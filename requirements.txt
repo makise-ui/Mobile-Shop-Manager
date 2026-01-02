@@ -1,0 +1,11 @@
+pandas
+openpyxl
+watchdog
+python-barcode
+Pillow
+reportlab
+python-escpos
+tinydb
+pyinstaller
+tk
+pywin32
