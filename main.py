@@ -1,3 +1,12 @@
+import sys
+import os
+
+# Fix for PyInstaller + Pillow
+try:
+    import PIL._tkinter_finder
+except ImportError:
+    pass
+
 from gui.app import MainApp
 
 if __name__ == "__main__":

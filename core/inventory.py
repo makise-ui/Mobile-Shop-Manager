@@ -33,14 +33,25 @@ class InventoryManager:
     def _normalize_data(self, df, mapping_data, file_path):
         """
         Converts the raw dataframe to the canonical format using the mapping.
-        Canonical columns: unique_id, imei, model, ram_rom, price, supplier, status, source_file, last_updated
         """
         mapping = mapping_data.get('mapping', {})
         file_supplier = mapping_data.get('supplier', '')
         
+        # Helper: Normalize Status
+        def norm_status(val):
+            s = str(val).upper().strip()
+            if s in ['OUT', 'SOLD', 'SALE']: return 'OUT'
+            if s in ['RTN', 'RETURN', 'RET']: return 'RTN'
+            # Catch-all for available synonyms
+            if s in ['AVAILABLE', 'AVBL', 'STOCK', 'IN', 'NAN', 'NONE', '']: return 'IN'
+            # Fallback: if it's not OUT/RTN, treat as IN but log it?
+            # For strictness, let's treat anything else as IN
+            return 'IN'
+
         # Create a new DF with canonical columns
         canonical = pd.DataFrame()
         
+        # ... (keep get_col helper) ...
         # Helper to safely get column data
         def get_col(canonical_name):
             mapped_col = None
@@ -73,7 +84,6 @@ class InventoryManager:
         if ram_rom is not None:
              canonical['ram_rom'] = ram_rom
         else:
-            # Try combining if mapped separately
             ram = get_col('ram')
             rom = get_col('rom')
             if ram is not None and rom is not None:
@@ -90,15 +100,9 @@ class InventoryManager:
         else:
             canonical['supplier'] = file_supplier
 
-        # Status handling
+        # Status handling (Excel)
         status_col = get_col('status')
         if status_col is not None:
-            # Normalize to IN/OUT/RTN
-            def norm_status(val):
-                s = str(val).upper().strip()
-                if s in ['OUT', 'SOLD', 'SALE']: return 'OUT'
-                if s in ['RTN', 'RETURN', 'RET']: return 'RTN'
-                return 'IN' # Default
             canonical['status'] = status_col.apply(norm_status)
         else:
             canonical['status'] = 'IN' # Default status (Available)
@@ -117,18 +121,39 @@ class InventoryManager:
         # Metadata
         canonical['source_file'] = str(file_path)
         canonical['last_updated'] = datetime.datetime.now()
-        canonical['status'] = 'Available' # Default status
         
         # Generate Unique ID using persistent registry
         canonical['unique_id'] = canonical.apply(lambda row: self.id_registry.get_or_create_id(row), axis=1)
         
-        # Merge persistent metadata (status override)
+        # Merge persistent metadata (status, notes, color, price overrides)
         def apply_overrides(row):
             meta = self.id_registry.get_metadata(row['unique_id'])
+            
+            # Conflict Detection Logic
+            excel_status = row['status']
+            app_status = None
+            
             if 'status' in meta:
-                row['status'] = meta['status']
+                # Normalize the app-stored status too!
+                app_status = norm_status(meta['status'])
+                row['status'] = app_status
+                
+                # Check for conflict (only if excel has explicit status)
+                if excel_status != app_status:
+                    # We trust App status usually, but let's note the conflict
+                    # print(f"Conflict ID {row['unique_id']}: Excel={excel_status} vs App={app_status}")
+                    pass
+
             if 'notes' in meta:
                 row['notes'] = meta['notes']
+            if 'color' in meta:
+                row['color'] = meta['color']
+            if 'price_original' in meta:
+                row['price_original'] = float(meta['price_original'])
+                if markup > 0:
+                    row['price'] = row['price_original'] * (1 + markup/100.0)
+                else:
+                    row['price'] = row['price_original']
             return row
             
         canonical = canonical.apply(apply_overrides, axis=1)
@@ -180,9 +205,194 @@ class InventoryManager:
     def get_inventory(self):
         return self.inventory_df
 
-    def update_item_status(self, item_id, new_status):
+    def update_item_status(self, item_id, new_status, write_to_excel=False):
         """Updates and persists the status of an item."""
+        # 1. Update Internal Registry
         self.id_registry.update_metadata(item_id, {"status": new_status})
-        # Update in-memory DF
+        
+        # 2. Update Memory
         mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
-        self.inventory_df.loc[mask, 'status'] = new_status
+        if mask.any():
+            self.inventory_df.loc[mask, 'status'] = new_status
+            
+            # 3. Write to Excel (Optional)
+            if write_to_excel:
+                try:
+                    row = self.inventory_df[mask].iloc[0]
+                    self._write_excel_status(row, new_status)
+                except Exception as e:
+                    print(f"Excel write error: {e}")
+                    return False
+        return True
+
+    def update_item_data(self, item_id, updates):
+        """Updates generic item data (price, color, etc) and writes to Excel."""
+        mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
+        if not mask.any(): return False
+        
+        # 1. Update Persistent Registry (App DB)
+        # This ensures changes stick even if Excel doesn't have the column
+        self.id_registry.update_metadata(item_id, updates)
+        
+        # 2. Update Memory
+        for k, v in updates.items():
+            if k in self.inventory_df.columns:
+                self.inventory_df.loc[mask, k] = v
+        
+        # 3. Update Excel (Best Effort)
+        try:
+            row = self.inventory_df[mask].iloc[0]
+            self._write_excel_generic(row, updates)
+            return True
+        except Exception as e:
+            print(f"Update error: {e}")
+            return False
+
+    def _write_excel_generic(self, row_data, updates):
+        from openpyxl import load_workbook
+        
+        file_path = row_data['source_file']
+        if not os.path.exists(file_path): return
+
+        mapping_data = self.config_manager.get_file_mapping(file_path)
+        mapping = mapping_data.get('mapping', {})
+        
+        # Build map of InternalField -> ExcelColumnName
+        field_to_col = {v: k for k, v in mapping.items()}
+        
+        # Map updates to Excel headers
+        excel_updates = {}
+        for k, v in updates.items():
+            # price_original maps to 'price' in mapping usually
+            if k == 'price_original': k = 'price'
+            if k in field_to_col:
+                excel_updates[field_to_col[k]] = v
+        
+        if not excel_updates: return
+
+        wb = load_workbook(file_path)
+        ws = wb.active
+        
+        # Find Header Columns
+        col_indices = {}
+        for cell in ws[1]:
+            val = str(cell.value).strip()
+            if val in excel_updates:
+                col_indices[val] = cell.column
+        
+        # Find Row (Match IMEI or Model+PriceOriginal)
+        target_imei = str(row_data['imei'])
+        
+        # Find IMEI col for matching
+        imei_header = field_to_col.get('imei')
+        imei_col_idx = None
+        for cell in ws[1]:
+            if str(cell.value).strip() == imei_header:
+                imei_col_idx = cell.column
+                break
+        
+        for row in ws.iter_rows(min_row=2):
+            match = False
+            if imei_col_idx and str(row[imei_col_idx-1].value) == target_imei:
+                match = True
+            # Fallback matching logic could go here
+            
+            if match:
+                # Apply updates
+                for col_name, new_val in excel_updates.items():
+                    if col_name in col_indices:
+                        ws.cell(row=row[0].row, column=col_indices[col_name]).value = new_val
+                break
+        
+        wb.save(file_path)
+        """Updates and persists the status of an item."""
+        # 1. Update Internal Registry
+        self.id_registry.update_metadata(item_id, {"status": new_status})
+        
+        # 2. Update Memory
+        mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
+        if mask.any():
+            self.inventory_df.loc[mask, 'status'] = new_status
+            
+            # 3. Write to Excel (Optional)
+            if write_to_excel:
+                try:
+                    row = self.inventory_df[mask].iloc[0]
+                    self._write_excel_status(row, new_status)
+                except Exception as e:
+                    print(f"Excel write error: {e}")
+                    return False
+        return True
+
+    def _write_excel_status(self, row_data, new_status):
+        from openpyxl import load_workbook
+        
+        file_path = row_data['source_file']
+        if not os.path.exists(file_path):
+            return
+
+        # Get mapping to find which column is 'Status'
+        mapping_data = self.config_manager.get_file_mapping(file_path)
+        mapping = mapping_data.get('mapping', {})
+        
+        # Find the Excel column header that maps to 'status'
+        status_col_name = None
+        for file_col, internal_col in mapping.items():
+            if internal_col == 'status':
+                status_col_name = file_col
+                break
+        
+        if not status_col_name:
+            # If no status column mapped, we can't write back
+            print("No 'status' column mapped for this file.")
+            return
+
+        try:
+            wb = load_workbook(file_path)
+            ws = wb.active # Assume first sheet
+            
+            # 1. Find Header Column Index
+            header_idx = None
+            for cell in ws[1]: # Assume row 1 is header
+                if str(cell.value).strip() == status_col_name:
+                    header_idx = cell.column
+                    break
+            
+            if not header_idx:
+                return
+
+            # 2. Find Row (Match IMEI or Model+Price)
+            target_imei = str(row_data['imei'])
+            target_model = str(row_data['model'])
+            
+            # Find IMEI column index if mapped
+            imei_col_idx = None
+            model_col_idx = None
+            
+            for cell in ws[1]:
+                val = str(cell.value).strip()
+                if val == [k for k, v in mapping.items() if v == 'imei'][0]:
+                    imei_col_idx = cell.column
+                if val == [k for k, v in mapping.items() if v == 'model'][0]:
+                    model_col_idx = cell.column
+
+            for row in ws.iter_rows(min_row=2):
+                # Check match
+                match = False
+                if imei_col_idx and str(row[imei_col_idx-1].value) == target_imei:
+                    match = True
+                elif model_col_idx and str(row[model_col_idx-1].value) == target_model:
+                    # Weak match, but fallback
+                    match = True
+                
+                if match:
+                    # Update Status
+                    ws.cell(row=row[0].row, column=header_idx).value = new_status
+                    break
+            
+            wb.save(file_path)
+            print(f"Updated Excel file: {file_path}")
+            
+        except Exception as e:
+            print(f"Failed to update Excel: {e}")
+            raise e
