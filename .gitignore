@@ -32,6 +32,12 @@ debug_prints/
 test_env/
 *.png
 *.jpg
+firebase-debug.log
+GEMINI.md
+*.pdf 
+4BrosManager.spec
+Analytics_Report.pdf
+
 # IDEs
 .vscode/
 .idea/
