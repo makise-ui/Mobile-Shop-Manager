@@ -6,13 +6,33 @@ from core.watcher import InventoryWatcher
 from core.barcode_utils import BarcodeGenerator
 from core.printer import PrinterManager
 from core.billing import BillingManager
-from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ColorScreen, SearchScreen
+from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ColorScreen, SearchScreen, StatusScreen, EditDataScreen
 
 class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("4 Bros Mobile Manager")
         self.geometry("1100x700")
+        
+        # Set Icon (Safe Load)
+        try:
+            # Only try loading icon if we are on Windows or if file exists
+            icon_path = "icon.jpg" 
+            import sys
+            import os
+            
+            if hasattr(sys, '_MEIPASS'):
+                icon_path = os.path.join(sys._MEIPASS, "icon.jpg")
+            
+            if os.path.exists(icon_path):
+                # On Termux/X11, high-res icons can crash X_CreateWindow
+                # Only load if on Windows to be safe, or wrap tightly
+                if os.name == 'nt':
+                    from PIL import ImageTk, Image
+                    img = Image.open(icon_path)
+                    self.iconphoto(True, ImageTk.PhotoImage(img))
+        except Exception as e:
+            print(f"Icon load skipped: {e}")
         
         # --- Core Initialization ---
         self.app_config = ConfigManager()
@@ -58,6 +78,8 @@ class MainApp(tk.Tk):
         nav_items = [
             ("Inventory", "inventory"),
             ("Search ID", "search"),
+            ("Quick Status", "status"),
+            ("Edit Data", "edit"),
             ("Manage Files", "files"),
             ("Billing / GST", "billing"),
             ("Analytics", "analytics"),
@@ -79,6 +101,8 @@ class MainApp(tk.Tk):
         self.screens = {}
         self.screens['inventory'] = InventoryScreen(self.content_area, self)
         self.screens['search'] = SearchScreen(self.content_area, self)
+        self.screens['status'] = StatusScreen(self.content_area, self)
+        self.screens['edit'] = EditDataScreen(self.content_area, self)
         self.screens['files'] = FilesScreen(self.content_area, self)
         self.screens['billing'] = BillingScreen(self.content_area, self)
         self.screens['analytics'] = AnalyticsScreen(self.content_area, self)

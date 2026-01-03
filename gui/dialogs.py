@@ -3,16 +3,17 @@ from tkinter import ttk, messagebox
 import pandas as pd
 
 class MapColumnsDialog(tk.Toplevel):
-    def __init__(self, parent, file_path, on_save_callback):
+    def __init__(self, parent, file_path, on_save_callback, current_mapping=None):
         super().__init__(parent)
         self.title("Map Columns")
         self.geometry("600x500")
         self.file_path = file_path
         self.on_save = on_save_callback
-        self.result = None
+        self.current_mapping = current_mapping or {}
         
         self.mappings = {}
-        self.canonical_fields = ['imei', 'model', 'ram_rom', 'ram', 'rom', 'price', 'supplier', 'notes', 'status', 'color']
+        # Removed 'ram', 'rom'
+        self.canonical_fields = ['imei', 'model', 'ram_rom', 'price', 'supplier', 'notes', 'status', 'color']
         
         # Load sample data
         try:
@@ -42,6 +43,13 @@ class MapColumnsDialog(tk.Toplevel):
         ttk.Label(frame, text="File Column", font=('bold')).grid(row=0, column=1, padx=5, pady=5)
 
         self.combos = {}
+        
+        # Load existing map: {FileCol: InternalCol}
+        # We need reverse map for UI: {InternalCol: FileCol}
+        existing_map = {}
+        if self.current_mapping and 'mapping' in self.current_mapping:
+            for k, v in self.current_mapping['mapping'].items():
+                existing_map[v] = k
 
         # Rows
         for idx, field in enumerate(self.canonical_fields):
@@ -49,18 +57,28 @@ class MapColumnsDialog(tk.Toplevel):
             ttk.Label(frame, text=field).grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
             
             combo = ttk.Combobox(frame, values=["(Ignore)"] + self.headers)
-            combo.current(0)
+            
+            # Pre-select if exists
+            if field in existing_map:
+                if existing_map[field] in self.headers:
+                    combo.set(existing_map[field])
+            else:
+                combo.current(0)
+                # Auto-suggest only if not mapped
+                self._auto_suggest(field, combo)
+                
             combo.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=5)
             self.combos[field] = combo
-            
-            # Auto-suggest
-            self._auto_suggest(field, combo)
 
         # Supplier Override
         frame_supp = ttk.Frame(self, padding=10)
         frame_supp.pack(fill=tk.X)
         ttk.Label(frame_supp, text="Default Supplier (if column not mapped):").pack(side=tk.LEFT)
         self.ent_supplier = ttk.Entry(frame_supp)
+        
+        if self.current_mapping:
+            self.ent_supplier.insert(0, self.current_mapping.get('supplier', ''))
+            
         self.ent_supplier.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
         # Buttons
