@@ -26,6 +26,10 @@ class InventoryManager:
             else:
                 df = pd.read_excel(file_path)
             
+            # Safety: Ensure DataFrame
+            if isinstance(df, pd.Series):
+                df = df.to_frame().T
+            
             # Normalize columns based on mapping
             normalized_df = self._normalize_data(df, mapping_data, file_path)
             return normalized_df, "SUCCESS"
@@ -44,17 +48,13 @@ class InventoryManager:
             s = str(val).upper().strip()
             if s in ['OUT', 'SOLD', 'SALE']: return 'OUT'
             if s in ['RTN', 'RETURN', 'RET']: return 'RTN'
-            # Catch-all for available synonyms
-            if s in ['AVAILABLE', 'AVBL', 'STOCK', 'IN', 'NAN', 'NONE', '']: return 'IN'
-            # Fallback: if it's not OUT/RTN, treat as IN but log it?
-            # For strictness, let's treat anything else as IN
+            if s in ['AVAILABLE', 'AVBL', 'STOCK', 'IN', 'NAN', 'NONE', '', 'NAN']: return 'IN'
             return 'IN'
 
         # Create a new DF with canonical columns
         canonical = pd.DataFrame()
         
-        # ... (keep get_col helper) ...
-        # Helper to safely get column data
+        # Helper to safely get column data as Series
         def get_col(canonical_name):
             mapped_col = None
             for col_name, can_name in mapping.items():
@@ -63,15 +63,28 @@ class InventoryManager:
                     break
             
             if mapped_col and mapped_col in df.columns:
-                return df[mapped_col]
+                # SAFE CAST: Convert to object to avoid float.fillna errors
+                return df[mapped_col].astype(object)
             return None
 
         # Map fields
-        canonical['imei'] = get_col('imei')
-        canonical['model'] = get_col('model')
+        # Note: We fillna('') immediately after converting to object to be safe
+        
+        # IMEI
+        col_imei = get_col('imei')
+        canonical['imei'] = col_imei.fillna('').astype(str) if col_imei is not None else ''
+        
+        # Model
+        col_model = get_col('model')
+        canonical['model'] = col_model.fillna('Unknown Model').astype(str) if col_model is not None else 'Unknown Model'
         
         # Price Logic
-        raw_price = pd.to_numeric(get_col('price'), errors='coerce').fillna(0.0)
+        col_price = get_col('price')
+        if col_price is not None:
+            raw_price = pd.to_numeric(col_price, errors='coerce').fillna(0.0)
+        else:
+            raw_price = 0.0
+        
         canonical['price_original'] = raw_price
         
         # Apply Markup
@@ -81,6 +94,7 @@ class InventoryManager:
             markup = 0.0
             
         if markup > 0:
+            # Vectorized calc
             canonical['price'] = raw_price * (1 + markup/100.0)
         else:
             canonical['price'] = raw_price
@@ -88,21 +102,21 @@ class InventoryManager:
         # RAM/ROM handling
         ram_rom = get_col('ram_rom')
         if ram_rom is not None:
-             canonical['ram_rom'] = ram_rom
+             canonical['ram_rom'] = ram_rom.fillna('').astype(str)
         else:
             ram = get_col('ram')
             rom = get_col('rom')
             if ram is not None and rom is not None:
-                canonical['ram_rom'] = ram.astype(str) + " / " + rom.astype(str)
+                canonical['ram_rom'] = ram.fillna('').astype(str) + " / " + rom.fillna('').astype(str)
             elif ram is not None:
-                canonical['ram_rom'] = ram.astype(str)
+                canonical['ram_rom'] = ram.fillna('').astype(str)
             else:
                 canonical['ram_rom'] = ""
 
         # Supplier handling
         supplier_col = get_col('supplier')
         if supplier_col is not None:
-            canonical['supplier'] = supplier_col
+            canonical['supplier'] = supplier_col.fillna(file_supplier).astype(str)
         else:
             canonical['supplier'] = file_supplier
 
@@ -121,12 +135,14 @@ class InventoryManager:
             canonical['color'] = ''
 
         # Buyer handling
-        canonical['buyer'] = get_col('buyer').fillna('').astype(str) if get_col('buyer') is not None else ''
-        canonical['buyer_contact'] = get_col('buyer_contact').fillna('').astype(str) if get_col('buyer_contact') is not None else ''
+        col_buyer = get_col('buyer')
+        canonical['buyer'] = col_buyer.fillna('').astype(str) if col_buyer is not None else ''
+        
+        col_contact = get_col('buyer_contact')
+        canonical['buyer_contact'] = col_contact.fillna('').astype(str) if col_contact is not None else ''
 
-        # Fill missing basics
-        canonical['imei'] = canonical['imei'].fillna('').astype(str)
-        canonical['model'] = canonical['model'].fillna('Unknown Model').astype(str)
+        # Fill missing basics if any were missed
+        # ... (Already handled above)
         
         # Metadata
         canonical['source_file'] = str(file_path)
