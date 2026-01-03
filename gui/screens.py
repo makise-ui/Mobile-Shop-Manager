@@ -59,16 +59,20 @@ class InventoryScreen(BaseScreen):
         ttk.Button(action_frame, text="Mark Sold", command=lambda: self._bulk_update_status("OUT")).pack(side=tk.LEFT, padx=5)
         ttk.Button(action_frame, text="Mark RTN", command=lambda: self._bulk_update_status("RTN")).pack(side=tk.LEFT, padx=5)
         
+        # Preview Toggle
+        self.var_show_preview = tk.BooleanVar(value=False)
+        ttk.Checkbutton(action_frame, text="Show Preview", variable=self.var_show_preview, command=self._toggle_preview).pack(side=tk.RIGHT, padx=10)
+        
         ttk.Button(action_frame, text="Refresh Data", command=self.refresh_data).pack(side=tk.RIGHT, padx=5)
 
         # -- Main Content --
-        paned = tk.PanedWindow(self, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True)
+        self.paned = tk.PanedWindow(self, orient=tk.HORIZONTAL)
+        self.paned.pack(fill=tk.BOTH, expand=True)
 
         # 1. Treeview (List)
         # Added 'check' column for checkboxes
         cols = ('check', 'unique_id', 'imei', 'model', 'ram_rom', 'price_original', 'price', 'supplier', 'status')
-        self.tree = ttk.Treeview(paned, columns=cols, show='headings', selectmode='extended')
+        self.tree = ttk.Treeview(self.paned, columns=cols, show='headings', selectmode='extended')
         
         # Configure Columns
         self.tree.heading('check', text='[x]')
@@ -87,10 +91,10 @@ class InventoryScreen(BaseScreen):
         self.tree.column('ram_rom', width=90)
         
         self.tree.heading('price_original', text='Price (Buy)')
-        self.tree.column('price_original', width=70, anchor='e')
+        self.tree.column('price_original', width=80, anchor='e')
         
         self.tree.heading('price', text='Price (Sell)')
-        self.tree.column('price', width=70, anchor='e')
+        self.tree.column('price', width=80, anchor='e')
         
         self.tree.heading('supplier', text='Supplier')
         self.tree.column('supplier', width=100)
@@ -102,26 +106,35 @@ class InventoryScreen(BaseScreen):
         self.tree.tag_configure('old', background='#fff3cd') # Yellowish
         self.tree.tag_configure('very_old', background='#f8d7da') # Reddish
 
-        scroll = ttk.Scrollbar(self.tree, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scroll.set)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        # Scrollbars
+        scroll_y = ttk.Scrollbar(self.tree, orient=tk.VERTICAL, command=self.tree.yview)
+        scroll_x = ttk.Scrollbar(self.tree, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(yscroll=scroll_y.set, xscroll=scroll_x.set)
+        
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
         
         self.tree.bind('<<TreeviewSelect>>', self._on_row_click) 
         self.tree.bind('<ButtonRelease-1>', self._on_click_check) # Specific click handler
         
-        paned.add(self.tree, minsize=400, width=700)
+        self.paned.add(self.tree, minsize=400, width=700)
 
-        # 2. Preview Panel (Right)
-        preview_frame = ttk.LabelFrame(paned, text="Label Preview", padding=10)
-        paned.add(preview_frame, minsize=250)
+        # 2. Preview Panel (Right) - Hidden by default
+        self.preview_frame = ttk.LabelFrame(self.paned, text="Label Preview", padding=10)
         
-        self.lbl_preview = ttk.Label(preview_frame, text="Select item to preview", anchor="center")
+        self.lbl_preview = ttk.Label(self.preview_frame, text="Select item to preview", anchor="center")
         self.lbl_preview.pack(fill=tk.BOTH, expand=True)
         
-        self.lbl_info = ttk.Label(preview_frame, text="")
+        self.lbl_info = ttk.Label(self.preview_frame, text="")
         self.lbl_info.pack(fill=tk.X, pady=5)
         
         self.checked_ids = set() # Store unique_ids of checked items
+
+    def _toggle_preview(self):
+        if self.var_show_preview.get():
+            self.paned.add(self.preview_frame, minsize=250)
+        else:
+            self.paned.remove(self.preview_frame)
 
     def on_show(self):
         self.refresh_data()
@@ -185,16 +198,23 @@ class InventoryScreen(BaseScreen):
             self.tree.delete(item)
             
         now = datetime.datetime.now()
+        existing_iids = set()
             
         for idx, row in df.iterrows():
             uid = str(row.get('unique_id', ''))
             
+            # Ensure unique IID for Treeview
+            original_uid = uid
+            if uid in existing_iids:
+                uid = f"{uid}_{idx}"
+            existing_iids.add(uid)
+            
             # Checkbox state
-            check_mark = "☑" if uid in self.checked_ids else "☐"
+            check_mark = "☑" if original_uid in self.checked_ids else "☐"
             
             vals = (
                 check_mark,
-                uid,
+                original_uid, # Display original ID text
                 str(row.get('imei', '')),
                 str(row.get('model', '')),
                 str(row.get('ram_rom', '')),
@@ -207,7 +227,6 @@ class InventoryScreen(BaseScreen):
             # Aging Logic
             tag = ''
             try:
-                # last_updated might be string or datetime
                 last_up = row.get('last_updated')
                 if isinstance(last_up, str):
                     last_up = datetime.datetime.fromisoformat(str(last_up))
@@ -221,7 +240,6 @@ class InventoryScreen(BaseScreen):
             except:
                 pass
 
-            # Use unique_id as IID
             self.tree.insert('', tk.END, values=vals, iid=uid, tags=(tag,))
 
     def _on_click_check(self, event):
@@ -709,34 +727,105 @@ class SettingsScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
         self.vars = {}
+        self.text_widgets = {}
         
-        # Form
-        form = ttk.LabelFrame(self, text="Application Settings", padding=20)
-        form.place(relx=0.5, rely=0.3, anchor='center')
+        # Scrollable Canvas for Settings if it gets too long
+        canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
-        # Fields
-        fields = [
+        self.form = scrollable_frame
+        self._init_form()
+
+    def _init_ui(self):
+        pass # Using _init_form called above
+
+    def _init_form(self):
+        ttk.Label(self.form, text="Application Settings", font=('Segoe UI', 16, 'bold')).pack(pady=10, anchor=tk.W, padx=20)
+        
+        # --- Group 1: General App ---
+        frame_gen = ttk.LabelFrame(self.form, text="General & Printing", padding=15)
+        frame_gen.pack(fill=tk.X, padx=20, pady=10)
+        
+        gen_fields = [
             ("Store Name", "store_name"),
             ("Label Width (mm)", "label_width_mm"),
             ("Label Height (mm)", "label_height_mm"),
-            ("GST Default %", "gst_default_percent"),
+            ("Auto Unique ID Prefix", "auto_unique_id_prefix"),
             ("Price Markup %", "price_markup_percent"),
-            ("Auto Unique ID Prefix", "auto_unique_id_prefix")
+            ("Theme Color (Hex)", "theme_color"),
+            ("UI Font Size", "font_size_ui")
         ]
         
-        for idx, (lbl, key) in enumerate(fields):
-            ttk.Label(form, text=lbl).grid(row=idx, column=0, sticky=tk.W, pady=8)
+        for idx, (lbl, key) in enumerate(gen_fields):
+            ttk.Label(frame_gen, text=lbl).grid(row=idx, column=0, sticky=tk.W, pady=5)
             var = tk.StringVar()
             self.vars[key] = var
-            ttk.Entry(form, textvariable=var, width=30).grid(row=idx, column=1, pady=8, padx=10)
+            ttk.Entry(frame_gen, textvariable=var, width=30).grid(row=idx, column=1, pady=5, padx=10)
+
+        # Toggle
+        self.var_buyer_track = tk.BooleanVar()
+        ttk.Checkbutton(frame_gen, text="Enable Buyer Tracking (Save to Excel)", variable=self.var_buyer_track).grid(row=len(gen_fields), column=0, columnspan=2, pady=10, sticky=tk.W)
+
+        # --- Group 2: Invoice Details ---
+        frame_inv = ttk.LabelFrame(self.form, text="Invoice Configuration", padding=15)
+        frame_inv.pack(fill=tk.X, padx=20, pady=10)
+        
+        # GSTIN & Contact
+        inv_fields = [
+            ("GSTIN", "store_gstin"),
+            ("Phone / Contact", "store_contact"),
+            ("GST Default %", "gst_default_percent")
+        ]
+        
+        r = 0
+        for lbl, key in inv_fields:
+            ttk.Label(frame_inv, text=lbl).grid(row=r, column=0, sticky=tk.W, pady=5)
+            var = tk.StringVar()
+            self.vars[key] = var
+            ttk.Entry(frame_inv, textvariable=var, width=30).grid(row=r, column=1, pady=5, padx=10)
+            r += 1
             
-        ttk.Button(form, text="Save Changes", command=self._save).grid(row=len(fields), column=1, pady=20, sticky=tk.E)
+        # Address (Text)
+        ttk.Label(frame_inv, text="Store Address:").grid(row=r, column=0, sticky=tk.NW, pady=5)
+        txt_addr = tk.Text(frame_inv, height=4, width=40, font=('Segoe UI', 10))
+        txt_addr.grid(row=r, column=1, pady=5, padx=10)
+        self.text_widgets['store_address'] = txt_addr
+        r += 1
+        
+        # Terms (Text)
+        ttk.Label(frame_inv, text="Invoice Terms:").grid(row=r, column=0, sticky=tk.NW, pady=5)
+        txt_terms = tk.Text(frame_inv, height=4, width=40, font=('Segoe UI', 10))
+        txt_terms.grid(row=r, column=1, pady=5, padx=10)
+        self.text_widgets['invoice_terms'] = txt_terms
+        
+        # Save Button
+        ttk.Button(self.form, text="Save All Changes", command=self._save, style="Accent.TButton").pack(pady=20, anchor=tk.E, padx=20)
 
     def on_show(self):
         # Load values
         for key, var in self.vars.items():
             val = self.app.app_config.get(key)
             var.set(str(val))
+        
+        self.var_buyer_track.set(self.app.app_config.get("enable_buyer_tracking", True))
+        
+        # Load Text widgets
+        for key, widget in self.text_widgets.items():
+            val = self.app.app_config.get(key, "")
+            widget.delete("1.0", tk.END)
+            widget.insert("1.0", str(val))
 
     def _save(self):
         try:
@@ -745,6 +834,7 @@ class SettingsScreen(BaseScreen):
             float(self.vars['label_height_mm'].get())
             float(self.vars['gst_default_percent'].get())
             
+            # Save Vars
             for key, var in self.vars.items():
                 val = var.get()
                 try:
@@ -752,53 +842,76 @@ class SettingsScreen(BaseScreen):
                 except:
                     pass
                 self.app.app_config.set(key, val)
+            
+            # Save Text Widgets
+            for key, widget in self.text_widgets.items():
+                val = widget.get("1.0", tk.END).strip()
+                self.app.app_config.set(key, val)
+            
+            self.app.app_config.set("enable_buyer_tracking", self.var_buyer_track.get())
                 
             messagebox.showinfo("Saved", "Settings updated successfully.")
         except ValueError:
-            messagebox.showerror("Error", "Please check numeric fields.")# --- Color Screen ---
-class ColorScreen(BaseScreen):
+            messagebox.showerror("Error", "Please check numeric fields.")# --- Manage Data Screen (Colors & Buyers) ---
+class ManageDataScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
-        from core.color_registry import ColorRegistry
-        self.registry = ColorRegistry()
+        from core.data_registry import DataRegistry
+        self.registry = DataRegistry()
         
         # UI
-        lbl = ttk.Label(self, text="Manage Mobile Colors", font=('Segoe UI', 12, 'bold'))
-        lbl.pack(pady=10)
+        ttk.Label(self, text="Manage App Data", font=('Segoe UI', 14, 'bold')).pack(pady=10)
         
-        frame_add = ttk.Frame(self)
-        frame_add.pack(pady=5)
+        # Tabs
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        self.ent_color = ttk.Entry(frame_add, width=20)
-        self.ent_color.pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame_add, text="Add Color", command=self._add).pack(side=tk.LEFT)
+        # Tab 1: Colors
+        self.tab_colors = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_colors, text="Mobile Colors")
+        self._init_list_ui(self.tab_colors, "Color", self.registry.get_colors, self.registry.add_color, self.registry.remove_color)
         
-        self.listbox = tk.Listbox(self)
-        self.listbox.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        ttk.Button(self, text="Delete Selected", command=self._delete).pack(pady=5)
-        
-        self._refresh()
+        # Tab 2: Buyers
+        self.tab_buyers = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_buyers, text="Frequent Buyers")
+        self._init_list_ui(self.tab_buyers, "Buyer Name", self.registry.get_buyers, self.registry.add_buyer, self.registry.remove_buyer)
 
-    def _refresh(self):
-        self.listbox.delete(0, tk.END)
-        for c in self.registry.get_all():
-            self.listbox.insert(tk.END, c)
+    def _init_list_ui(self, parent, item_name, get_func, add_func, remove_func):
+        frame_add = ttk.Frame(parent, padding=10)
+        frame_add.pack(fill=tk.X)
+        
+        ent = ttk.Entry(frame_add, width=30)
+        ent.pack(side=tk.LEFT, padx=5)
+        
+        lb = tk.Listbox(parent, font=('Segoe UI', 10))
+        lb.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        def refresh():
+            lb.delete(0, tk.END)
+            for item in get_func():
+                lb.insert(tk.END, item)
+                
+        def add():
+            val = ent.get().strip()
+            if val:
+                add_func(val)
+                ent.delete(0, tk.END)
+                refresh()
+                
+        def remove():
+            sel = lb.curselection()
+            if sel:
+                val = lb.get(sel[0])
+                if messagebox.askyesno("Confirm", f"Delete '{val}'?"):
+                    remove_func(val)
+                    refresh()
 
-    def _add(self):
-        c = self.ent_color.get().strip()
-        if c:
-            self.registry.add_color(c)
-            self.ent_color.delete(0, tk.END)
-            self._refresh()
+        ttk.Button(frame_add, text=f"Add {item_name}", command=add).pack(side=tk.LEFT)
+        ttk.Button(parent, text="Delete Selected", command=remove).pack(pady=10)
+        
+        # Initial load
+        refresh()
 
-    def _delete(self):
-        sel = self.listbox.curselection()
-        if sel:
-            c = self.listbox.get(sel[0])
-            if messagebox.askyesno("Confirm", f"Delete color '{c}'?"):
-                self.registry.remove_color(c)
-                self._refresh()
 # --- Search Screen ---
 class SearchScreen(BaseScreen):
     def __init__(self, parent, app_context):
@@ -806,188 +919,378 @@ class SearchScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        lbl_title = ttk.Label(self, text="ID Lookup / Mobile Details", font=('Segoe UI', 14, 'bold'))
-        lbl_title.pack(pady=10)
-
-        # Search Bar
-        frame_search = ttk.Frame(self)
-        frame_search.pack(fill=tk.X, pady=10)
+        # Header
+        ttk.Label(self, text="Search & History", font=('Segoe UI', 16, 'bold')).pack(pady=(10, 5))
         
-        ttk.Label(frame_search, text="Enter Mobile ID:").pack(side=tk.LEFT, padx=5)
-        self.ent_id = ttk.Entry(frame_search, width=20, font=('Segoe UI', 12))
-        self.ent_id.pack(side=tk.LEFT, padx=5)
-        self.ent_id.bind('<Return>', lambda e: self._do_lookup())
+        # Split Panes
+        self.paned = tk.PanedWindow(self, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
+        self.paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        ttk.Button(frame_search, text="Lookup", command=self._do_lookup).pack(side=tk.LEFT, padx=10)
-
-        # Details Area
-        self.details_frame = ttk.LabelFrame(self, text="Mobile Details", padding=20)
-        self.details_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # --- LEFT: Search ---
+        self.left_pane = ttk.Frame(self.paned)
+        self.paned.add(self.left_pane, minsize=300, width=350)
         
-        self.txt_details = tk.Text(self.details_frame, font=('Consolas', 12), state='disabled', bg='#f9f9f9')
-        self.txt_details.pack(fill=tk.BOTH, expand=True)
+        # Search Box
+        f_search = ttk.LabelFrame(self.left_pane, text="Find Item", padding=10)
+        f_search.pack(fill=tk.X, pady=5, padx=5)
+        
+        self.var_search_type = tk.StringVar(value="ID")
+        f_radios = ttk.Frame(f_search)
+        f_radios.pack(fill=tk.X)
+        ttk.Radiobutton(f_radios, text="Unique ID", variable=self.var_search_type, value="ID").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(f_radios, text="Model/IMEI", variable=self.var_search_type, value="MODEL").pack(side=tk.LEFT, padx=5)
+        
+        self.ent_search = ttk.Entry(f_search, font=('Segoe UI', 12))
+        self.ent_search.pack(fill=tk.X, pady=5)
+        self.ent_search.bind('<Return>', lambda e: self._do_lookup())
+        ttk.Button(f_search, text="SEARCH", command=self._do_lookup).pack(fill=tk.X, pady=5)
+        
+        # Results List (for multiple matches)
+        self.list_results = tk.Listbox(self.left_pane, font=('Segoe UI', 10))
+        self.list_results.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.list_results.bind('<<ListboxSelect>>', self._on_result_select)
+        
+        # --- RIGHT: Details Card ---
+        self.right_pane = ttk.Frame(self.paned)
+        self.paned.add(self.right_pane, minsize=400)
+        
+        # Card Header
+        self.f_header = tk.Frame(self.right_pane, bg='white', bd=1, relief=tk.SOLID)
+        self.f_header.pack(fill=tk.X, padx=10, pady=10)
+        
+        self.lbl_model = tk.Label(self.f_header, text="No Item Selected", font=('Segoe UI', 18, 'bold'), bg='white', fg='#333', anchor='w')
+        self.lbl_model.pack(fill=tk.X, padx=10, pady=(10, 0))
+        
+        f_sub = tk.Frame(self.f_header, bg='white')
+        f_sub.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        self.lbl_price = tk.Label(f_sub, text="--", font=('Segoe UI', 14, 'bold'), bg='white', fg='#007acc')
+        self.lbl_price.pack(side=tk.LEFT)
+        
+        self.lbl_status = tk.Label(f_sub, text="STATUS", font=('Segoe UI', 10, 'bold'), bg='#eee', fg='#333', padx=8, pady=2)
+        self.lbl_status.pack(side=tk.RIGHT)
+        
+        # Details Notebook
+        self.nb_details = ttk.Notebook(self.right_pane)
+        self.nb_details.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Tab 1: Info
+        self.tab_info = ttk.Frame(self.nb_details)
+        self.nb_details.add(self.tab_info, text="Details & Specs")
+        
+        self.txt_info = tk.Text(self.tab_info, font=('Consolas', 11), state='disabled', padx=10, pady=10, bg="#f9f9f9")
+        self.txt_info.pack(fill=tk.BOTH, expand=True)
+        
+        # Tab 2: History Timeline
+        self.tab_history = ttk.Frame(self.nb_details)
+        self.nb_details.add(self.tab_history, text="History & Logs")
+        
+        self.txt_timeline = tk.Text(self.tab_history, font=('Segoe UI', 11), state='disabled', padx=20, pady=20, bg="#ffffff", relief=tk.FLAT)
+        scroll_hist = ttk.Scrollbar(self.tab_history, orient=tk.VERTICAL, command=self.txt_timeline.yview)
+        self.txt_timeline.configure(yscrollcommand=scroll_hist.set)
+        
+        scroll_hist.pack(side=tk.RIGHT, fill=tk.Y)
+        self.txt_timeline.pack(fill=tk.BOTH, expand=True)
+        
+        # Tags for styling
+        self.txt_timeline.tag_configure("center", justify='center')
+        self.txt_timeline.tag_configure("status", font=('Segoe UI', 12, 'bold'), foreground="#007acc")
+        self.txt_timeline.tag_configure("date", font=('Segoe UI', 9), foreground="#666")
+        self.txt_timeline.tag_configure("line", font=('Consolas', 14), foreground="#ccc")
 
     def on_show(self):
-        self.ent_id.focus_set()
+        self.ent_search.focus_set()
 
     def _do_lookup(self):
-        iid = self.ent_id.get().strip()
-        if not iid:
-            return
-            
+        query = self.ent_search.get().strip()
+        if not query: return
+        
         df = self.app.inventory.get_inventory()
-        if df.empty:
-            messagebox.showinfo("Empty", "Inventory is empty")
+        self.list_results.delete(0, tk.END)
+        self.matches = [] # Store raw rows
+        
+        search_type = self.var_search_type.get()
+        match_df = pd.DataFrame()
+        
+        if search_type == "ID":
+            match_df = df[df['unique_id'].astype(str) == query]
+        else:
+            mask = df.apply(lambda x: query.lower() in str(x['model']).lower() or query in str(x['imei']), axis=1)
+            match_df = df[mask]
+            
+        if match_df.empty:
+            self.lbl_model.config(text="No Results Found")
+            self.lbl_price.config(text="--")
+            self.lbl_status.config(text="--", bg="#eee", fg="#333")
+            self._clear_details()
             return
             
-        # Search by unique_id (string match)
-        match = df[df['unique_id'].astype(str) == iid]
-        
-        if match.empty:
-            self._update_text(f"No mobile found with ID: {iid}")
-            return
+        # Populate List
+        for _, row in match_df.iterrows():
+            self.matches.append(row)
+            self.list_results.insert(tk.END, f"{row['model']} | ID: {row['unique_id']}")
             
-        row = match.iloc[0]
+        # Auto-select first
+        self.list_results.selection_set(0)
+        self._on_result_select(None)
+
+    def _on_result_select(self, event):
+        sel = self.list_results.curselection()
+        if not sel: return
         
-        details = f"""
-ITEM DETAILS
-------------
-ID          : {row.get('unique_id')}
-Status      : {row.get('status')}
+        idx = sel[0]
+        row = self.matches[idx]
+        self._show_details(row)
+
+    def _show_details(self, row):
+        # 1. Header
+        self.lbl_model.config(text=row.get('model', 'Unknown'))
+        price = row.get('price', 0)
+        self.lbl_price.config(text=f"₹{price:,.2f}")
+        
+        status = str(row.get('status', 'IN')).upper()
+        bg_col = "#d4edda" if status == 'IN' else "#f8d7da" # Green/Red tint
+        fg_col = "#155724" if status == 'IN' else "#721c24"
+        self.lbl_status.config(text=status, bg=bg_col, fg=fg_col)
+        
+        # 2. Details Text
+        info = f"""
+UNIQUE ID   : {row.get('unique_id')}
 IMEI        : {row.get('imei')}
-Model       : {row.get('model')}
 RAM/ROM     : {row.get('ram_rom')}
-Color       : {row.get('color', 'N/A')}
+COLOR       : {row.get('color')}
+SUPPLIER    : {row.get('supplier')}
 
-PRICING
--------
-Buy Price   : ₹{row.get('price_original', 0):,.2f}
-Sell Price  : ₹{row.get('price', 0):,.2f}
-Markup %    : {self.app.app_config.get('price_markup_percent', 0)}%
+BUY PRICE   : ₹{row.get('price_original', 0):,.2f}
+SELL PRICE  : ₹{row.get('price', 0):,.2f}
 
-INVENTORY INFO
---------------
-Supplier    : {row.get('supplier')}
+BUYER INFO
+----------
+Name        : {row.get('buyer', '-')}
+Contact     : {row.get('buyer_contact', '-')}
+
+METADATA
+--------
 Source File : {row.get('source_file')}
 Last Updated: {row.get('last_updated')}
 Notes       : {row.get('notes', '')}
 """
-        self._update_text(details)
+        self.txt_info.configure(state='normal')
+        self.txt_info.delete(1.0, tk.END)
+        self.txt_info.insert(tk.END, info)
+        self.txt_info.configure(state='disabled')
+        
+        # 3. History Timeline
+        self.txt_timeline.configure(state='normal')
+        self.txt_timeline.delete(1.0, tk.END)
+            
+        # Fetch from Registry
+        reg_meta = self.app.inventory.id_registry.get_metadata(row['unique_id'])
+        history = reg_meta.get('history', [])
+        
+        if not history:
+            # Fallback entry
+            self.txt_timeline.insert(tk.END, "INITIAL ENTRY\n", ("status", "center"))
+            self.txt_timeline.insert(tk.END, f"Recorded on {row.get('last_updated')}\n", ("date", "center"))
+        else:
+            # Sort chronological (Oldest first for timeline flow)
+            history = sorted(history, key=lambda x: x.get('ts', ''))
+            
+            for i, h in enumerate(history):
+                # Extract status if it's a status change
+                disp_action = h.get('action')
+                details = h.get('details', '')
+                
+                if "Moved from" in details:
+                    # Clean up: just show the NEW status clearly
+                    parts = details.split(" to ")
+                    status_text = parts[1] if len(parts) > 1 else details
+                else:
+                    status_text = disp_action
+                
+                # Insert Entry
+                self.txt_timeline.insert(tk.END, f"{status_text}\n", ("status", "center"))
+                self.txt_timeline.insert(tk.END, f"on {h.get('ts')}\n", ("date", "center"))
+                
+                # Add connector line if not last
+                if i < len(history) - 1:
+                    self.txt_timeline.insert(tk.END, "   |   \n", ("line", "center"))
+                    self.txt_timeline.insert(tk.END, "   |   \n", ("line", "center"))
 
-    def _update_text(self, text):
-        self.txt_details.configure(state='normal')
-        self.txt_details.delete(1.0, tk.END)
-        self.txt_details.insert(tk.END, text)
-        self.txt_details.configure(state='disabled')
+        self.txt_timeline.configure(state='disabled')
+
+    def _clear_details(self):
+        self.txt_info.configure(state='normal')
+        self.txt_info.delete(1.0, tk.END)
+        self.txt_info.configure(state='disabled')
+        self.txt_timeline.configure(state='normal')
+        self.txt_timeline.delete(1.0, tk.END)
+        self.txt_timeline.configure(state='disabled')
+
+
 # --- Status Update Screen ---
 class StatusScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
+        from core.data_registry import DataRegistry
+        self.registry = DataRegistry()
         self.history = []
+        self.current_item = None
+        self.batch_list = [] # List of items scanned in batch mode
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Quick Status Update (IN / OUT / RTN)", font=('Segoe UI', 14, 'bold')).pack(pady=10)
+        # Header
+        ttk.Label(self, text="Quick Status Update", font=('Segoe UI', 16, 'bold')).pack(pady=10)
         
-        # 1. Mode Selection
-        frame_mode = ttk.LabelFrame(self, text="Select New Status", padding=10)
-        frame_mode.pack(fill=tk.X, pady=5)
+        # Batch Toggle
+        self.var_batch_mode = tk.BooleanVar(value=False)
+        f_top = ttk.Frame(self)
+        f_top.pack(fill=tk.X, padx=20)
+        ttk.Checkbutton(f_top, text="BATCH MODE (Scan multiple, update at end)", variable=self.var_batch_mode, command=self._toggle_batch_ui).pack(side=tk.RIGHT)
         
+        # Main Container
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20)
+        
+        # --- Left Side: Scan & Details ---
+        left_pane = ttk.LabelFrame(main_frame, text="1. Scan Item", padding=15)
+        left_pane.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Search Type
+        self.var_search_type = tk.StringVar(value="ID")
+        f_type = ttk.Frame(left_pane)
+        f_type.pack(fill=tk.X, pady=5)
+        ttk.Label(f_type, text="Scan Mode:").pack(side=tk.LEFT)
+        ttk.Radiobutton(f_type, text="Unique ID", variable=self.var_search_type, value="ID").pack(side=tk.LEFT, padx=10)
+        ttk.Radiobutton(f_type, text="Model/IMEI", variable=self.var_search_type, value="MODEL").pack(side=tk.LEFT, padx=10)
+        
+        # Input
+        f_input = ttk.Frame(left_pane)
+        f_input.pack(fill=tk.X, pady=10)
+        self.ent_id = ttk.Entry(f_input, font=('Segoe UI', 14))
+        self.ent_id.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.ent_id.bind('<Return>', self._lookup_item)
+        ttk.Button(f_input, text="FIND", command=self._lookup_item, width=8).pack(side=tk.LEFT, padx=5)
+        
+        # Details Box
+        self.lbl_details = tk.Label(left_pane, text="Ready to scan...", font=('Consolas', 11), bg="#e8e8e8", relief=tk.SUNKEN, height=6, justify=tk.LEFT, anchor="nw", padx=10, pady=10)
+        self.lbl_details.pack(fill=tk.BOTH, expand=True, pady=10)
+
+        # --- Right Side: Action ---
+        right_pane = ttk.LabelFrame(main_frame, text="2. Update Status", padding=15)
+        right_pane.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Status Buttons (Big)
         self.var_status = tk.StringVar(value="OUT")
         
-        ttk.Radiobutton(frame_mode, text="SOLD (OUT)", variable=self.var_status, value="OUT").pack(side=tk.LEFT, padx=20)
-        ttk.Radiobutton(frame_mode, text="RETURN (RTN)", variable=self.var_status, value="RTN").pack(side=tk.LEFT, padx=20)
-        ttk.Radiobutton(frame_mode, text="STOCK IN (IN)", variable=self.var_status, value="IN").pack(side=tk.LEFT, padx=20)
+        btn_frame = ttk.Frame(right_pane)
+        btn_frame.pack(fill=tk.X, pady=10)
         
-        # 2. Input
-        frame_input = ttk.Frame(self, padding=10)
-        frame_input.pack(fill=tk.X)
+        r_out = ttk.Radiobutton(btn_frame, text="SOLD (OUT)", variable=self.var_status, value="OUT", command=self._toggle_buyer_fields)
+        r_rtn = ttk.Radiobutton(btn_frame, text="RETURN (RTN)", variable=self.var_status, value="RTN", command=self._toggle_buyer_fields)
+        r_in  = ttk.Radiobutton(btn_frame, text="STOCK IN (IN)", variable=self.var_status, value="IN", command=self._toggle_buyer_fields)
         
-        # Search Type Toggle
-        self.var_search_type = tk.StringVar(value="ID")
-        frame_search_type = ttk.Frame(frame_input)
-        frame_search_type.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(frame_search_type, text="Search By: ").pack(side=tk.LEFT)
-        ttk.Radiobutton(frame_search_type, text="Unique ID (Exact)", variable=self.var_search_type, value="ID").pack(side=tk.LEFT, padx=10)
-        ttk.Radiobutton(frame_search_type, text="Model / IMEI", variable=self.var_search_type, value="MODEL").pack(side=tk.LEFT, padx=10)
+        r_out.pack(fill=tk.X, pady=5)
+        r_rtn.pack(fill=tk.X, pady=5)
+        r_in.pack(fill=tk.X, pady=5)
+
+        # Buyer Fields (Conditional)
+        self.frame_buyer = ttk.Frame(right_pane, padding=10, relief=tk.RIDGE, borderwidth=1)
+        self.frame_buyer.pack(fill=tk.X, pady=10)
         
-        ttk.Label(frame_input, text="Scan/Enter Value:", font=('Segoe UI', 12)).pack(anchor=tk.W)
-        self.ent_id = ttk.Entry(frame_input, font=('Segoe UI', 16))
-        self.ent_id.pack(fill=tk.X, pady=5)
-        self.ent_id.bind('<Return>', self._process_entry)
+        ttk.Label(self.frame_buyer, text="Buyer Name:").pack(anchor=tk.W)
+        self.ent_buyer = ttk.Combobox(self.frame_buyer)
+        self.ent_buyer.pack(fill=tk.X, pady=(0,5))
+        self.ent_buyer.bind('<Return>', lambda e: self.ent_contact.focus_set())
         
-        # 3. Actions
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=5)
-        ttk.Button(btn_frame, text="Update Status", command=self._process_entry).pack(side=tk.RIGHT)
-        ttk.Button(btn_frame, text="Undo Last", command=self._undo).pack(side=tk.LEFT)
+        ttk.Label(self.frame_buyer, text="Contact No:").pack(anchor=tk.W)
+        self.ent_contact = ttk.Entry(self.frame_buyer)
+        self.ent_contact.pack(fill=tk.X, pady=(0,5))
+        self.ent_contact.bind('<Return>', self._confirm_update)
         
-        # 4. Log
-        self.txt_log = tk.Text(self, font=('Consolas', 10), state='disabled', height=10)
-        self.txt_log.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Update Button
+        self.btn_update = ttk.Button(right_pane, text="CONFIRM UPDATE", command=self._confirm_update, style="Accent.TButton")
+        self.btn_update.pack(fill=tk.X, pady=(20, 10))
+        
+        ttk.Button(right_pane, text="UNDO LAST ACTION", command=self._undo).pack(fill=tk.X, pady=5)
+        
+        # --- Batch View (Hidden by default) ---
+        self.batch_frame = ttk.Frame(self) # Will pack at bottom when active
+        self.batch_tree = ttk.Treeview(self.batch_frame, columns=('id', 'model'), show='headings', height=6)
+        self.batch_tree.heading('id', text='ID')
+        self.batch_tree.heading('model', text='Model')
+        self.batch_tree.column('id', width=60)
+        self.batch_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        btn_batch_commit = ttk.Button(self.batch_frame, text="FINISH & REVIEW BATCH", command=self._finish_batch, style="Accent.TButton")
+        btn_batch_commit.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
+
+        # --- Bottom: Log ---
+        self.log_frame = ttk.LabelFrame(self, text="Recent Activity", padding=10)
+        self.log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        self.txt_log = tk.Text(self.log_frame, font=('Consolas', 9), state='disabled', height=5, bg="#f9f9f9")
+        self.txt_log.pack(fill=tk.BOTH, expand=True)
 
     def on_show(self):
         self.ent_id.focus_set()
+        self._refresh_buyers()
+        self._toggle_buyer_fields()
 
-    def _process_entry(self, event=None):
-        val = self.ent_id.get().strip()
+    def _refresh_buyers(self):
+        self.ent_buyer['values'] = self.registry.get_buyers()
+
+    def _toggle_batch_ui(self):
+        if self.var_batch_mode.get():
+            # Show Batch UI, Hide Log
+            self.log_frame.pack_forget()
+            
+            # Pack batch frame in the same spot (bottom)
+            self.batch_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            self.btn_update.config(state='disabled') # Disable single update
+            
+            # Refresh list
+            self._refresh_batch_list()
+        else:
+            # Show Log, Hide Batch UI
+            self.batch_frame.pack_forget()
+            
+            self.log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            self.btn_update.config(state='normal')
+            
+            # Clear batch warning if needed?
+            if self.batch_list:
+                if messagebox.askyesno("Clear Batch", "Batch mode disabled. Clear current batch list?"):
+                    self.batch_list = []
+                else:
+                    # Revert check
+                    self.var_batch_mode.set(True)
+                    self._toggle_batch_ui()
+
+    def _refresh_batch_list(self):
+        for i in self.batch_tree.get_children():
+            self.batch_tree.delete(i)
+        for item in self.batch_list:
+            self.batch_tree.insert('', tk.END, values=(item['unique_id'], item['model']))
+
+    def _toggle_buyer_fields(self):
         status = self.var_status.get()
-        search_type = self.var_search_type.get()
-        
-        if not val: return
-        
-        df = self.app.inventory.get_inventory()
-        target_id = None
-        
-        if search_type == "ID":
-            # Exact Match
-            if df[df['unique_id'].astype(str) == val].empty:
-                self._log(f"Error: ID {val} not found.")
-                self.ent_id.delete(0, tk.END)
-                return
-            target_id = val
+        if status == "OUT":
+            self.frame_buyer.pack(fill=tk.X, pady=10)
+            self.btn_update.config(text="CONFIRM SALE")
+        elif status == "RTN":
+            self.frame_buyer.pack_forget()
+            self.btn_update.config(text="CONFIRM RETURN")
         else:
-            # Model/IMEI Search
-            mask = df.apply(lambda x: val.lower() in str(x['model']).lower() or val in str(x['imei']), axis=1)
-            matches = df[mask]
-            
-            if matches.empty:
-                self._log(f"No match for '{val}'")
-                return
-            elif len(matches) == 1:
-                target_id = str(matches.iloc[0]['unique_id'])
-            else:
-                # Multiple Matches - Ask User
-                target_id = self._pick_from_list(matches)
-                if not target_id: return
-
-        # Update
-        match = df[df['unique_id'].astype(str) == str(target_id)]
-        if match.empty: return # Should not happen
-        
-        success = self.app.inventory.update_item_status(target_id, status, write_to_excel=True)
-        
-        if success:
-            model = match.iloc[0]['model']
-            msg = f"Updated {target_id} ({model}) -> {status}"
-            self._log(msg)
-            
-            # Save for undo
-            self.history.append({
-                "id": target_id,
-                "prev_status": match.iloc[0]['status'],
-                "new_status": status
-            })
-        else:
-            self._log(f"Failed to update {target_id} (Excel Error)")
-            
-        self.ent_id.delete(0, tk.END)
+            self.frame_buyer.pack_forget()
+            self.btn_update.config(text="CONFIRM STOCK IN")
 
     def _pick_from_list(self, matches):
         # Popup to pick one
         top = tk.Toplevel(self)
         top.title("Select Mobile")
-        top.geometry("500x300")
+        top.geometry("600x400")
         
         selected_id = [None]
         
@@ -1009,9 +1312,179 @@ class StatusScreen(BaseScreen):
                 
         ttk.Button(top, text="Select", command=on_select).pack(pady=5)
         
+        # Make modal
         top.transient(self)
-        top.wait_window()
+        top.grab_set()
+        self.wait_window(top)
         return selected_id[0]
+
+    def _log(self, msg):
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        self.txt_log.configure(state='normal')
+        self.txt_log.insert(tk.END, f"[{ts}] {msg}\n")
+        self.txt_log.see(tk.END)
+        self.txt_log.configure(state='disabled')
+
+    def _lookup_item(self, event=None):
+        val = self.ent_id.get().strip()
+        if not val: return
+        
+        df = self.app.inventory.get_inventory()
+        search_type = self.var_search_type.get()
+        match = pd.DataFrame()
+        
+        if search_type == "ID":
+            match = df[df['unique_id'].astype(str) == val]
+        else:
+            mask = df.apply(lambda x: val.lower() in str(x['model']).lower() or val in str(x['imei']), axis=1)
+            match = df[mask]
+            
+        if match.empty:
+            self.lbl_details.config(text=f"NO MATCH FOUND FOR:\n'{val}'\n\nTry different ID or Check spelling.", fg="red")
+            self.current_item = None
+            self.ent_id.select_range(0, tk.END)
+            return
+            
+        if len(match) > 1:
+            uid = self._pick_from_list(match)
+            if not uid: return
+            match = df[df['unique_id'].astype(str) == str(uid)]
+            
+        self.current_item = match.iloc[0]
+        
+        # BATCH MODE LOGIC
+        if self.var_batch_mode.get():
+            # Add to batch and reset
+            # Check if already in batch
+            if any(str(x['unique_id']) == str(self.current_item['unique_id']) for x in self.batch_list):
+                self._log(f"Already in batch: {val}")
+            else:
+                self.batch_list.append(self.current_item)
+                self._refresh_batch_list()
+                self.lbl_details.config(text=f"Added to batch: {self.current_item['model']}", fg="blue")
+            
+            self.ent_id.delete(0, tk.END)
+            self.ent_id.focus_set()
+            return
+
+        # Normal Mode
+        d = self.current_item
+        status_color = "green" if d['status'] == 'IN' else "red"
+        
+        txt = f"MODEL : {d['model']}\nIMEI  : {d['imei']}\nCOLOR : {d['color']}\nPRICE : ₹{d['price']:,.0f}\nSTATUS: {d['status']}"
+        self.lbl_details.config(text=txt, fg="black")
+        
+        # Auto-focus logic
+        if self.var_status.get() == "OUT":
+            self.ent_buyer.focus_set()
+
+    def _finish_batch(self):
+        if not self.batch_list:
+            messagebox.showinfo("Empty", "Batch is empty")
+            return
+            
+        # Review Dialog
+        top = tk.Toplevel(self)
+        top.title(f"Review Batch ({len(self.batch_list)} Items)")
+        top.geometry("600x500")
+        
+        lbl = ttk.Label(top, text=f"Update all to: {self.var_status.get()}?", font=('bold'))
+        lbl.pack(pady=10)
+        
+        # List
+        frame_list = ttk.Frame(top)
+        frame_list.pack(fill=tk.BOTH, expand=True, padx=10)
+        
+        tv = ttk.Treeview(frame_list, columns=('id', 'model', 'price'), show='headings')
+        tv.heading('id', text='ID')
+        tv.heading('model', text='Model')
+        tv.heading('price', text='Price')
+        tv.pack(fill=tk.BOTH, expand=True)
+        
+        for item in self.batch_list:
+            tv.insert('', tk.END, values=(item['unique_id'], item['model'], item['price']))
+            
+        def remove_sel():
+            sel = tv.selection()
+            if not sel: return
+            for s in sel:
+                vals = tv.item(s)['values']
+                uid = str(vals[0])
+                # Remove from batch_list
+                self.batch_list = [x for x in self.batch_list if str(x['unique_id']) != uid]
+                tv.delete(s)
+            self._refresh_batch_list()
+
+        ttk.Button(top, text="Remove Selected", command=remove_sel).pack(pady=5)
+        
+        def confirm():
+            status = self.var_status.get()
+            buyer = self.ent_buyer.get().strip()
+            contact = self.ent_contact.get().strip()
+            
+            if status == "OUT" and not buyer:
+                messagebox.showwarning("Error", "Buyer Name Required")
+                return
+                
+            updates = {"status": status}
+            if status == "OUT":
+                updates['buyer'] = buyer
+                updates['buyer_contact'] = contact
+                
+            # Process
+            count = 0
+            for item in self.batch_list:
+                if self.app.inventory.update_item_data(item['unique_id'], updates):
+                    count += 1
+            
+            messagebox.showinfo("Done", f"Updated {count} items successfully.")
+            self.batch_list = []
+            self._refresh_batch_list()
+            self.ent_id.delete(0, tk.END)
+            self.ent_buyer.set('')
+            self.ent_contact.delete(0, tk.END)
+            top.destroy()
+            
+        ttk.Button(top, text="CONFIRM UPDATE ALL", command=confirm, style="Accent.TButton").pack(pady=10, fill=tk.X, padx=20)
+
+    def _confirm_update(self, event=None):
+        if self.current_item is None:
+            messagebox.showwarning("Wait", "Please scan/find an item first.")
+            return
+            
+        status = self.var_status.get()
+        uid = self.current_item['unique_id']
+        
+        updates = {"status": status}
+        if status == "OUT":
+            buyer = self.ent_buyer.get().strip()
+            if not buyer:
+                messagebox.showwarning("Required", "Please enter Buyer Name")
+                self.ent_buyer.focus_set()
+                return
+            updates['buyer'] = buyer
+            updates['buyer_contact'] = self.ent_contact.get().strip()
+            
+        # Update
+        success = self.app.inventory.update_item_data(uid, updates)
+        
+        if success:
+            # Log & History
+            self._log(f"Updated ID {uid} -> {status}")
+            self.history.append({"id": uid, "prev_status": self.current_item['status']})
+            
+            messagebox.showinfo("Success", f"Item marked as {status}")
+            
+            # Reset UI
+            self.ent_id.delete(0, tk.END)
+            self.lbl_details.config(text="Ready to scan next...", fg="gray")
+            self.ent_buyer.set('') # Clear combo
+            self.ent_contact.delete(0, tk.END)
+            self.current_item = None
+            self.ent_id.focus_set()
+        else:
+            messagebox.showerror("Error", "Update failed.")
+            self._log(f"FAILED update for {uid}")
 
     def _undo(self):
         if not self.history: 
@@ -1022,15 +1495,12 @@ class StatusScreen(BaseScreen):
         iid = last['id']
         prev = last['prev_status']
         
-        self.app.inventory.update_item_status(iid, prev, write_to_excel=True)
-        self._log(f"UNDO: Reverted {iid} -> {prev}")
+        if self.app.inventory.update_item_status(iid, prev, write_to_excel=True):
+            self._log(f"UNDO: Reverted {iid} -> {prev}")
+            messagebox.showinfo("Undo", f"Reverted ID {iid} to {prev}")
+        else:
+            messagebox.showerror("Undo Error", f"Failed to revert {iid}")
 
-    def _log(self, msg):
-        ts = datetime.datetime.now().strftime("%H:%M:%S")
-        self.txt_log.configure(state='normal')
-        self.txt_log.insert(tk.END, f"[{ts}] {msg}\n")
-        self.txt_log.see(tk.END)
-        self.txt_log.configure(state='disabled')
 # --- Edit Data Screen ---
 class EditDataScreen(BaseScreen):
     def __init__(self, parent, app_context):
@@ -1063,8 +1533,8 @@ class EditDataScreen(BaseScreen):
             self.vars[f] = var
             
             if f == 'color':
-                from core.color_registry import ColorRegistry
-                colors = ColorRegistry().get_all()
+                from core.data_registry import DataRegistry
+                colors = DataRegistry().get_colors()
                 combo = ttk.Combobox(self.form_frame, textvariable=var, values=colors)
                 combo.grid(row=idx, column=1, padx=10, pady=5, sticky=tk.EW)
             else:
@@ -1113,3 +1583,130 @@ class EditDataScreen(BaseScreen):
             self.app.inventory.reload_all() # Refresh to be safe
         else:
             messagebox.showerror("Error", "Failed to update Excel.")
+
+# --- Help / User Guide Screen ---
+class HelpScreen(BaseScreen):
+    def __init__(self, parent, app_context):
+        super().__init__(parent, app_context)
+        self._init_ui()
+
+    def _init_ui(self):
+        ttk.Label(self, text="User Guide & Help", font=('Segoe UI', 16, 'bold')).pack(pady=10)
+        
+        # Notebook for sections
+        nb = ttk.Notebook(self)
+        nb.pack(fill=tk.BOTH, expand=True)
+        
+        # 1. Getting Started
+        f_start = ttk.Frame(nb)
+        nb.add(f_start, text="Getting Started")
+        self._add_scroll_text(f_start, self._get_start_text())
+        
+        # 2. Features & How-To
+        f_feat = ttk.Frame(nb)
+        nb.add(f_feat, text="Features Guide")
+        self._add_scroll_text(f_feat, self._get_feature_text())
+        
+        # 3. FAQ
+        f_faq = ttk.Frame(nb)
+        nb.add(f_faq, text="FAQ")
+        self._add_scroll_text(f_faq, self._get_faq_text())
+
+    def _add_scroll_text(self, parent, content):
+        txt = tk.Text(parent, font=('Segoe UI', 10), wrap=tk.WORD, padx=10, pady=10)
+        scroll = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=txt.yview)
+        txt.configure(yscrollcommand=scroll.set)
+        
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        txt.pack(fill=tk.BOTH, expand=True)
+        
+        txt.insert(tk.END, content)
+        txt.configure(state='disabled')
+
+    def _get_start_text(self):
+        return """WELCOME TO 4BROS MOBILE MANAGER
+
+Step 1: Add Your Inventory
+--------------------------
+1. Go to "Manage" -> "Manage Files".
+2. Click "+ Add Excel File".
+3. Select your stock Excel file (.xlsx) or CSV.
+4. Map your columns! The app needs to know which column is IMEI, Model, Price, etc.
+   - If you don't have a column, select "(Ignore)".
+   - You can set a default Supplier for the whole file.
+
+Step 2: Check Your Dashboard
+----------------------------
+- Go to "Inventory" to see all your items combined.
+- The app automatically assigns a 'Unique ID' to every phone. Use this ID for fast scanning!
+
+Step 3: Printing Labels
+-----------------------
+- In "Inventory", check the boxes [x] next to items.
+- Click "Print Checked".
+- Select "Batch Mode" if you have a ZPL Thermal Printer for best results (2-up labels).
+
+Step 4: Selling
+---------------
+- Go to "Quick Status".
+- Scan the Unique ID (or search by IMEI).
+- Select "SOLD".
+- Enter Buyer Name (select from list or type new).
+- Click Confirm. The app updates your Excel file automatically!
+"""
+
+    def _get_feature_text(self):
+        return """KEY FEATURES GUIDE
+
+1. BATCH SCANNING (New!)
+------------------------
+- In "Quick Status", check "BATCH MODE".
+- Scan multiple phones one after another.
+- They are added to a waiting list.
+- When done, click "FINISH & REVIEW".
+- You can review the list, verify prices, and update them all to SOLD in one click.
+
+2. BUYER & DATA MANAGEMENT
+--------------------------
+- Go to "Manage" -> "Manage Data".
+- Pre-load your Frequent Buyers list to save typing time.
+- Manage standard Colors for consistent data entry.
+
+3. INVOICING / BILLING
+----------------------
+- Go to "Billing".
+- Scan IDs to add to cart.
+- Enter Customer Details.
+- Click "Generate Invoice" to get a professional PDF receipt with GST breakdowns.
+
+4. ANALYTICS
+------------
+- See your total stock value, potential profit, and sales performance.
+- Export detailed PDF reports for your records.
+
+5. SAFETY & BACKUPS
+-------------------
+- The app creates a backup (.bak) of your Excel file before every write.
+- If Excel is open, the app will warn you instead of crashing.
+- Data like 'Sold' status is saved internally too, so you never lose track even if you replace the Excel file.
+"""
+
+    def _get_faq_text(self):
+        return """FREQUENTLY ASKED QUESTIONS
+
+Q: My Excel file isn't updating!
+A: Ensure the file is NOT open in Microsoft Excel. The app cannot write if the file is locked by another program. Close Excel and try again.
+
+Q: I see "Conflict Detected" warning.
+A: This means the same IMEI was found in two different files or rows. The app asks you to merge them. Usually, you should check your source files for duplicates.
+
+Q: How do I change the Store Name on labels?
+A: Go to "Manage" -> "Settings". You can change Store Name, Label Size, and GST % there.
+
+Q: Can I use this without Excel?
+A: You need at least one Excel/CSV file to load inventory. You can create a simple dummy file with headers (Model, IMEI, Price) to start.
+
+Q: Where is my data saved?
+A: All config and history is saved in your 'Documents/4BrosManager' folder. Do not delete the 'config' folder there unless you want to reset everything.
+"""
+

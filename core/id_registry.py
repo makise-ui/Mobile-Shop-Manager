@@ -2,6 +2,7 @@ import json
 import os
 import hashlib
 from pathlib import Path
+from .utils import SafeJsonWriter
 
 # Use the same config dir as config.py
 APP_DIR = Path.home() / "Documents" / "4BrosManager"
@@ -37,8 +38,7 @@ class IDRegistry:
             return {"next_id": 1, "items": {}, "metadata": {}}
 
     def _save_registry(self):
-        with open(self.file_path, 'w') as f:
-            json.dump(self.registry, f, indent=4)
+        SafeJsonWriter.write(self.file_path, self.registry)
 
     def get_or_create_id(self, row_data):
         """
@@ -70,6 +70,24 @@ class IDRegistry:
         if iid_str not in self.registry['metadata']:
             self.registry['metadata'][iid_str] = {}
         self.registry['metadata'][iid_str].update(data)
+        self._save_registry()
+
+    def add_history_log(self, item_id, action, details):
+        """Adds a timestamped history entry for an item."""
+        import datetime
+        iid_str = str(item_id)
+        if iid_str not in self.registry['metadata']:
+            self.registry['metadata'][iid_str] = {}
+            
+        if 'history' not in self.registry['metadata'][iid_str]:
+            self.registry['metadata'][iid_str]['history'] = []
+            
+        entry = {
+            "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "action": action,
+            "details": details
+        }
+        self.registry['metadata'][iid_str]['history'].append(entry)
         self._save_registry()
 
     def get_metadata(self, item_id):

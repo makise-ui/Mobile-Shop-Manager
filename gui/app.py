@@ -6,13 +6,19 @@ from core.watcher import InventoryWatcher
 from core.barcode_utils import BarcodeGenerator
 from core.printer import PrinterManager
 from core.billing import BillingManager
-from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ColorScreen, SearchScreen, StatusScreen, EditDataScreen
+from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen
+from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 
 class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("4 Bros Mobile Manager")
         self.geometry("1100x700")
+        
+        # --- Splash Screen ---
+        store_name = ConfigManager().get('store_name', '4 Bros Mobile')
+        splash = SplashScreen(self, store_name)
+        self.withdraw() # Hide main window while splash shows
         
         # Set Icon (Safe Load)
         try:
@@ -50,52 +56,106 @@ class MainApp(tk.Tk):
         # --- Start ---
         self.inventory.reload_all()
         self.watcher.start_watching()
+        
+        # Close Splash and Show Main
+        self.after(2000, lambda: self._finish_init(splash))
+
+    def _finish_init(self, splash):
+        splash.destroy()
+        self.deiconify() # Show main window
+        self.after(500, self._check_conflicts) # Check conflicts on startup
+        
+        # Check if first run (no files)
+        if not self.app_config.mappings:
+            WelcomeDialog(self, self._on_welcome_choice)
+
+    def _on_welcome_choice(self, choice):
+        if choice == "files":
+            self.show_screen("files")
+        elif choice == "help":
+            self.show_screen("help")
+        # 'explore' just stays on inventory
 
     def _init_layout(self):
         # --- Styles ---
         style = ttk.Style()
-        style.theme_use('clam') # 'clam' usually looks cleaner than default 'tk'
+        style.theme_use('clam')
         
-        # Treeview Style
-        style.configure("Treeview", rowheight=25, font=('Segoe UI', 10))
-        style.configure("Treeview.Heading", font=('Segoe UI', 10, 'bold'))
+        # Colors
+        BG_COLOR = "#f0f0f0"
+        NAV_BG = "#2c3e50"
+        NAV_FG = "white"
+        ACCENT = "#007acc"
         
-        # General
-        style.configure("TButton", font=('Segoe UI', 10), padding=5)
-        style.configure("TLabel", font=('Segoe UI', 10))
-        style.configure("TLabelframe.Label", font=('Segoe UI', 10, 'bold'))
+        self.configure(background=BG_COLOR)
         
-        # Main Container: Sidebar (Left) + Content (Right)
-        container = ttk.Frame(self)
-        container.pack(fill=tk.BOTH, expand=True)
+        # Configure Styles
+        style.configure("TFrame", background=BG_COLOR)
+        style.configure("TLabel", background=BG_COLOR, font=('Segoe UI', 10))
+        style.configure("TLabelframe", background=BG_COLOR)
+        style.configure("TLabelframe.Label", background=BG_COLOR, font=('Segoe UI', 11, 'bold'), foreground="#333")
         
-        # Sidebar
-        sidebar = ttk.Frame(container, padding=5, width=200)
-        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        # Nav Button Style
+        style.configure("Nav.TButton", font=('Segoe UI', 10, 'bold'), background=NAV_BG, foreground=NAV_FG, borderwidth=0, focuscolor=NAV_BG)
+        style.map("Nav.TButton", background=[('active', '#34495e'), ('pressed', ACCENT)])
         
-        # Sidebar Buttons
-        # Use simple Buttons for navigation
+        # Accent Button
+        style.configure("Accent.TButton", font=('Segoe UI', 10, 'bold'), background=ACCENT, foreground="white")
+        style.map("Accent.TButton", background=[('active', '#005f9e')])
+        
+        # Treeview
+        style.configure("Treeview", rowheight=28, font=('Segoe UI', 10), background="white", fieldbackground="white")
+        style.configure("Treeview.Heading", font=('Segoe UI', 10, 'bold'), background="#e0e0e0")
+        
+        # --- Layout ---
+        
+        # 1. Top Navigation Bar
+        nav_frame = tk.Frame(self, bg=NAV_BG, height=50)
+        nav_frame.pack(side=tk.TOP, fill=tk.X)
+        nav_frame.pack_propagate(False) # Fixed height
+        
+        # App Title in Nav
+        lbl_title = tk.Label(nav_frame, text="4BROS MANAGER", font=('Segoe UI', 14, 'bold'), bg=NAV_BG, fg="white")
+        lbl_title.pack(side=tk.LEFT, padx=20)
+        
+        # Nav Buttons
+        btn_bar = tk.Frame(nav_frame, bg=NAV_BG)
+        btn_bar.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
+        
         nav_items = [
             ("Inventory", "inventory"),
-            ("Search ID", "search"),
+            ("Search", "search"),
             ("Quick Status", "status"),
-            ("Edit Data", "edit"),
-            ("Manage Files", "files"),
-            ("Billing / GST", "billing"),
+            ("Edit", "edit"),
+            ("Billing", "billing"),
             ("Analytics", "analytics"),
-            ("Manage Colors", "colors"),
-            ("Settings", "settings")
         ]
         
-        ttk.Label(sidebar, text="MENU", font=('Arial', 10, 'bold')).pack(pady=10)
-        
+        self.nav_btns = {}
         for label, key in nav_items:
-            btn = ttk.Button(sidebar, text=label, command=lambda k=key: self.show_screen(k))
-            btn.pack(fill=tk.X, pady=2)
+            btn = ttk.Button(btn_bar, text=label, style="Nav.TButton", command=lambda k=key: self.show_screen(k))
+            btn.pack(side=tk.LEFT, padx=2, pady=10)
+            self.nav_btns[key] = btn
 
-        # Content Area
-        self.content_area = ttk.Frame(container)
-        self.content_area.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # Manage Dropdown (for less used items)
+        mb = ttk.Menubutton(btn_bar, text="Manage ▼", style="Nav.TButton")
+        menu = tk.Menu(mb, tearoff=0, bg=NAV_BG, fg="black", font=('Segoe UI', 10))
+        
+        menu.add_command(label="Manage Files", command=lambda: self.show_screen('files'))
+        menu.add_command(label="Manage Data", command=lambda: self.show_screen('managedata'))
+        menu.add_separator()
+        menu.add_command(label="User Guide & Help", command=lambda: self.show_screen('help'))
+        menu.add_command(label="Settings", command=lambda: self.show_screen('settings'))
+        
+        mb.config(menu=menu)
+        mb.pack(side=tk.LEFT, padx=2, pady=10)
+
+        # 2. Main Content Area (Card style)
+        self.container = tk.Frame(self, bg=BG_COLOR)
+        self.container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        self.content_area = ttk.Frame(self.container) # Inner frame for padding
+        self.content_area.pack(fill=tk.BOTH, expand=True) # Fill the 'card' area
         
         # Initialize Screens
         self.screens = {}
@@ -107,10 +167,12 @@ class MainApp(tk.Tk):
         self.screens['billing'] = BillingScreen(self.content_area, self)
         self.screens['analytics'] = AnalyticsScreen(self.content_area, self)
         self.screens['settings'] = SettingsScreen(self.content_area, self)
-        self.screens['colors'] = ColorScreen(self.content_area, self)
+        self.screens['managedata'] = ManageDataScreen(self.content_area, self)
+        self.screens['help'] = HelpScreen(self.content_area, self)
         
         # Show default
         self.show_screen('inventory')
+
         
         # Status Bar
         self.status_var = tk.StringVar()
@@ -140,18 +202,31 @@ class MainApp(tk.Tk):
 
     def _refresh_ui(self):
         # If inventory is visible, refresh it
-        # We can just call on_show of current if it's inventory
-        # For simplicity, just refresh inventory screen data if it exists
         if 'inventory' in self.screens:
             self.screens['inventory'].refresh_data()
         
-        # Check conflicts
+        self._check_conflicts()
+            
+    def _check_conflicts(self):
         if hasattr(self.inventory, 'conflicts') and self.inventory.conflicts:
             count = len(self.inventory.conflicts)
-            self.status_var.set(f"Inventory updated. WARNING: {count} IMEI conflicts detected!")
-            # Ideally show a dialog or button to resolve
+            self.status_var.set(f"WARNING: {count} IMEI conflicts detected!")
+            
+            # Pop the first conflict
+            c = self.inventory.conflicts[0]
+            ConflictResolutionDialog(self, c, self._resolve_conflict_callback)
         else:
-            self.status_var.set("Inventory updated from file change.")
+            self.status_var.set("Inventory Ready.")
+
+    def _resolve_conflict_callback(self, conflict_data, action):
+        # Update backend
+        self.inventory.resolve_conflict(conflict_data, action)
+        # Remove resolved conflict from list
+        if conflict_data in self.inventory.conflicts:
+            self.inventory.conflicts.remove(conflict_data)
+        
+        # Check if more remain
+        self._check_conflicts()
 
     def on_close(self):
         self.watcher.stop_watching()

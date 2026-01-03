@@ -4,6 +4,7 @@ import datetime
 import hashlib
 from .config import ConfigManager
 from .id_registry import IDRegistry
+from .utils import backup_excel_file
 
 class InventoryManager:
     def __init__(self, config_manager: ConfigManager):
@@ -11,6 +12,7 @@ class InventoryManager:
         self.id_registry = IDRegistry()
         self.inventory_df = pd.DataFrame()
         self.file_status = {}  # Keep track of file read status
+        self.conflicts = []
 
     def load_file(self, file_path):
         mapping_data = self.config_manager.get_file_mapping(file_path)
@@ -73,7 +75,11 @@ class InventoryManager:
         canonical['price_original'] = raw_price
         
         # Apply Markup
-        markup = self.config_manager.get('price_markup_percent', 0.0)
+        try:
+            markup = float(self.config_manager.get('price_markup_percent', 0.0))
+        except (ValueError, TypeError):
+            markup = 0.0
+            
         if markup > 0:
             canonical['price'] = raw_price * (1 + markup/100.0)
         else:
@@ -114,6 +120,10 @@ class InventoryManager:
         else:
             canonical['color'] = ''
 
+        # Buyer handling
+        canonical['buyer'] = get_col('buyer').fillna('').astype(str) if get_col('buyer') is not None else ''
+        canonical['buyer_contact'] = get_col('buyer_contact').fillna('').astype(str) if get_col('buyer_contact') is not None else ''
+
         # Fill missing basics
         canonical['imei'] = canonical['imei'].fillna('').astype(str)
         canonical['model'] = canonical['model'].fillna('Unknown Model').astype(str)
@@ -141,7 +151,6 @@ class InventoryManager:
                 # Check for conflict (only if excel has explicit status)
                 if excel_status != app_status:
                     # We trust App status usually, but let's note the conflict
-                    # print(f"Conflict ID {row['unique_id']}: Excel={excel_status} vs App={app_status}")
                     pass
 
             if 'notes' in meta:
@@ -150,6 +159,12 @@ class InventoryManager:
                 row['color'] = meta['color']
             if 'price_original' in meta:
                 row['price_original'] = float(meta['price_original'])
+                
+                try:
+                    markup = float(self.config_manager.get('price_markup_percent', 0.0))
+                except (ValueError, TypeError):
+                    markup = 0.0
+                    
                 if markup > 0:
                     row['price'] = row['price_original'] * (1 + markup/100.0)
                 else:
@@ -192,6 +207,7 @@ class InventoryManager:
                     if len(sources) > 1:
                         self.conflicts.append({
                             "imei": imei,
+                            "model": group.iloc[0]['model'],
                             "sources": list(sources),
                             "rows": group.to_dict('records')
                         })
@@ -201,17 +217,41 @@ class InventoryManager:
             self.inventory_df = pd.DataFrame(columns=['unique_id', 'imei', 'model', 'ram_rom', 'price', 'price_original', 'supplier', 'source_file', 'last_updated', 'status', 'color'])
             
         return self.inventory_df
+    
+    def resolve_conflict(self, conflict_data, action, keep_source=None):
+        """
+        Resolves an IMEI conflict.
+        action: 'merge' (not really applicable for physical goods, usually means keep one) or 'keep_one'
+        keep_source: The file path to keep the record from.
+        """
+        # Logic: If 'keep_one', we effectively want to IGNORE the other rows in future loads?
+        # Or just tell the user to fix the Excel file?
+        # For now, we can flag the 'duplicate' in the ID Registry to be ignored or just log it.
+        # But real resolution involves modifying the source file to remove the duplicate.
+        
+        if action == 'keep_one' and keep_source:
+            # We can't easily delete from the source excel here without risk.
+            # Best approach: Add to a 'blacklist' or 'ignore' list in config?
+            # Or just update the registry to map this IMEI -> Specific Source File preferred?
+            pass
+        return True # Placeholder
 
     def get_inventory(self):
         return self.inventory_df
 
     def update_item_status(self, item_id, new_status, write_to_excel=False):
         """Updates and persists the status of an item."""
-        # 1. Update Internal Registry
-        self.id_registry.update_metadata(item_id, {"status": new_status})
-        
-        # 2. Update Memory
+        # 1. Get Previous Status for logging
         mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
+        old_status = "UNKNOWN"
+        if mask.any():
+            old_status = self.inventory_df.loc[mask, 'status'].values[0]
+
+        # 2. Update Internal Registry
+        self.id_registry.update_metadata(item_id, {"status": new_status})
+        self.id_registry.add_history_log(item_id, "STATUS_CHANGE", f"Moved from {old_status} to {new_status}")
+        
+        # 3. Update Memory
         if mask.any():
             self.inventory_df.loc[mask, 'status'] = new_status
             
@@ -219,7 +259,8 @@ class InventoryManager:
             if write_to_excel:
                 try:
                     row = self.inventory_df[mask].iloc[0]
-                    self._write_excel_status(row, new_status)
+                    # Use the generic writer for status too
+                    self._write_excel_generic(row, {"status": new_status})
                 except Exception as e:
                     print(f"Excel write error: {e}")
                     return False
@@ -231,8 +272,11 @@ class InventoryManager:
         if not mask.any(): return False
         
         # 1. Update Persistent Registry (App DB)
-        # This ensures changes stick even if Excel doesn't have the column
         self.id_registry.update_metadata(item_id, updates)
+        
+        # Log generic updates
+        log_details = ", ".join([f"{k}={v}" for k, v in updates.items()])
+        self.id_registry.add_history_log(item_id, "DATA_UPDATE", log_details)
         
         # 2. Update Memory
         for k, v in updates.items():
@@ -254,6 +298,12 @@ class InventoryManager:
         file_path = row_data['source_file']
         if not os.path.exists(file_path): return
 
+        # SAFETY 1: Backup
+        backup_path = backup_excel_file(file_path)
+        if not backup_path:
+            print("Failed to create backup, aborting write for safety.")
+            return
+
         mapping_data = self.config_manager.get_file_mapping(file_path)
         mapping = mapping_data.get('mapping', {})
         
@@ -263,136 +313,80 @@ class InventoryManager:
         # Map updates to Excel headers
         excel_updates = {}
         for k, v in updates.items():
-            # price_original maps to 'price' in mapping usually
             if k == 'price_original': k = 'price'
             if k in field_to_col:
                 excel_updates[field_to_col[k]] = v
         
-        if not excel_updates: return
-
-        wb = load_workbook(file_path)
-        ws = wb.active
+        # If excel_updates empty, check if we need to CREATE columns
+        # even if not mapped.
         
-        # Find Header Columns
-        col_indices = {}
-        for cell in ws[1]:
-            val = str(cell.value).strip()
-            if val in excel_updates:
-                col_indices[val] = cell.column
-        
-        # Find Row (Match IMEI or Model+PriceOriginal)
-        target_imei = str(row_data['imei'])
-        
-        # Find IMEI col for matching
-        imei_header = field_to_col.get('imei')
-        imei_col_idx = None
-        for cell in ws[1]:
-            if str(cell.value).strip() == imei_header:
-                imei_col_idx = cell.column
-                break
-        
-        for row in ws.iter_rows(min_row=2):
-            match = False
-            if imei_col_idx and str(row[imei_col_idx-1].value) == target_imei:
-                match = True
-            # Fallback matching logic could go here
-            
-            if match:
-                # Apply updates
-                for col_name, new_val in excel_updates.items():
-                    if col_name in col_indices:
-                        ws.cell(row=row[0].row, column=col_indices[col_name]).value = new_val
-                break
-        
-        wb.save(file_path)
-        """Updates and persists the status of an item."""
-        # 1. Update Internal Registry
-        self.id_registry.update_metadata(item_id, {"status": new_status})
-        
-        # 2. Update Memory
-        mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
-        if mask.any():
-            self.inventory_df.loc[mask, 'status'] = new_status
-            
-            # 3. Write to Excel (Optional)
-            if write_to_excel:
-                try:
-                    row = self.inventory_df[mask].iloc[0]
-                    self._write_excel_status(row, new_status)
-                except Exception as e:
-                    print(f"Excel write error: {e}")
-                    return False
-        return True
-
-    def _write_excel_status(self, row_data, new_status):
-        from openpyxl import load_workbook
-        
-        file_path = row_data['source_file']
-        if not os.path.exists(file_path):
-            return
-
-        # Get mapping to find which column is 'Status'
-        mapping_data = self.config_manager.get_file_mapping(file_path)
-        mapping = mapping_data.get('mapping', {})
-        
-        # Find the Excel column header that maps to 'status'
-        status_col_name = None
-        for file_col, internal_col in mapping.items():
-            if internal_col == 'status':
-                status_col_name = file_col
-                break
-        
-        if not status_col_name:
-            # If no status column mapped, we can't write back
-            print("No 'status' column mapped for this file.")
-            return
-
         try:
             wb = load_workbook(file_path)
-            ws = wb.active # Assume first sheet
+            ws = wb.active
             
-            # 1. Find Header Column Index
-            header_idx = None
-            for cell in ws[1]: # Assume row 1 is header
-                if str(cell.value).strip() == status_col_name:
-                    header_idx = cell.column
-                    break
+            # Find Header Columns
+            col_indices = {}
+            max_col_idx = 0
+            for cell in ws[1]:
+                val = str(cell.value).strip()
+                if val:
+                    col_indices[val] = cell.column
+                    if cell.column > max_col_idx: max_col_idx = cell.column
             
-            if not header_idx:
-                return
+            default_headers = {
+                'buyer': 'Buyer Name',
+                'buyer_contact': 'Buyer Contact',
+                'notes': 'Notes',
+                'status': 'Status',
+                'color': 'Color',
+                'price': 'Selling Price'
+            }
+            
+            for field, value in updates.items():
+                header_name = None
+                if field in field_to_col:
+                    header_name = field_to_col[field]
+                elif field in default_headers:
+                    header_name = default_headers[field]
+                
+                if header_name:
+                    if header_name not in col_indices:
+                        # Create New Column
+                        max_col_idx += 1
+                        ws.cell(row=1, column=max_col_idx).value = header_name
+                        col_indices[header_name] = max_col_idx
+                    excel_updates[header_name] = value
 
-            # 2. Find Row (Match IMEI or Model+Price)
+            # Find Row (Match IMEI or Model)
             target_imei = str(row_data['imei'])
             target_model = str(row_data['model'])
             
-            # Find IMEI column index if mapped
-            imei_col_idx = None
-            model_col_idx = None
+            # Find IMEI/Model col for matching
+            imei_header = field_to_col.get('imei')
+            model_header = field_to_col.get('model')
             
-            for cell in ws[1]:
-                val = str(cell.value).strip()
-                if val == [k for k, v in mapping.items() if v == 'imei'][0]:
-                    imei_col_idx = cell.column
-                if val == [k for k, v in mapping.items() if v == 'model'][0]:
-                    model_col_idx = cell.column
-
+            imei_col_idx = col_indices.get(imei_header)
+            model_col_idx = col_indices.get(model_header)
+            
             for row in ws.iter_rows(min_row=2):
-                # Check match
                 match = False
                 if imei_col_idx and str(row[imei_col_idx-1].value) == target_imei:
                     match = True
                 elif model_col_idx and str(row[model_col_idx-1].value) == target_model:
-                    # Weak match, but fallback
-                    match = True
+                    match = True # Weak match
                 
                 if match:
-                    # Update Status
-                    ws.cell(row=row[0].row, column=header_idx).value = new_status
+                    # Apply updates
+                    for col_name, new_val in excel_updates.items():
+                        if col_name in col_indices:
+                            ws.cell(row=row[0].row, column=col_indices[col_name]).value = new_val
                     break
             
             wb.save(file_path)
-            print(f"Updated Excel file: {file_path}")
             
+        except PermissionError:
+            print(f"Error: File {file_path} is open in Excel. Cannot save.")
+            raise Exception("File is open in Excel. Please close it.")
         except Exception as e:
-            print(f"Failed to update Excel: {e}")
-            raise e
+            print(f"Excel Write Error: {e}")
+            raise

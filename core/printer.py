@@ -140,22 +140,22 @@ class PrinterManager:
                     bc_x = self._calculate_barcode_x(uid, center_x)
                     
                     return f"""
-^FO{x_offset+0},5^A0N,28,28
+^FO{x_offset+0},0^A0N,28,28
 ^FB400,1,0,C,0^FD{store}^FS
 
-^FO{bc_x},35^BY2,2,40^BCN,40,N,N,N
+^FO{bc_x},30^BY2,2,40^BCN,40,N,N,N
 ^FD{uid}^FS
 
-^FO{x_offset+0},80^A0N,22,22
+^FO{x_offset+0},75^A0N,22,22
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO{x_offset+10},105^A0N,22,22
+^FO{x_offset+10},100^A0N,22,22
 ^FB280,2,0,L,0^FD{model}^FS
 
-^FO{x_offset+10},145^A0N,22,22
+^FO{x_offset+10},140^A0N,22,22
 ^FB200,1,0,L,0^FD{ram}^FS
 
-^FO{x_offset+150},140^A0N,30,30
+^FO{x_offset+150},135^A0N,30,30
 ^FB230,1,0,R,0^FD{pr}^FS
 """
                 

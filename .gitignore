@@ -20,7 +20,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+debug_prints/
 # Data & Config (User specific)
 config.json
 file_mappings.json
@@ -30,7 +30,8 @@ colors.json
 *.csv
 debug_prints/
 test_env/
-
+*.png
+*.jpg
 # IDEs
 .vscode/
 .idea/

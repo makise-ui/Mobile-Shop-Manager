@@ -13,7 +13,7 @@ class MapColumnsDialog(tk.Toplevel):
         
         self.mappings = {}
         # Removed 'ram', 'rom'
-        self.canonical_fields = ['imei', 'model', 'ram_rom', 'price', 'supplier', 'notes', 'status', 'color']
+        self.canonical_fields = ['imei', 'model', 'ram_rom', 'price', 'supplier', 'notes', 'status', 'color', 'buyer', 'buyer_contact']
         
         # Load sample data
         try:
@@ -255,3 +255,110 @@ class ZPLPreviewDialog(tk.Toplevel):
     def _print(self):
         self.destroy()
         self.on_confirm()
+
+class ConflictResolutionDialog(tk.Toplevel):
+    def __init__(self, parent, conflict_data, on_resolve):
+        super().__init__(parent)
+        self.title("Data Conflict Detected")
+        self.geometry("600x450")
+        self.conflict = conflict_data
+        self.on_resolve = on_resolve
+        self.result = None
+        
+        self._init_ui()
+        
+    def _init_ui(self):
+        ttk.Label(self, text="Conflict: Duplicate IMEI Found", font=('Segoe UI', 12, 'bold'), foreground='red').pack(pady=10)
+        
+        info_frame = ttk.LabelFrame(self, text="Item Details", padding=10)
+        info_frame.pack(fill=tk.X, padx=10)
+        
+        ttk.Label(info_frame, text=f"IMEI: {self.conflict['imei']}").pack(anchor=tk.W)
+        ttk.Label(info_frame, text=f"Model: {self.conflict['model']}").pack(anchor=tk.W)
+        
+        ttk.Label(self, text="Found in multiple files:", font=('Segoe UI', 10, 'bold')).pack(pady=(10,5), anchor=tk.W, padx=10)
+        
+        # Sources List
+        self.lb = tk.Listbox(self, height=5)
+        self.lb.pack(fill=tk.X, padx=10)
+        
+        for src in self.conflict['sources']:
+            self.lb.insert(tk.END, src)
+            
+        ttk.Label(self, text="Action Required:", font=('Segoe UI', 10, 'bold')).pack(pady=(10,5), anchor=tk.W, padx=10)
+        
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(fill=tk.X, pady=10)
+        
+        # Options
+        ttk.Button(btn_frame, text="Keep All (Merge)", command=self._merge).pack(side=tk.LEFT, padx=20, expand=True)
+        # ttk.Button(btn_frame, text="Keep One (Ignore Others)", command=self._keep_one).pack(side=tk.LEFT, padx=20, expand=True) # Logic too complex for now
+        ttk.Button(btn_frame, text="Ignore Warning", command=self.destroy).pack(side=tk.RIGHT, padx=20, expand=True)
+        
+    def _merge(self):
+        self.on_resolve(self.conflict, 'merge')
+        self.destroy()
+
+    def _keep_one(self):
+        # Determine which one to keep?
+        # For now let's just support Merge or Ignore
+        pass
+
+class SplashScreen(tk.Toplevel):
+    def __init__(self, parent, store_name):
+        super().__init__(parent)
+        self.title("Welcome")
+        self.geometry("500x300")
+        self.overrideredirect(True) # No title bar
+        
+        # Center on screen
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w // 2) - 250
+        y = (screen_h // 2) - 150
+        self.geometry(f"+{x}+{y}")
+        
+        self.configure(bg='#2c3e50')
+        
+        frame = tk.Frame(self, bg='#2c3e50', bd=5, relief=tk.RAISED)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        tk.Label(frame, text="WELCOME TO", font=('Segoe UI', 12), bg='#2c3e50', fg='white').pack(pady=(50, 5))
+        tk.Label(frame, text=store_name.upper(), font=('Segoe UI', 24, 'bold'), bg='#2c3e50', fg='#007acc').pack(pady=5)
+        tk.Label(frame, text="Management System", font=('Segoe UI', 10), bg='#2c3e50', fg='lightgray').pack(pady=5)
+        
+        tk.Label(frame, text="Loading inventory and settings...", font=('Segoe UI', 8, 'italic'), bg='#2c3e50', fg='gray').pack(side=tk.BOTTOM, pady=20)
+        
+        self.update()
+
+class WelcomeDialog(tk.Toplevel):
+    def __init__(self, parent, on_choice):
+        super().__init__(parent)
+        self.title("Welcome - Getting Started")
+        self.geometry("500x400")
+        self.on_choice = on_choice
+        
+        # Center
+        self.transient(parent)
+        self.grab_set()
+        
+        self._init_ui()
+        
+    def _init_ui(self):
+        ttk.Label(self, text="Welcome to 4Bros Manager!", font=('Segoe UI', 16, 'bold')).pack(pady=20)
+        ttk.Label(self, text="It looks like you haven't added any inventory files yet.", font=('Segoe UI', 10)).pack(pady=10)
+        
+        btn_frame = ttk.Frame(self, padding=20)
+        btn_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(btn_frame, text="1. ADD EXCEL FILE", width=30, command=lambda: self._choose("files")).pack(pady=10)
+        ttk.Button(btn_frame, text="2. USER GUIDE (Read First)", width=30, command=lambda: self._choose("help")).pack(pady=10)
+        ttk.Button(btn_frame, text="3. EXPLORE APP (Without Files)", width=30, command=lambda: self._choose("explore")).pack(pady=10)
+        
+        ttk.Label(self, text="Tip: You can find these options later in the 'Manage' menu.", font=('Segoe UI', 8, 'italic')).pack(side=tk.BOTTOM, pady=20)
+
+    def _choose(self, choice):
+        self.destroy()
+        self.on_choice(choice)
+
+
