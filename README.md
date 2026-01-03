@@ -1,55 +1,90 @@
-# 4bros Mobile Point Manager
+# 4Bros Mobile Point Manager
 
-A professional Windows desktop application for managing mobile shop inventory, printing 2-up barcode labels, and generating GST invoices.
+A professional Windows desktop application designed for mobile shop inventory management. It streamlines operations by merging stock data from multiple Excel files, providing a unified dashboard, handling GST billing, and offering specialized 2-up barcode printing for thermal printers.
 
 ## 🚀 Key Features
 
-- **Inventory Dashboard**: Combined view of stock from multiple Excel files with real-time file watching.
-- **2-Up ZPL Printing**: Optimized for thermal printers with 2-label rows. Features high-quality Code128 barcodes and precise alignment.
-- **ID Lookup (Search)**: Instantly find any phone by its unique ID to view full details (Buy/Sell Price, IMEI, Supplier, Color).
-- **Professional GST Billing**: Generate neat PDF invoices with CGST/SGST/IGST splits, customer contact info, and tax-inclusive toggles.
-- **Color Management**: Preload and manage mobile colors for consistent data entry.
-- **Persistent Status**: Mark items as **SOLD** or **RTN** (Return) directly in the app; status persists even after Excel reloads.
-- **Auto-Price Markup**: Set a percentage (e.g., 15%) in settings to automatically calculate selling prices.
+- **Unified Inventory Dashboard**: Automatically merges and tracks stock from multiple Excel files. Watches for file changes in real-time.
+- **High-Precision Label Printing**: Optimized for **ZPL (Zebra Programming Language)** compatible thermal printers. Supports 2-up label rolls (2 labels per row) with crisp Code128 barcodes.
+- **Smart ID Registry**: Assigns a unique 3-character ID to every item. Tracks **Sold** and **Return** status persistently, ensuring data isn't lost when you replace your daily stock sheet.
+- **Professional GST Billing**: Generates PDF invoices with automatic CGST/SGST/IGST tax splits.
+- **Conflict Resolution**: Detects duplicate entries across different files and helps you resolve them.
+- **Customizable**: Configure store details, label dimensions, tax rates, and price markups.
+
+---
 
 ## 🛠️ Requirements
 
-- **OS**: Windows 10 or 11
-- **Python**: 3.10+ (for source execution)
-- **Dependencies**: pandas, openpyxl, Pillow, python-barcode, reportlab, python-escpos, pywin32.
+- **Operating System**: Windows 10 or Windows 11 (Recommended).
+- **Python**: Version 3.10 or higher.
+- **Printer**: A thermal label printer (203 DPI recommended) installed as a Windows printer (e.g., Zebra, TSC, Xprinter).
 
-## 📥 Installation (Source)
+---
 
-1. Clone the repository or extract the source folder.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 📥 Installation & Setup
 
-3. Run the app:
-   ```bash
-   python main.py
-   ```
+### 1. Install Python
+If you haven't already, download and install Python 3.10+ from [python.org](https://www.python.org/downloads/windows/).
+*   **Important:** During installation, check the box **"Add Python to PATH"**.
 
-## 📦 Packaging (Create .EXE)
-
-To build a standalone `.exe` for Windows, use the following command:
-
-```bash
-pyinstaller --noconfirm --onefile --windowed --name "4BrosManager" --icon "icon.jpg" --hidden-import "PIL._tkinter_finder" --collect-all "escpos" --add-data "core;core" --add-data "gui;gui" --add-data "icon.jpg;." main.py
+### 2. Get the Code
+Download this repository as a ZIP file and extract it, or use git:
+```powershell
+git clone https://github.com/yourusername/Mobile-Shop-Manager.git
+cd Mobile-Shop-Manager
 ```
 
-## 📂 Data & Configuration
+### 3. Install Dependencies
+Open a Command Prompt or PowerShell in the project folder and run:
 
-For safety, the app stores all settings, ID history, and file mappings in your Windows Documents folder:
-`C:\Users\<YourUser>\Documents\4BrosManager\config\`
+```powershell
+pip install -r requirements.txt
+```
 
-- **`config.json`**: Store name, label sizes, GST %, and Markup %.
-- **`id_registry.json`**: Permanent record of IDs and Status (Sold/Return). **Do not delete this file if you want to keep your ID history.**
-- **`file_mappings.json`**: Remembers which Excel columns match the app fields.
+*Note: If you encounter permission errors, try running the command prompt as Administrator.*
 
-## 📝 Usage Tips
+### 4. Run the Application
+Start the application using:
 
-1. **Adding Files**: Use the "Manage Files" screen to add your Excel/CSV. Map the columns once, and the app will remember them.
-2. **Printing**: Check the items you want to print in the Inventory screen. The "Print Checked" button will show a **2-up Preview** before sending to the printer.
-3. **ZPL Support**: The app is optimized for Zebra/ZPL compatible thermal printers (203 DPI). Set your ZPL printer as the Windows Default.
+```powershell
+python main.py
+```
+*(If `python` doesn't work, try `py main.py` or `python3 main.py` depending on your setup).*
+
+---
+
+## 📦 Building a Standalone EXE
+
+To distribute the app to other computers without installing Python, you can package it into a single `.exe` file.
+
+**Note:** The `pyinstaller` command is best run as a module to avoid path issues on Windows.
+
+Run this command in your terminal:
+
+```powershell
+python -m PyInstaller --noconfirm --onefile --windowed --name "4BrosManager" --icon "icon.jpg" --hidden-import "PIL._tkinter_finder" --collect-all "escpos" --add-data "core;core" --add-data "gui;gui" --add-data "icon.jpg;." main.py
+```
+
+Once finished, you will find `4BrosManager.exe` in the `dist/` folder.
+
+---
+
+## 📂 Data Storage
+
+The application does **not** store your data inside the program folder. Instead, it keeps everything safe in your Documents folder:
+
+`C:\Users\<YourName>\Documents\4BrosManager\`
+
+*   **`config/`**: Contains settings (`config.json`) and file mappings (`file_mappings.json`).
+*   **`invoices/`**: Generated PDF bills are saved here.
+*   **`id_registry.json`**: The master database of Unique IDs and item statuses. **Back up this file regularly.**
+
+---
+
+## 📚 Documentation
+
+For more detailed instructions, please check the [docs](docs/) folder:
+
+*   [**User Guide**](docs/UserGuide.md): How to use the inventory, billing, and printing features.
+*   [**Configuration**](docs/Configuration.md): Advanced settings and file mapping details.
+*   [**Troubleshooting**](docs/Troubleshooting.md): Common issues and fixes.
