@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from .utils import SafeJsonWriter
 
 # Determine App Data Directory (Documents/4BrosManager/config)
 # This is safer than the executable folder
@@ -17,11 +18,16 @@ DEFAULT_CONFIG = {
     "printer_type": "windows",  # or 'escpos'
     "gst_default_percent": 18.0,
     "price_markup_percent": 0.0,
+    "enable_buyer_tracking": True,
     "store_name": "4bros Mobile Point",
     "store_address": "123 Mobile Street, India",
     "store_gstin": "",
+    "store_contact": "",
+    "invoice_terms": "Goods once sold will not be taken back.",
     "output_folder": str(APP_DIR),
-    "auto_unique_id_prefix": "4BM"
+    "auto_unique_id_prefix": "4BM",
+    "theme_color": "#007acc", # Added customization
+    "font_size_ui": 10        # Added customization
 }
 
 class ConfigManager:
@@ -44,8 +50,7 @@ class ConfigManager:
     def save_config(self, config=None):
         if config:
             self.config = config
-        with open(self.config_path, 'w') as f:
-            json.dump(self.config, f, indent=4)
+        SafeJsonWriter.write(self.config_path, self.config)
 
     def load_mappings(self):
         if not self.mappings_path.exists():
@@ -59,8 +64,7 @@ class ConfigManager:
     def save_mappings(self, mappings=None):
         if mappings:
             self.mappings = mappings
-        with open(self.mappings_path, 'w') as f:
-            json.dump(self.mappings, f, indent=4)
+        SafeJsonWriter.write(self.mappings_path, self.mappings)
 
     def get(self, key, default=None):
         return self.config.get(key, default)
