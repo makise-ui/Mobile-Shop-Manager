@@ -126,48 +126,76 @@ class PrinterManager:
                 item1 = items[i]
                 item2 = items[i+1] if i+1 < len(items) else None
                 
-                zpl_content = "^XA^PW830^LL176" 
+                # Header
+                zpl_content = "^XA^PW830^LL176"
                 
-                def get_fields(item, x_offset):
+                def get_fields(item, is_right_side):
+                    # Coordinates from user snippet
+                    # LEFT: X=0..400. Barcode X=132.
+                    # RIGHT: X=416..816. Barcode X=548.
+                    
+                    offset = 416 if is_right_side else 0
+                    
                     store = self.config.get('store_name', '4bros mobile')[:20]
                     uid = str(item.get('unique_id', ''))
                     model = item.get('model', '')[:25]
                     ram = item.get('ram_rom', '')
                     pr = f"Rs. {item.get('price', 0):,.0f}"
                     
-                    # Calculate Dynamic Barcode Center
-                    center_x = x_offset + 200
-                    bc_x = self._calculate_barcode_x(uid, center_x)
+                    # Specific Coords from user request
+                    # Store
+                    c_store = f"^FO{0+offset},15"
                     
+                    # Barcode (Fixed positions requested: 132 for Left, 548 for Right)
+                    # 548 - 416 = 132. So offset + 132 is correct.
+                    c_bc = f"^FO{132+offset},45"
+                    
+                    # ID Text
+                    c_id = f"^FO{0+offset},92"
+                    
+                    # Model (Left: 35, Right: 460 -> 460-416=44)
+                    # User used 35 for Left, 460 for Right. 
+                    # Let's respect exact values if possible, or use logical offset.
+                    # 35 + 416 = 451. User used 460 (shifted 9px).
+                    # I'll use the user's explicit Logic: 
+                    # If Right: 460. If Left: 35.
+                    x_model = 460 if is_right_side else 35
+                    c_model = f"^FO{x_model},118"
+                    
+                    # RAM (Left: 35, Right: 460)
+                    c_ram = f"^FO{x_model},152"
+                    
+                    # Price (Left: 150, Right: 566 -> 566-416=150)
+                    # So offset + 150.
+                    c_price = f"^FO{150+offset},148"
+
                     return f"""
-^FO{x_offset+0},0^A0N,28,28
+{c_store}^A0N,28,28
 ^FB400,1,0,C,0^FD{store}^FS
 
-^FO{bc_x},30^BY2,2,40^BCN,40,N,N,N
+{c_bc}^BY2,2,40^BCN,40,N,N,N
 ^FD{uid}^FS
 
-^FO{x_offset+0},75^A0N,22,22
+{c_id}^A0N,22,22
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO{x_offset+10},100^A0N,22,22
+{c_model}^A0N,21,21
 ^FB280,2,0,L,0^FD{model}^FS
 
-^FO{x_offset+10},140^A0N,22,22
+{c_ram}^A0N,22,22
 ^FB200,1,0,L,0^FD{ram}^FS
 
-^FO{x_offset+150},135^A0N,30,30
+{c_price}^A0N,30,30
 ^FB230,1,0,R,0^FD{pr}^FS
 """
                 
                 # Add Label 1 (Left)
-                zpl_content += get_fields(item1, 0)
+                zpl_content += get_fields(item1, False)
                 
                 # Add Label 2 (Right) if exists
                 if item2:
-                    # Offset 416 dots (approx 52mm start point)
-                    # Gap between labels is handled by skipping pixels or physical gap
-                    # Assuming 50mm label + 2mm gap -> Start next at 52mm (416 dots)
-                    zpl_content += get_fields(item2, 416)
+                    zpl_content += "^FX --- RIGHT SIDE --- ^FS"
+                    zpl_content += get_fields(item2, True)
                 
                 zpl_content += "^XZ"
                 
