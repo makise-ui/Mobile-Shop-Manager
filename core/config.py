@@ -37,6 +37,11 @@ class ConfigManager:
         self.config = self.load_config()
         self.mappings = self.load_mappings()
 
+    def get_invoices_dir(self):
+        d = APP_DIR / "Invoices"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
     def load_config(self):
         if not self.config_path.exists():
             self.save_config(DEFAULT_CONFIG)

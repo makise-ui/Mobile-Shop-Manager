@@ -1,9 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import ImageTk
-from .dialogs import MapColumnsDialog, ZPLPreviewDialog
+from .dialogs import MapColumnsDialog, ZPLPreviewDialog, PrinterSelectionDialog
 import pandas as pd
 import datetime
+import os
+import glob
 
 # --- Base Screen Class ---
 class BaseScreen(ttk.Frame):
@@ -519,7 +521,10 @@ class BillingScreen(BaseScreen):
         btn_frame.pack(fill=tk.X, pady=10)
         
         ttk.Button(btn_frame, text="Clear Cart", command=self.clear_cart).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="Generate Invoice PDF", command=self._generate).pack(side=tk.RIGHT)
+        
+        # Right Side Buttons
+        ttk.Button(btn_frame, text="Print Invoice", command=self._print_invoice).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="Save PDF", command=self._save_invoice).pack(side=tk.RIGHT, padx=5)
 
     def on_show(self):
         self.ent_scan.focus_set()
@@ -571,28 +576,152 @@ class BillingScreen(BaseScreen):
                 f"{tax_amt:.2f}"
             ))
 
-    def _generate(self):
+    def _generate_file(self):
         if not self.cart_items:
             messagebox.showwarning("Empty", "Cart is empty")
-            return
+            return None
             
-        fname = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile="Invoice.pdf")
-        if not fname:
-            return
-            
+        buyer_name = self.ent_name.get().strip() or "Customer"
+        # Sanitize filename
+        safe_name = "".join([c for c in buyer_name if c.isalnum() or c in (' ', '-', '_')]).strip()
+        ts = int(datetime.datetime.now().timestamp())
+        filename = f"{safe_name}_{ts}.pdf"
+        
+        # Use invoices directory
+        save_path = self.app.app_config.get_invoices_dir() / filename
+        
         buyer = {
-            "name": self.ent_name.get() or "Customer",
+            "name": buyer_name,
             "contact": self.ent_contact.get(),
             "date": self.ent_date.get(),
             "is_interstate": self.var_interstate.get(),
             "is_tax_inclusive": self.var_inclusive.get()
         }
         
-        inv_num = f"INV-{int(datetime.datetime.now().timestamp())}"
+        inv_num = f"INV-{ts}"
         
-        self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, fname)
-        messagebox.showinfo("Success", f"Invoice {inv_num} saved!")
-        self.clear_cart()
+        try:
+            self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, str(save_path))
+            return str(save_path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate invoice: {e}")
+            return None
+
+    def _save_invoice(self):
+        path = self._generate_file()
+        if path:
+            messagebox.showinfo("Success", f"Invoice saved to:\n{path}")
+            self.clear_cart()
+            # Try to open folder?
+            # os.startfile(os.path.dirname(path))
+
+    def _print_invoice(self):
+        path = self._generate_file()
+        if not path: return
+        
+        # Open Printer Selector
+        printers = self.app.printer.get_system_printers()
+        if not printers:
+            messagebox.showwarning("No Printers", "No Windows printers found. PDF saved only.")
+            return
+
+        def on_printer_select(printer_name):
+            if self.app.printer.print_pdf(path, printer_name):
+                messagebox.showinfo("Sent", f"Invoice sent to {printer_name}")
+                self.clear_cart()
+            else:
+                messagebox.showerror("Error", "Failed to print.")
+
+        PrinterSelectionDialog(self.winfo_toplevel(), printers, on_printer_select)
+
+class InvoiceHistoryScreen(BaseScreen):
+    def __init__(self, parent, app_context):
+        super().__init__(parent, app_context)
+        self._init_ui()
+
+    def _init_ui(self):
+        # Toolbar
+        tb = ttk.Frame(self)
+        tb.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(tb, text="Generated Invoices", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        ttk.Button(tb, text="Refresh", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
+        
+        # Actions
+        actions = ttk.Frame(self)
+        actions.pack(fill=tk.X, pady=5)
+        ttk.Button(actions, text="Open PDF", command=self._open_pdf).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions, text="Print", command=self._print_pdf).pack(side=tk.LEFT, padx=5)
+        
+        # List
+        cols = ('date', 'name', 'filename', 'size')
+        self.tree = ttk.Treeview(self, columns=cols, show='headings')
+        self.tree.heading('date', text='Date')
+        self.tree.column('date', width=120)
+        self.tree.heading('name', text='Customer Name')
+        self.tree.column('name', width=200)
+        self.tree.heading('filename', text='Filename')
+        self.tree.heading('size', text='Size')
+        self.tree.column('size', width=80)
+        
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+    def on_show(self):
+        self._refresh_list()
+
+    def _refresh_list(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        inv_dir = self.app.app_config.get_invoices_dir()
+        if not inv_dir.exists(): return
+        
+        # Get PDF files
+        files = list(inv_dir.glob("*.pdf"))
+        # Sort by modification time (newest first)
+        files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        
+        for f in files:
+            stats = f.stat()
+            dt = datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M")
+            size = f"{stats.st_size / 1024:.1f} KB"
+            
+            # Try to guess name from filename: Name_Timestamp.pdf
+            name = f.stem.split('_')[0] if '_' in f.stem else "Unknown"
+            
+            self.tree.insert('', tk.END, values=(dt, name, f.name, size), iid=str(f))
+
+    def _get_selected(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Select", "Please select an invoice.")
+            return None
+        return sel[0] # Returns full path as iid
+
+    def _open_pdf(self):
+        path = self._get_selected()
+        if path:
+            try:
+                os.startfile(path)
+            except Exception as e:
+                messagebox.showerror("Error", f"Cannot open file: {e}")
+
+    def _print_pdf(self):
+        path = self._get_selected()
+        if not path: return
+        
+        printers = self.app.printer.get_system_printers()
+        if not printers:
+            messagebox.showwarning("No Printers", "No Windows printers found.")
+            return
+
+        def on_printer_select(printer_name):
+            if self.app.printer.print_pdf(path, printer_name):
+                messagebox.showinfo("Sent", f"Sent to {printer_name}")
+            else:
+                messagebox.showerror("Error", "Failed to print.")
+
+        PrinterSelectionDialog(self.winfo_toplevel(), printers, on_printer_select)
 
 # --- Analytics Screen ---
 class AnalyticsScreen(BaseScreen):

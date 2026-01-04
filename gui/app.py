@@ -6,7 +6,7 @@ from core.watcher import InventoryWatcher
 from core.barcode_utils import BarcodeGenerator
 from core.printer import PrinterManager
 from core.billing import BillingManager
-from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen
+from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen, InvoiceHistoryScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 
 class MainApp(tk.Tk):
@@ -128,6 +128,7 @@ class MainApp(tk.Tk):
             ("Quick Status", "status"),
             ("Edit", "edit"),
             ("Billing", "billing"),
+            ("Invoices", "invoices"),
             ("Analytics", "analytics"),
         ]
         
@@ -165,6 +166,7 @@ class MainApp(tk.Tk):
         self.screens['edit'] = EditDataScreen(self.content_area, self)
         self.screens['files'] = FilesScreen(self.content_area, self)
         self.screens['billing'] = BillingScreen(self.content_area, self)
+        self.screens['invoices'] = InvoiceHistoryScreen(self.content_area, self)
         self.screens['analytics'] = AnalyticsScreen(self.content_area, self)
         self.screens['settings'] = SettingsScreen(self.content_area, self)
         self.screens['managedata'] = ManageDataScreen(self.content_area, self)

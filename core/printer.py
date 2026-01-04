@@ -7,6 +7,7 @@ from PIL import Image
 # Try importing win32 libraries, handle failure for non-Windows dev env
 try:
     import win32print
+    import win32api
     import win32ui
     from PIL import ImageWin
     HAS_WIN32 = True
@@ -24,6 +25,49 @@ class PrinterManager:
     def __init__(self, config_manager, barcode_generator):
         self.config = config_manager
         self.barcode_gen = barcode_generator
+
+    def get_system_printers(self):
+        if not HAS_WIN32:
+            return []
+        try:
+            # Enum local and network printers
+            printers = []
+            # Level 2 returns (ServerName, PrinterName, ShareName, PortName, DriverName, Comment, Location, DevMode, SepFile, PrintProcessor, Datatype, Parameters, Attributes, Priority, DefaultPriority, StartTime, UntilTime, Status, cJobs, AveragePPM)
+            # Actually EnumPrinters(flags, level)
+            # Level 2 is details. Level 4 is usually used for simple enumeration but typically Level 2 with LOCAL|CONNECTIONS is best.
+            # win32print.PRINTER_ENUM_LOCAL = 2
+            # win32print.PRINTER_ENUM_CONNECTIONS = 4
+            
+            flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+            for p in win32print.EnumPrinters(flags):
+                # p[2] is usually printer name in Level 2? 
+                # Docs: Level 1: (flags, desc, name, comment) -> name is p[2]
+                # Docs: Level 2: (server, printer, share, ...) -> printer is p[1]
+                # Let's check what EnumPrinters defaults to or just try/except
+                # Actually default level is often 1. 
+                # Let's stick to safe retrieval.
+                name = p[2] # Typically Name
+                if name:
+                    printers.append(name)
+            return sorted(list(set(printers)))
+        except Exception as e:
+            print(f"Error listing printers: {e}")
+            return []
+
+    def print_pdf(self, pdf_path, printer_name):
+        if not HAS_WIN32:
+            print("Cannot print PDF: Win32 not available.")
+            return False
+            
+        try:
+            # Use ShellExecute 'printto' verb
+            # This requires a PDF reader (like Adobe or Sumatra) to be registered for 'printto'
+            # Most modern Windows setups have this.
+            win32api.ShellExecute(0, "printto", pdf_path, f'"{printer_name}"', ".", 0)
+            return True
+        except Exception as e:
+            print(f"PDF Print Error: {e}")
+            return False
 
     def print_label_zpl(self, item_data, printer_name=None):
         if not HAS_WIN32:
