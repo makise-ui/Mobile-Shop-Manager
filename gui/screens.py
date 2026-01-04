@@ -389,20 +389,32 @@ class FilesScreen(BaseScreen):
     def _refresh_list(self):
         self.listbox.delete(0, tk.END)
         mappings = self.app.app_config.mappings
-        for fp, data in mappings.items():
-            status = self.app.inventory.file_status.get(fp, "Unknown")
+        
+        # Store keys to map listbox index back to config key
+        self.list_keys = []
+        
+        for key, data in mappings.items():
+            status = self.app.inventory.file_status.get(key, "Unknown")
             supplier = data.get('supplier', 'Mixed/None')
-            self.listbox.insert(tk.END, f"[{status}] {fp} (Supplier: {supplier})")
+            
+            # Display: [OK] /path/to/file.xlsx (Sheet: Sheet1, Supplier: ABC)
+            file_path = data.get('file_path', key)
+            sheet = data.get('sheet_name', 'Default')
+            
+            display_text = f"[{status}] {file_path} (Sheet: {sheet}, Supplier: {supplier})"
+            self.listbox.insert(tk.END, display_text)
+            self.list_keys.append(key)
 
     def _add_file(self):
         file_paths = filedialog.askopenfilenames(filetypes=[("Excel/CSV", "*.xlsx *.xls *.csv")])
         for fp in file_paths:
-            if not self.app.app_config.get_file_mapping(fp):
-                MapColumnsDialog(self.winfo_toplevel(), fp, self._on_mapping_save)
-            else:
-                self.app.inventory.load_file(fp)
-                self.app.watcher.refresh_watch_list()
-        self._refresh_list()
+            # Always open dialog to allow sheet selection
+            # even if file is already mapped (could be different sheet)
+            from .dialogs import MapColumnsDialog
+            MapColumnsDialog(self.winfo_toplevel(), fp, self._on_mapping_save)
+        
+        # Refresh happens in callback, but call it here just in case of cancel/close
+        # Actually _on_mapping_save handles refresh.
 
     def _edit_mapping(self):
         sel = self.listbox.curselection()
@@ -410,25 +422,16 @@ class FilesScreen(BaseScreen):
             messagebox.showwarning("Selection", "Please select a file to edit mapping.")
             return
             
-        # Parse file path from listbox text "[OK] /path/to/file (Supplier: ...)"
-        text = self.listbox.get(sel[0])
-        # A bit hacky parsing, but simplest given current display format
-        # Find first ] and (Supplier:
-        try:
-            start_idx = text.find("] ") + 2
-            end_idx = text.rfind(" (Supplier:")
-            if start_idx < 2 or end_idx == -1:
-                fp = text # Fallback
-            else:
-                fp = text[start_idx:end_idx]
-            
-            # Get existing config
-            existing = self.app.app_config.get_file_mapping(fp)
-            
-            # Open Dialog
-            MapColumnsDialog(self.winfo_toplevel(), fp, self._on_mapping_save, current_mapping=existing)
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not parse file path: {e}")
+        key = self.list_keys[sel[0]]
+        mapping_data = self.app.app_config.mappings.get(key)
+        
+        if not mapping_data: return
+        
+        fp = mapping_data.get('file_path', key)
+        if '::' in fp: fp = fp.split('::')[0] # Safety
+        
+        from .dialogs import MapColumnsDialog
+        MapColumnsDialog(self.winfo_toplevel(), fp, self._on_mapping_save, current_mapping=mapping_data)
 
     def _remove_file(self):
         sel = self.listbox.curselection()
@@ -436,25 +439,20 @@ class FilesScreen(BaseScreen):
             messagebox.showwarning("Selection", "Please select a file to remove.")
             return
 
-        text = self.listbox.get(sel[0])
-        try:
-            start_idx = text.find("] ") + 2
-            end_idx = text.rfind(" (Supplier:")
-            if start_idx < 2 or end_idx == -1:
-                fp = text
-            else:
-                fp = text[start_idx:end_idx]
-            
-            if messagebox.askyesno("Confirm", f"Remove file from inventory?\n{fp}"):
-                self.app.app_config.remove_file_mapping(fp)
-                self.app.inventory.reload_all()
-                self.app.watcher.refresh_watch_list()
-                self._refresh_list()
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not remove file: {e}")
+        key = self.list_keys[sel[0]]
+        
+        if messagebox.askyesno("Confirm", f"Remove inventory source?\n{key}"):
+            # We need to expose remove logic in config that takes a KEY
+            # Currently remove_file_mapping takes 'file_path' and does `del mappings[str(file_path)]`
+            # This works if we pass the key!
+            self.app.app_config.remove_file_mapping(key)
+            self.app.inventory.reload_all()
+            self.app.watcher.refresh_watch_list()
+            self._refresh_list()
 
-    def _on_mapping_save(self, file_path, mapping_data):
-        self.app.app_config.set_file_mapping(file_path, mapping_data)
+    def _on_mapping_save(self, key, mapping_data):
+        # Key here is either file_path or composite key passed from Dialog
+        self.app.app_config.set_file_mapping(key, mapping_data)
         self.app.inventory.reload_all()
         self.app.watcher.refresh_watch_list()
         self._refresh_list()
@@ -1053,6 +1051,16 @@ class SearchScreen(BaseScreen):
         fg_col = "#155724" if status == 'IN' else "#721c24"
         self.lbl_status.config(text=status, bg=bg_col, fg=fg_col)
         
+        # Parse Source File (Handle composite key path::sheet)
+        raw_source = str(row.get('source_file', ''))
+        import os
+        if '::' in raw_source:
+            parts = raw_source.split('::')
+            fname = os.path.basename(parts[0])
+            display_source = f"{fname} (Sheet: {parts[1]})"
+        else:
+            display_source = os.path.basename(raw_source)
+
         # 2. Details Text
         info = f"""
 UNIQUE ID   : {row.get('unique_id')}
@@ -1071,7 +1079,7 @@ Contact     : {row.get('buyer_contact', '-')}
 
 METADATA
 --------
-Source File : {row.get('source_file')}
+Source File : {display_source}
 Last Updated: {row.get('last_updated')}
 Notes       : {row.get('notes', '')}
 """

@@ -6,22 +6,33 @@ class MapColumnsDialog(tk.Toplevel):
     def __init__(self, parent, file_path, on_save_callback, current_mapping=None):
         super().__init__(parent)
         self.title("Map Columns")
-        self.geometry("600x500")
+        self.geometry("700x600")
         self.file_path = file_path
         self.on_save = on_save_callback
         self.current_mapping = current_mapping or {}
         
         self.mappings = {}
-        # Removed 'ram', 'rom'
         self.canonical_fields = ['imei', 'model', 'ram_rom', 'price', 'supplier', 'notes', 'status', 'color', 'buyer', 'buyer_contact']
         
-        # Load sample data
+        self.sheet_names = []
+        self.current_sheet = None
+        self.df = pd.DataFrame()
+        self.headers = []
+
+        # Load Sheet Names if Excel
         try:
             if file_path.endswith('.csv'):
-                self.df = pd.read_csv(file_path, nrows=3)
+                self.sheet_names = ["Default"]
+                self._load_data(None)
             else:
-                self.df = pd.read_excel(file_path, nrows=3)
-            self.headers = list(self.df.columns)
+                xl = pd.ExcelFile(file_path)
+                self.sheet_names = xl.sheet_names
+                # Default to saved sheet or first one
+                saved_sheet = self.current_mapping.get('sheet_name')
+                if saved_sheet and saved_sheet in self.sheet_names:
+                    self._load_data(saved_sheet)
+                else:
+                    self._load_data(self.sheet_names[0])
         except Exception as e:
             messagebox.showerror("Error", f"Could not read file: {e}")
             self.destroy()
@@ -29,46 +40,48 @@ class MapColumnsDialog(tk.Toplevel):
 
         self._init_ui()
 
+    def _load_data(self, sheet_name):
+        self.current_sheet = sheet_name
+        try:
+            if self.file_path.endswith('.csv'):
+                self.df = pd.read_csv(self.file_path, nrows=5)
+            else:
+                self.df = pd.read_excel(self.file_path, sheet_name=sheet_name, nrows=5)
+            # Ensure headers are strings to prevent AttributeErrors later
+            self.headers = [str(c) for c in self.df.columns]
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading data: {e}")
+
     def _init_ui(self):
         # Header Info
-        lbl_info = ttk.Label(self, text=f"Mapping for: {self.file_path}")
-        lbl_info.pack(pady=10)
+        header_frame = ttk.Frame(self, padding=10)
+        header_frame.pack(fill=tk.X)
+        
+        ttk.Label(header_frame, text=f"File: {self.file_path}").pack(anchor=tk.W)
+        
+        # Sheet Selection (Only for Excel)
+        if len(self.sheet_names) > 1 or not self.file_path.endswith('.csv'):
+            f_sheet = ttk.Frame(header_frame)
+            f_sheet.pack(fill=tk.X, pady=5)
+            ttk.Label(f_sheet, text="Select Sheet:").pack(side=tk.LEFT)
+            
+            self.combo_sheet = ttk.Combobox(f_sheet, values=self.sheet_names, state="readonly")
+            if self.current_sheet:
+                self.combo_sheet.set(self.current_sheet)
+            else:
+                self.combo_sheet.current(0)
+            self.combo_sheet.pack(side=tk.LEFT, padx=10)
+            self.combo_sheet.bind("<<ComboboxSelected>>", self._on_sheet_change)
+
+        # Preview Button
+        ttk.Button(header_frame, text="Preview Data (First 5 Rows)", command=self._show_preview).pack(anchor=tk.W, pady=5)
 
         # Mapping Frame
-        frame = ttk.Frame(self, padding=10)
-        frame.pack(fill=tk.BOTH, expand=True)
-
-        # Grid Header
-        ttk.Label(frame, text="Internal Field", font=('bold')).grid(row=0, column=0, padx=5, pady=5)
-        ttk.Label(frame, text="File Column", font=('bold')).grid(row=0, column=1, padx=5, pady=5)
+        self.mapping_frame = ttk.Frame(self, padding=10)
+        self.mapping_frame.pack(fill=tk.BOTH, expand=True)
 
         self.combos = {}
-        
-        # Load existing map: {FileCol: InternalCol}
-        # We need reverse map for UI: {InternalCol: FileCol}
-        existing_map = {}
-        if self.current_mapping and 'mapping' in self.current_mapping:
-            for k, v in self.current_mapping['mapping'].items():
-                existing_map[v] = k
-
-        # Rows
-        for idx, field in enumerate(self.canonical_fields):
-            row = idx + 1
-            ttk.Label(frame, text=field).grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
-            
-            combo = ttk.Combobox(frame, values=["(Ignore)"] + self.headers)
-            
-            # Pre-select if exists
-            if field in existing_map:
-                if existing_map[field] in self.headers:
-                    combo.set(existing_map[field])
-            else:
-                combo.current(0)
-                # Auto-suggest only if not mapped
-                self._auto_suggest(field, combo)
-                
-            combo.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=5)
-            self.combos[field] = combo
+        self._render_mapping_ui()
 
         # Supplier Override
         frame_supp = ttk.Frame(self, padding=10)
@@ -87,14 +100,85 @@ class MapColumnsDialog(tk.Toplevel):
         ttk.Button(btn_frame, text="Save", command=self._on_save).pack(side=tk.RIGHT)
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=5)
 
+    def _render_mapping_ui(self):
+        # Clear existing
+        for widget in self.mapping_frame.winfo_children():
+            widget.destroy()
+
+        # Grid Header
+        ttk.Label(self.mapping_frame, text="Internal Field", font=('bold')).grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(self.mapping_frame, text="File Column", font=('bold')).grid(row=0, column=1, padx=5, pady=5)
+
+        # Load existing map
+        existing_map = {}
+        if self.current_mapping and 'mapping' in self.current_mapping:
+            for k, v in self.current_mapping['mapping'].items():
+                existing_map[v] = k
+
+        # Rows
+        for idx, field in enumerate(self.canonical_fields):
+            row = idx + 1
+            ttk.Label(self.mapping_frame, text=field).grid(row=row, column=0, sticky=tk.W, padx=5, pady=5)
+            
+            combo = ttk.Combobox(self.mapping_frame, values=["(Ignore)"] + self.headers)
+            
+            # Pre-select logic
+            if field in existing_map and existing_map[field] in self.headers:
+                combo.set(existing_map[field])
+            else:
+                combo.current(0)
+                self._auto_suggest(field, combo)
+                
+            combo.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=5)
+            self.combos[field] = combo
+
+    def _on_sheet_change(self, event):
+        new_sheet = self.combo_sheet.get()
+        if new_sheet != self.current_sheet:
+            self._load_data(new_sheet)
+            self._render_mapping_ui()
+
+    def _show_preview(self):
+        # Popup with treeview
+        top = tk.Toplevel(self)
+        top.title(f"Preview: {self.current_sheet}")
+        top.geometry("800x400")
+        
+        frame = ttk.Frame(top)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        tv = ttk.Treeview(frame)
+        
+        # Scrollbars
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=tv.yview)
+        hsb = ttk.Scrollbar(frame, orient="horizontal", command=tv.xview)
+        tv.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+        tv.pack(fill=tk.BOTH, expand=True)
+        
+        # Set columns
+        tv['columns'] = self.headers
+        tv['show'] = 'headings'
+        
+        for h in self.headers:
+            tv.heading(h, text=h)
+            tv.column(h, width=150, minwidth=100)
+            
+        # Add rows
+        for _, row in self.df.iterrows():
+            vals = [str(x) for x in row.tolist()]
+            tv.insert('', tk.END, values=vals)
+
+        ttk.Button(top, text="Close", command=top.destroy).pack(pady=5)
+
     def _auto_suggest(self, field, combo):
-        # Simple heuristic
         for header in self.headers:
             h_lower = header.lower()
             if field in h_lower:
                 combo.set(header)
                 return
-            # Price specific
             if field == 'price' and ('cost' in h_lower or 'mrp' in h_lower or 'rate' in h_lower):
                 combo.set(header)
                 return
@@ -104,24 +188,22 @@ class MapColumnsDialog(tk.Toplevel):
         for field, combo in self.combos.items():
             val = combo.get()
             if val and val != "(Ignore)":
-                final_mapping[val] = field # Store as {FileCol: InternalCol} for inventory logic 
-                # Wait, inventory.py expects {FileCol: InternalCol} in 'mapping' dict logic?
-                # Let's check inventory.py:
-                # for col_name, can_name in mapping.items():
-                #    if can_name == canonical_name: ...
-                # Yes, inventory.py iterates mapping.items() where key=FileCol, value=InternalCol.
-                pass
+                final_mapping[val] = field 
         
-        # Construct the object expected by config
-        # We need {FileCol: InternalCol}
-        # My loop above: final_mapping[val] = field  -> {HeaderName: 'imei'}
-        
+        # Save explicit file path
         save_data = {
+            "file_path": self.file_path,
             "mapping": final_mapping,
-            "supplier": self.ent_supplier.get()
+            "supplier": self.ent_supplier.get(),
+            "sheet_name": self.current_sheet
         }
         
-        self.on_save(self.file_path, save_data)
+        # Use composite key if specific sheet
+        key = self.file_path
+        if self.current_sheet and self.current_sheet != "Default":
+             key = f"{self.file_path}::{self.current_sheet}"
+        
+        self.on_save(key, save_data)
         self.destroy()
 
 class SettingsDialog(tk.Toplevel):
