@@ -338,6 +338,38 @@ class ZPLPreviewDialog(tk.Toplevel):
         self.destroy()
         self.on_confirm()
 
+class PrinterSelectionDialog(tk.Toplevel):
+    def __init__(self, parent, printer_list, on_select):
+        super().__init__(parent)
+        self.title("Select Printer")
+        self.geometry("400x150")
+        self.printer_list = printer_list
+        self.on_select = on_select
+        
+        self._init_ui()
+        
+    def _init_ui(self):
+        ttk.Label(self, text="Choose a printer for the invoice:", font=('Segoe UI', 10)).pack(pady=10)
+        
+        self.combo = ttk.Combobox(self, values=self.printer_list, state="readonly", width=40)
+        if self.printer_list:
+            self.combo.current(0)
+        self.combo.pack(pady=5, padx=20)
+        
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(fill=tk.X, pady=15)
+        
+        ttk.Button(btn_frame, text="Print", command=self._confirm).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=10)
+
+    def _confirm(self):
+        sel = self.combo.get()
+        if sel:
+            self.destroy()
+            self.on_select(sel)
+        else:
+            messagebox.showwarning("Warning", "Please select a printer.")
+
 class ConflictResolutionDialog(tk.Toplevel):
     def __init__(self, parent, conflict_data, on_resolve):
         super().__init__(parent)
