@@ -63,6 +63,11 @@ class MainApp(tk.Tk):
     def _finish_init(self, splash):
         splash.destroy()
         self.deiconify() # Show main window
+        
+        # Force refresh of default screen to ensure data is visible
+        if 'inventory' in self.screens:
+             self.screens['inventory'].on_show()
+        
         self.after(500, self._check_conflicts) # Check conflicts on startup
         
         # Check if first run (no files)

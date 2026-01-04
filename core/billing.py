@@ -43,7 +43,7 @@ class BillingManager:
             
         return breakdown
 
-    def generate_invoice(self, items, buyer_details, invoice_number, filename):
+    def generate_invoice(self, items, buyer_details, invoice_number, filename, discount=None):
         doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=18)
         elements = []
         styles = getSampleStyleSheet()
@@ -113,8 +113,17 @@ class BillingManager:
             data.append(row)
             grand_total += tax_calc['total_amount']
             
-        # Summary Row
-        data.append(['', 'Total', '', '', '', '', f"{grand_total:.2f}"])
+        # Summary Rows
+        data.append(['', 'Subtotal', '', '', '', '', f"{grand_total:.2f}"])
+        final_total = grand_total
+        
+        if discount and discount.get('amount', 0) > 0:
+            d_amt = float(discount['amount'])
+            d_reason = discount.get('reason', 'Discount')
+            data.append(['', f"Less: {d_reason}", '', '', '', '', f"-{d_amt:.2f}"])
+            final_total -= d_amt
+            
+        data.append(['', 'Grand Total', '', '', '', '', f"{final_total:.2f}"])
         
         t = Table(data, colWidths=[10*mm, 60*mm, 25*mm, 20*mm, 20*mm, 20*mm, 30*mm])
         t.setStyle(TableStyle([
@@ -127,7 +136,7 @@ class BillingManager:
             # Data rows
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -2), 0.5, colors.grey), # Grid for items
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey), # Grid for items
             ('BOX', (0, 0), (-1, -1), 1, colors.black), # Outer Box
             # Total Row
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),

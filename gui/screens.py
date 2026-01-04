@@ -506,7 +506,7 @@ class BillingScreen(BaseScreen):
         
         # 2. Cart (Treeview)
         cart_frame = ttk.LabelFrame(self, text="Invoice Items", padding=10)
-        cart_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        cart_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
         cols = ('id', 'model', 'price', 'gst')
         self.tree = ttk.Treeview(cart_frame, columns=cols, show='headings', height=8)
@@ -516,7 +516,24 @@ class BillingScreen(BaseScreen):
         self.tree.heading('gst', text='Tax Est.')
         self.tree.pack(fill=tk.BOTH, expand=True)
         
-        # 3. Actions
+        # 3. Discount & Totals (NEW)
+        adj_frame = ttk.Frame(self)
+        adj_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(adj_frame, text="Discount/Exchange Note:").pack(side=tk.LEFT, padx=5)
+        self.ent_disc_reason = ttk.Entry(adj_frame, width=20)
+        self.ent_disc_reason.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(adj_frame, text="Amount (-):").pack(side=tk.LEFT, padx=5)
+        self.ent_disc_amt = ttk.Entry(adj_frame, width=10)
+        self.ent_disc_amt.insert(0, "0")
+        self.ent_disc_amt.pack(side=tk.LEFT, padx=5)
+        self.ent_disc_amt.bind('<KeyRelease>', self._calculate_totals)
+        
+        self.lbl_grand_total = ttk.Label(adj_frame, text="Payable: ₹0.00", font=('Segoe UI', 12, 'bold'), foreground="#007acc")
+        self.lbl_grand_total.pack(side=tk.RIGHT, padx=20)
+        
+        # 4. Actions
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=10)
         
@@ -550,7 +567,20 @@ class BillingScreen(BaseScreen):
 
     def clear_cart(self):
         self.cart_items = []
+        self.ent_disc_amt.delete(0, tk.END)
+        self.ent_disc_amt.insert(0, "0")
+        self.ent_disc_reason.delete(0, tk.END)
         self._refresh_cart()
+
+    def _calculate_totals(self, event=None):
+        subtotal = sum(float(item.get('price', 0)) for item in self.cart_items)
+        try:
+            disc = float(self.ent_disc_amt.get())
+        except ValueError:
+            disc = 0.0
+        
+        final = subtotal - disc
+        self.lbl_grand_total.config(text=f"Payable: ₹{final:,.2f}")
 
     def _refresh_cart(self):
         for item in self.tree.get_children():
@@ -575,6 +605,8 @@ class BillingScreen(BaseScreen):
                 f"{price:.2f}",
                 f"{tax_amt:.2f}"
             ))
+        
+        self._calculate_totals()
 
     def _generate_file(self):
         if not self.cart_items:
@@ -582,12 +614,10 @@ class BillingScreen(BaseScreen):
             return None
             
         buyer_name = self.ent_name.get().strip() or "Customer"
-        # Sanitize filename
         safe_name = "".join([c for c in buyer_name if c.isalnum() or c in (' ', '-', '_')]).strip()
         ts = int(datetime.datetime.now().timestamp())
         filename = f"{safe_name}_{ts}.pdf"
         
-        # Use invoices directory
         save_path = self.app.app_config.get_invoices_dir() / filename
         
         buyer = {
@@ -598,10 +628,22 @@ class BillingScreen(BaseScreen):
             "is_tax_inclusive": self.var_inclusive.get()
         }
         
+        # Prepare Discount
+        discount = None
+        try:
+            d_amt = float(self.ent_disc_amt.get())
+            if d_amt > 0:
+                discount = {
+                    "reason": self.ent_disc_reason.get().strip() or "Adjustment",
+                    "amount": d_amt
+                }
+        except:
+            pass
+        
         inv_num = f"INV-{ts}"
         
         try:
-            self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, str(save_path))
+            self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, str(save_path), discount=discount)
             return str(save_path)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate invoice: {e}")
