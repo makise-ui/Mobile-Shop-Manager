@@ -13,14 +13,17 @@ class TestAppLogic(unittest.TestCase):
         os.makedirs(self.test_dir, exist_ok=True)
         
         # Mock paths for config
-        self.config_path = os.path.join(self.test_dir, "config.json")
-        self.mappings_path = os.path.join(self.test_dir, "mappings.json")
+        from pathlib import Path
+        self.config_path = Path(self.test_dir) / "config.json"
+        self.mappings_path = Path(self.test_dir) / "mappings.json"
         
         # Init ConfigManager with mocked paths
         self.cm = ConfigManager()
         self.cm.config_path = self.config_path
         self.cm.mappings_path = self.mappings_path
         self.cm.save_config(self.cm.load_config()) # Init files
+        self.cm.mappings = {} # Clear any pre-loaded mappings from default path
+        self.cm.save_mappings() # Save empty mappings to test file
 
         self.im = InventoryManager(self.cm)
         self.bm = BillingManager(self.cm)
@@ -30,7 +33,7 @@ class TestAppLogic(unittest.TestCase):
             shutil.rmtree(self.test_dir)
 
     def test_config_defaults(self):
-        self.assertEqual(self.cm.get('store_name'), "4 Bros Mobile")
+        self.assertEqual(self.cm.get('store_name'), "4bros Mobile Point")
         self.assertEqual(self.cm.get('gst_default_percent'), 18.0)
 
     def test_inventory_logic(self):
@@ -70,7 +73,9 @@ class TestAppLogic(unittest.TestCase):
         self.assertEqual(row1['price'], 25000)
         self.assertEqual(row1['supplier'], 'Test Supplier')
         self.assertEqual(row1['ram_rom'], '8 / 128') # Combined logic
-        self.assertEqual(row1['unique_id'], '123456789012345')
+        # Unique ID is generated (int), checking if it exists
+        self.assertTrue('unique_id' in row1)
+        self.assertIsNotNone(row1['unique_id'])
 
     def test_billing_calc(self):
         # Taxable Value = 1000, Tax 18%

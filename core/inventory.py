@@ -15,16 +15,23 @@ class InventoryManager:
         self.conflicts = []
 
     def load_file(self, file_path):
+        """Legacy wrapper or simple load."""
         mapping_data = self.config_manager.get_file_mapping(file_path)
+        return self._load_file_internal(file_path, mapping_data)
+
+    def _load_file_internal(self, file_path, mapping_data):
         if not mapping_data:
-            # Need mapping
             return None, "MAPPING_REQUIRED"
 
         try:
             if file_path.endswith('.csv'):
                 df = pd.read_csv(file_path)
             else:
-                df = pd.read_excel(file_path)
+                # Support specific sheet name
+                sheet_name = mapping_data.get('sheet_name', 0)
+                # If sheet_name is None/Empty, default to 0
+                if not sheet_name: sheet_name = 0
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
             
             # Safety: Ensure DataFrame
             if isinstance(df, pd.Series):
@@ -197,16 +204,29 @@ class InventoryManager:
         mappings = self.config_manager.mappings
         self.conflicts = [] # Reset conflicts
         
-        for file_path in mappings.keys():
+        for key, mapping_data in mappings.items():
+            # Support composite keys "path::sheet" or legacy "path"
+            file_path = mapping_data.get('file_path', key)
+            
+            # Fallback if file_path is not in data and key looks composite
+            if '::' in key and not os.path.exists(key):
+                parts = key.split('::')
+                if os.path.exists(parts[0]):
+                    file_path = parts[0]
+            
             if os.path.exists(file_path):
-                df, status = self.load_file(file_path)
+                # Call internal load to ensure we pass the correct mapping_data (with sheet_name)
+                df, status = self._load_file_internal(file_path, mapping_data)
+
                 if status == "SUCCESS" and df is not None:
+                    # Enrich with source info (key acts as unique source ID)
+                    df['source_file'] = key 
                     all_frames.append(df)
-                    self.file_status[file_path] = "OK"
+                    self.file_status[key] = "OK"
                 else:
-                    self.file_status[file_path] = f"Error: {status}"
+                    self.file_status[key] = f"Error: {status}"
             else:
-                self.file_status[file_path] = "Missing"
+                self.file_status[key] = "Missing"
         
         if all_frames:
             full_df = pd.concat(all_frames, ignore_index=True)
