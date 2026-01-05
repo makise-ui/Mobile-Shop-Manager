@@ -9,3 +9,5 @@ tinydb
 pyinstaller
 tk
 pywin32
+requests
+packaging
