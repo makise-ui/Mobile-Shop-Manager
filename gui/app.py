@@ -81,10 +81,51 @@ class MainApp(tk.Tk):
         if not self.app_config.mappings:
             WelcomeDialog(self, self._on_welcome_choice)
 
-    def _on_update_found(self, available, tag, url):
+    def _on_update_found(self, available, tag, notes):
         if available:
             self.btn_update.config(text=f"⬇ Update Available ({tag})")
             self.btn_update.pack(side=tk.RIGHT, padx=20)
+
+    def _show_update_dialog(self):
+        top = tk.Toplevel(self)
+        top.title("Update Available")
+        top.geometry("500x450")
+        top.transient(self)
+        top.grab_set()
+        
+        ttk.Label(top, text=f"New Version Available: {self.updater.latest_version}", font=('Segoe UI', 14, 'bold')).pack(pady=10)
+        
+        lbl_notes = ttk.Label(top, text="What's New:", font=('Segoe UI', 10, 'bold'))
+        lbl_notes.pack(anchor=tk.W, padx=10)
+        
+        txt = tk.Text(top, height=10, font=('Segoe UI', 10), wrap=tk.WORD, bg="#f0f0f0", relief=tk.FLAT)
+        txt.insert(tk.END, self.updater.release_notes)
+        txt.configure(state='disabled')
+        txt.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Progress
+        progress_var = tk.DoubleVar()
+        progress_bar = ttk.Progressbar(top, variable=progress_var, maximum=100)
+        
+        lbl_status = ttk.Label(top, text="")
+        
+        def update_progress(percent):
+            progress_var.set(percent)
+            lbl_status.config(text=f"Downloading... {percent}%")
+            top.update_idletasks()
+            
+        def finish_download(file_path):
+            lbl_status.config(text="Installing...")
+            self.updater.restart_and_install(file_path)
+
+        def start_download():
+            btn_update.config(state='disabled')
+            progress_bar.pack(fill=tk.X, padx=20, pady=(10,0))
+            lbl_status.pack(pady=5)
+            self.updater.download_update(update_progress, finish_download)
+            
+        btn_update = ttk.Button(top, text="Update Now & Restart", command=start_download, style="Accent.TButton")
+        btn_update.pack(pady=20)
 
     def _on_welcome_choice(self, choice):
         if choice == "files":
@@ -136,7 +177,7 @@ class MainApp(tk.Tk):
         lbl_title.pack(side=tk.LEFT, padx=20)
         
         # Update Button (Hidden by default)
-        self.btn_update = ttk.Button(nav_frame, text="⬇ Update Available", style="Accent.TButton", command=lambda: self.updater.open_download_page())
+        self.btn_update = ttk.Button(nav_frame, text="⬇ Update Available", style="Accent.TButton", command=self._show_update_dialog)
         
         # Nav Buttons
         btn_bar = tk.Frame(nav_frame, bg=NAV_BG)
