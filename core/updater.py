@@ -83,19 +83,60 @@ class UpdateChecker:
         if not getattr(sys, 'frozen', False):
             return False, "Cannot update: App is running from source (Python script)."
 
-        exe_name = os.path.basename(sys.executable)
+        import tempfile
         
+        exe_path = sys.executable
+        exe_dir = os.path.dirname(exe_path)
+        exe_name = os.path.basename(exe_path)
+        pid = os.getpid()
+        
+        # Resolve absolute path for the new file (it's likely in CWD or temp)
+        new_file_abs = os.path.abspath(new_file_path)
+        
+        # Write bat file to System Temp to avoid locking issues in _MEI or App Dir
+        bat_path = os.path.join(tempfile.gettempdir(), f"msm_update_{pid}.bat")
+        
+        # Robust Batch Script
+        # 1. Wait for PID to vanish
+        # 2. Delete old exe
+        # 3. Move new exe
+        # 4. Relaunch
         batch_script = f"""
 @echo off
-timeout /t 2 /nobreak > NUL
-del "{exe_name}"
-move "{new_file_path}" "{exe_name}"
+:loop
+tasklist | findstr /R "\\<{pid}\\>" >nul
+if %errorlevel% == 0 (
+    timeout /t 1 /nobreak >nul
+    goto loop
+)
+
+REM Process {pid} is gone. Wait 1s for file locks.
+timeout /t 1 /nobreak >nul
+
+cd /d "{exe_dir}"
+if exist "{exe_name}" del "{exe_name}"
+
+if exist "{exe_name}" (
+    REM Delete failed? Wait and try again
+    timeout /t 2 /nobreak >nul
+    del "{exe_name}"
+)
+
+move /Y "{new_file_abs}" "{exe_name}"
 start "" "{exe_name}"
-del "%~f0"
+
+REM Cleanup self
+(goto) 2>nul & del "%~f0"
 """
-        with open("updater.bat", "w") as f:
-            f.write(batch_script)
+        try:
+            with open(bat_path, "w") as f:
+                f.write(batch_script)
+                
+            # Launch detached process
+            # close_fds=True is crucial to ensure the bat process doesn't hold handles 
+            # to the parent's _MEI folder or pipes, allowing parent to exit cleanly.
+            subprocess.Popen([bat_path], shell=True, close_fds=True, cwd=exe_dir)
             
-        subprocess.Popen("updater.bat", shell=True)
-        sys.exit()
-        return True, "Restarting..."
+            return True, "Restarting..."
+        except Exception as e:
+            return False, f"Failed to launch updater: {e}"

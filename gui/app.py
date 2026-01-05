@@ -122,6 +122,15 @@ class MainApp(tk.Tk):
                 lbl_status.config(text="Update Failed", foreground="red")
                 messagebox.showwarning("Update Error", msg)
                 btn_update.config(state='normal')
+            else:
+                # Success: Graceful Shutdown to allow Updater Bat to run
+                lbl_status.config(text="Restarting...")
+                self.update_idletasks()
+                if self.watcher:
+                    self.watcher.stop_watching()
+                self.destroy()
+                import sys
+                sys.exit(0)
 
         def start_download():
             btn_update.config(state='disabled')
