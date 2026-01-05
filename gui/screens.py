@@ -549,9 +549,37 @@ class BillingScreen(BaseScreen):
         
         ttk.Button(btn_frame, text="Print Invoice", command=self._print_invoice).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="Save PDF", command=self._save_invoice).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="MARK SOLD", command=self._mark_cart_as_sold, style="Accent.TButton").pack(side=tk.RIGHT, padx=20)
 
     def on_show(self):
         self.ent_scan.focus_set()
+
+    def _mark_cart_as_sold(self):
+        if not self.cart_items:
+            messagebox.showwarning("Empty", "Cart is empty")
+            return
+
+        buyer_name = self.ent_name.get().strip()
+        buyer_contact = self.ent_contact.get().strip()
+        
+        if not buyer_name:
+            if not messagebox.askyesno("Confirm", "No Buyer Name entered. Mark as SOLD anyway?"):
+                self.ent_name.focus_set()
+                return
+
+        count = 0
+        updates = {
+            "status": "OUT",
+            "buyer": buyer_name,
+            "buyer_contact": buyer_contact
+        }
+        
+        for item in self.cart_items:
+            if self.app.inventory.update_item_data(item['unique_id'], updates):
+                count += 1
+                
+        messagebox.showinfo("Success", f"Marked {count} items as SOLD (OUT).")
+        self.clear_cart()
 
     def _on_scan(self, event):
         q = self.ent_scan.get().strip()
