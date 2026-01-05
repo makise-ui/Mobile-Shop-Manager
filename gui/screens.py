@@ -592,6 +592,49 @@ class BillingScreen(BaseScreen):
         messagebox.showinfo("Success", f"Invoice saved.\nMarked {count} items as SOLD (OUT).")
         self.clear_cart()
 
+    def _handle_sold_item(self, item):
+        buyer = item.get('buyer', 'Unknown')
+        
+        # Custom Dialog
+        top = tk.Toplevel(self)
+        top.title("Item Already Sold")
+        top.geometry("400x350")
+        top.transient(self)
+        top.grab_set()
+        
+        msg = f"This item is marked as SOLD.\n\nModel: {item.get('model')}\nBuyer: {buyer}\n\nWhat would you like to do?"
+        ttk.Label(top, text=msg, padding=20, font=('Segoe UI', 10)).pack()
+        
+        def action_rtn():
+            # Mark RTN then Add
+            self.app.inventory.update_item_status(item['unique_id'], 'RTN', write_to_excel=True)
+            self.add_items([item])
+            top.destroy()
+            self.ent_scan.delete(0, tk.END)
+
+        def action_in():
+             # Mark IN then Add
+            self.app.inventory.update_item_status(item['unique_id'], 'IN', write_to_excel=True)
+            self.add_items([item])
+            top.destroy()
+            self.ent_scan.delete(0, tk.END)
+
+        def action_anyway():
+            # Just Add
+            self.add_items([item])
+            top.destroy()
+            self.ent_scan.delete(0, tk.END)
+
+        def action_cancel():
+            top.destroy()
+            self.ent_scan.delete(0, tk.END)
+
+        # Buttons
+        ttk.Button(top, text="Mark Return (RTN) & Sell", command=action_rtn).pack(fill=tk.X, padx=40, pady=5)
+        ttk.Button(top, text="Mark Stock (IN) & Sell", command=action_in).pack(fill=tk.X, padx=40, pady=5)
+        ttk.Button(top, text="Sell Anyway (Keep History)", command=action_anyway).pack(fill=tk.X, padx=40, pady=5)
+        ttk.Button(top, text="Cancel", command=action_cancel).pack(fill=tk.X, padx=40, pady=(20, 10))
+
     def _on_scan(self, event):
         q = self.ent_scan.get().strip()
         if not q: return
@@ -618,6 +661,12 @@ class BillingScreen(BaseScreen):
             
         if len(match) == 1:
             item = match.iloc[0].to_dict()
+            
+            # Check Sold Status
+            if str(item.get('status', '')).upper() == 'OUT':
+                self._handle_sold_item(item)
+                return
+                
             self.add_items([item])
             self.ent_scan.delete(0, tk.END)
         else:
