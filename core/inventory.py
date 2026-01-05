@@ -394,16 +394,28 @@ class InventoryManager:
         from openpyxl.styles import Font, Alignment
         from copy import copy
         
-        file_path = row_data['source_file']
-        if not os.path.exists(file_path): return
+        # Handle composite keys (path::sheet)
+        key = row_data['source_file']
+        file_path = key
+        if '::' in key and not os.path.exists(key):
+            file_path = key.split('::')[0]
+
+        if not os.path.exists(file_path): 
+            print(f"Error: Source file not found: {file_path}")
+            return
 
         # SAFETY 1: Backup
         backup_path = backup_excel_file(file_path)
         if not backup_path:
             print("Failed to create backup, aborting write for safety.")
             return
-
-        mapping_data = self.config_manager.get_file_mapping(file_path)
+            
+        # Use the original KEY to get mapping data (it might be keyed by "path::sheet")
+        mapping_data = self.config_manager.get_file_mapping(key)
+        # If fallback needed (mapping might be keyed by just path)
+        if not mapping_data:
+             mapping_data = self.config_manager.get_file_mapping(file_path)
+             
         mapping = mapping_data.get('mapping', {})
         
         # Build map of InternalField -> ExcelColumnName
@@ -421,7 +433,21 @@ class InventoryManager:
         
         try:
             wb = load_workbook(file_path)
-            ws = wb.active
+            # Handle specific sheet if part of key or mapping
+            sheet_name = mapping_data.get('sheet_name', 0)
+            if '::' in key:
+                 try:
+                     sheet_part = key.split('::')[1]
+                     if sheet_part: sheet_name = sheet_part
+                 except: pass
+
+            if sheet_name and sheet_name != 0:
+                 if str(sheet_name) in wb.sheetnames:
+                     ws = wb[str(sheet_name)]
+                 else:
+                     ws = wb.active # Fallback
+            else:
+                 ws = wb.active
             
             # Find Header Columns
             col_indices = {}
@@ -467,6 +493,8 @@ class InventoryManager:
             imei_col_idx = col_indices.get(imei_header)
             model_col_idx = col_indices.get(model_header)
             
+            row_found = False
+            
             for row in ws.iter_rows(min_row=2):
                 match = False
                 if imei_col_idx:
@@ -485,6 +513,7 @@ class InventoryManager:
                         match = True # Weak match fallback
                 
                 if match:
+                    row_found = True
                     # Capture Style from the first cell of the row to preserve consistency
                     ref_cell = row[0]
                     ref_font = copy(ref_cell.font)
@@ -528,6 +557,9 @@ class InventoryManager:
                                 
                     break
             
+            if not row_found:
+                print(f"Warning: No matching row found in Excel for {target_imei} / {target_model}")
+                
             wb.save(file_path)
             
         except PermissionError:
