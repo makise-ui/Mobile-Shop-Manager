@@ -568,6 +568,10 @@ class BillingScreen(BaseScreen):
         elif mode == "Model":
             match = df[df['model'].astype(str).str.contains(q, case=False, na=False)]
             
+        # Deduplicate
+        if not match.empty:
+            match = match.drop_duplicates(subset=['unique_id'])
+            
         if match.empty:
             messagebox.showwarning("Not Found", f"No item found for {mode}: {q}")
             self.ent_scan.select_range(0, tk.END)
@@ -1909,6 +1913,10 @@ class EditDataScreen(BaseScreen):
             match = df[df['imei'].astype(str).str.contains(q, na=False)]
         elif mode == "Model":
             match = df[df['model'].astype(str).str.contains(q, case=False, na=False)]
+            
+        # Deduplicate
+        if not match.empty:
+            match = match.drop_duplicates(subset=['unique_id'])
             
         if match.empty:
             messagebox.showwarning("Error", f"No item found for {mode}: {q}")

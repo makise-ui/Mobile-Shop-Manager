@@ -445,13 +445,21 @@ class ItemSelectionDialog(tk.Toplevel):
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Populate
+        first_iid = None
         for item in self.items:
+            iid = str(item.get('unique_id'))
             self.tree.insert('', tk.END, values=(
                 item.get('unique_id', ''),
                 item.get('imei', ''),
                 item.get('model', ''),
                 f"{item.get('price', 0):.2f}"
-            ), iid=str(item.get('unique_id')))
+            ), iid=iid)
+            if not first_iid: first_iid = iid
+            
+        # Auto-select first
+        if first_iid:
+            self.tree.selection_set(first_iid)
+            self.tree.focus(first_iid)
             
         # Buttons
         btn_frame = ttk.Frame(self)
@@ -460,6 +468,7 @@ class ItemSelectionDialog(tk.Toplevel):
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT)
         
         self.tree.bind("<Double-1>", lambda e: self._confirm())
+        self.bind("<Return>", lambda e: self._confirm())
 
     def _confirm(self):
         sel = self.tree.selection()
