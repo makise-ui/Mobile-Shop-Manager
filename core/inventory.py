@@ -391,6 +391,7 @@ class InventoryManager:
 
     def _write_excel_generic(self, row_data, updates):
         from openpyxl import load_workbook
+        from openpyxl.styles import Font, Alignment
         from copy import copy
         
         file_path = row_data['source_file']
@@ -468,14 +469,23 @@ class InventoryManager:
             
             for row in ws.iter_rows(min_row=2):
                 match = False
-                if imei_col_idx and str(row[imei_col_idx-1].value) == target_imei:
-                    match = True
-                elif model_col_idx and str(row[model_col_idx-1].value) == target_model:
-                    match = True # Weak match
+                if imei_col_idx:
+                    cell_val = row[imei_col_idx-1].value
+                    if cell_val:
+                        s_cell = str(cell_val).strip().replace('.0', '')
+                        # Robust Check: Exact match or partial (for dual IMEI scenarios)
+                        # target_imei might be "A / B", cell might be "A" or "B" or "A/B"
+                        if s_cell == target_imei:
+                            match = True
+                        elif target_imei and (target_imei in s_cell or s_cell in target_imei):
+                            match = True
+                
+                if not match and model_col_idx:
+                    if str(row[model_col_idx-1].value).strip() == target_model:
+                        match = True # Weak match fallback
                 
                 if match:
                     # Capture Style from the first cell of the row to preserve consistency
-                    # This ensures if the row is Bold/Centered, the new values match.
                     ref_cell = row[0]
                     ref_font = copy(ref_cell.font)
                     ref_align = copy(ref_cell.alignment)
@@ -493,11 +503,22 @@ class InventoryManager:
                                 
                             cell.value = new_val
                             
-                            # Apply preserved style
+                            # Apply preserved style first
                             cell.font = ref_font
                             cell.alignment = ref_align
                             cell.border = ref_border
                             cell.fill = ref_fill
+
+                            # SPECIAL FORMATTING: Status = OUT
+                            # Check if this column maps to 'status'
+                            is_status = False
+                            if col_name == field_to_col.get('status') or col_name == default_headers.get('status'):
+                                is_status = True
+                                
+                            if is_status and str(new_val).strip() == "OUT":
+                                cell.font = Font(bold=True)
+                                cell.alignment = Alignment(horizontal='center')
+                                
                     break
             
             wb.save(file_path)
