@@ -81,8 +81,7 @@ class UpdateChecker:
     def restart_and_install(self, new_file_path):
         # Logic for Frozen (PyInstaller) app
         if not getattr(sys, 'frozen', False):
-            print("Not running as frozen exe. Update downloaded but swap skipped.")
-            return
+            return False, "Cannot update: App is running from source (Python script)."
 
         exe_name = os.path.basename(sys.executable)
         
@@ -99,3 +98,4 @@ del "%~f0"
             
         subprocess.Popen("updater.bat", shell=True)
         sys.exit()
+        return True, "Restarting..."

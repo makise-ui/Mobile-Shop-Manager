@@ -8,13 +8,14 @@ from core.printer import PrinterManager
 from core.billing import BillingManager
 from core.activity_log import ActivityLogger
 from core.updater import UpdateChecker
+from core.version import APP_VERSION
 from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 
 class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("4 Bros Mobile Manager")
+        self.title(f"4 Bros Mobile Manager v{APP_VERSION}")
         self.geometry("1100x700")
         
         # --- Splash Screen ---
@@ -116,7 +117,11 @@ class MainApp(tk.Tk):
             
         def finish_download(file_path):
             lbl_status.config(text="Installing...")
-            self.updater.restart_and_install(file_path)
+            success, msg = self.updater.restart_and_install(file_path)
+            if not success:
+                lbl_status.config(text="Update Failed", foreground="red")
+                messagebox.showwarning("Update Error", msg)
+                btn_update.config(state='normal')
 
         def start_download():
             btn_update.config(state='disabled')
