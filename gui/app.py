@@ -193,6 +193,10 @@ class MainApp(tk.Tk):
         # Update Button (Hidden by default)
         self.btn_update = ttk.Button(nav_frame, text="⬇ Update Available", style="Accent.TButton", command=self._show_update_dialog)
         
+        # Manual Refresh Button
+        self.btn_refresh = ttk.Button(nav_frame, text="⟳ REFRESH DATA", style="Nav.TButton", command=self.manual_refresh)
+        self.btn_refresh.pack(side=tk.RIGHT, padx=10, pady=10)
+
         # Nav Buttons
         btn_bar = tk.Frame(nav_frame, bg=NAV_BG)
         btn_bar.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
@@ -277,6 +281,21 @@ class MainApp(tk.Tk):
         billing_screen = self.screens['billing']
         billing_screen.add_items(items)
         self.show_screen('billing')
+
+    def manual_refresh(self):
+        self.status_var.set("Refreshing data from files...")
+        self.update_idletasks()
+        
+        # 1. Reload Data
+        self.inventory.reload_all()
+        
+        # 2. Update Watcher (in case files changed)
+        self.watcher.refresh_watch_list()
+        
+        # 3. Refresh UI
+        self._refresh_ui()
+        
+        self.status_var.set("Data refreshed manually.")
 
     def _on_inventory_update(self):
         self.after(0, self._refresh_ui)
