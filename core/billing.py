@@ -55,21 +55,31 @@ class BillingManager:
         TEXT_COLOR = colors.HexColor("#2c3e50")
         
         # Custom Styles
-        style_title = styles['Heading1']
-        style_title.fontName = 'Helvetica-Bold'
-        style_title.fontSize = 18 # Reduced from 24
-        style_title.textColor = ACCENT_COLOR
-        style_title.alignment = 2 # Right
         
-        style_store = styles['Normal']
-        style_store.fontName = 'Helvetica-Bold'
-        style_store.fontSize = 14
-        style_store.textColor = colors.black
+        # Store Name (Top Center)
+        style_store_header = styles['Heading1']
+        style_store_header.fontName = 'Helvetica-Bold'
+        style_store_header.fontSize = 20
+        style_store_header.textColor = ACCENT_COLOR
+        style_store_header.alignment = 1 # Center
+        
+        # Invoice Title (Smaller)
+        style_inv_title = styles['Normal']
+        style_inv_title.fontName = 'Helvetica-Bold'
+        style_inv_title.fontSize = 14
+        style_inv_title.textColor = ACCENT_COLOR
+        style_inv_title.alignment = 2 # Right
         
         style_body = styles['Normal']
         style_body.fontName = 'Helvetica'
         style_body.fontSize = 9
         style_body.leading = 12
+        
+        style_right = styles['Normal']
+        style_right.fontName = 'Helvetica'
+        style_right.fontSize = 9
+        style_right.leading = 12
+        style_right.alignment = 2 # Right
         
         # --- 1. Header Section ---
         store_name = self.config.get('store_name', 'My Store')
@@ -77,29 +87,32 @@ class BillingManager:
         store_gstin = self.config.get('store_gstin', '')
         store_contact = self.config.get('store_contact', '')
         
-        # Left: Store Info
+        # 1. Store Name (Centered)
+        elements.append(Paragraph(store_name, style_store_header))
+        elements.append(Spacer(1, 10))
+        
+        # 2. Details Row (Address Left | Invoice Right)
+        # Left: Store Details
         store_info = f"{store_addr}<br/>GSTIN: {store_gstin}<br/>Phone: {store_contact}"
-        p_store_name = Paragraph(store_name, style_store)
         p_store_info = Paragraph(store_info, style_body)
         
-        # Right: Invoice Title & Details
+        # Right: Invoice Details
         inv_date = buyer_details.get('date', datetime.date.today())
-        p_inv_title = Paragraph("TAX INVOICE", style_title)
-        inv_details = f"<b>INVOICE NO:</b> {invoice_number}<br/><b>DATE:</b> {inv_date}"
-        p_inv_details = Paragraph(inv_details, style_body)
         
-        # Header Table
-        header_data = [
-            [p_store_name, p_inv_title],
-            [p_store_info, p_inv_details]
-        ]
+        # Combine Title and Details in one Right-Aligned cell
+        inv_text = f"""<font size=14 color={ACCENT_COLOR}><b>TAX INVOICE</b></font><br/>
+        <b>INVOICE NO:</b> {invoice_number}<br/>
+        <b>DATE:</b> {inv_date}"""
+        p_inv_details = Paragraph(inv_text, style_right)
+        
+        header_data = [[p_store_info, p_inv_details]]
         
         t_header = Table(header_data, colWidths=[100*mm, 90*mm])
         t_header.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('ALIGN', (1,0), (1,1), 'RIGHT'),
-            ('BOTTOMPADDING', (0,1), (-1,1), 15),
-            ('LINEBELOW', (0,1), (-1,1), 1, colors.lightgrey), # Separator line
+            ('ALIGN', (1,0), (1,0), 'RIGHT'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+            ('LINEBELOW', (0,0), (-1,-1), 1, colors.lightgrey),
         ]))
         elements.append(t_header)
         elements.append(Spacer(1, 15))
