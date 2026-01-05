@@ -509,13 +509,20 @@ class InventoryManager:
                             cell.border = ref_border
                             cell.fill = ref_fill
 
-                            # SPECIAL FORMATTING: Status = OUT
-                            # Check if this column maps to 'status'
-                            is_status = False
-                            if col_name == field_to_col.get('status') or col_name == default_headers.get('status'):
-                                is_status = True
+                            # SPECIAL FORMATTING: Status, Buyer, Contact
+                            col_status = field_to_col.get('status') or default_headers.get('status')
+                            col_buyer = field_to_col.get('buyer') or default_headers.get('buyer')
+                            col_contact = field_to_col.get('buyer_contact') or default_headers.get('buyer_contact')
+                            
+                            val_str = str(new_val).strip()
+                            
+                            # Status = OUT -> Bold + Center
+                            if col_name == col_status and val_str == "OUT":
+                                cell.font = Font(bold=True)
+                                cell.alignment = Alignment(horizontal='center')
                                 
-                            if is_status and str(new_val).strip() == "OUT":
+                            # Buyer/Contact (if present) -> Bold + Center
+                            elif (col_name == col_buyer or col_name == col_contact) and val_str:
                                 cell.font = Font(bold=True)
                                 cell.alignment = Alignment(horizontal='center')
                                 
