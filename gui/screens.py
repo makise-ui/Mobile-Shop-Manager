@@ -531,12 +531,22 @@ class BillingScreen(BaseScreen):
         self.ent_disc_reason = ttk.Entry(adj_frame, width=20)
         self.ent_disc_reason.pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(adj_frame, text="Amount (-):").pack(side=tk.LEFT, padx=5)
-        self.ent_disc_amt = ttk.Entry(adj_frame, width=10)
+        ttk.Label(adj_frame, text="Disc:").pack(side=tk.LEFT, padx=(10,5))
+        
+        self.var_disc_type = tk.StringVar(value="AMT") # AMT or PERCENT
+        
+        self.ent_disc_amt = ttk.Entry(adj_frame, width=8)
         self.ent_disc_amt.insert(0, "0")
         self.ent_disc_amt.pack(side=tk.LEFT, padx=5)
         self.ent_disc_amt.bind('<KeyRelease>', self._calculate_totals)
         
+        # Toggle Buttons (Small)
+        f_toggle = ttk.Frame(adj_frame)
+        f_toggle.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Radiobutton(f_toggle, text="₹", variable=self.var_disc_type, value="AMT", command=self._calculate_totals).pack(side=tk.LEFT)
+        ttk.Radiobutton(f_toggle, text="%", variable=self.var_disc_type, value="PERCENT", command=self._calculate_totals).pack(side=tk.LEFT)
+
         self.lbl_grand_total = ttk.Label(adj_frame, text="Payable: ₹0.00", font=('Segoe UI', 12, 'bold'), foreground="#007acc")
         self.lbl_grand_total.pack(side=tk.RIGHT, padx=20)
         
@@ -549,24 +559,25 @@ class BillingScreen(BaseScreen):
         
         ttk.Button(btn_frame, text="Print Invoice", command=self._print_invoice).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="Save PDF", command=self._save_invoice).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(btn_frame, text="MARK SOLD", command=self._mark_cart_as_sold, style="Accent.TButton").pack(side=tk.RIGHT, padx=20)
+        ttk.Button(btn_frame, text="SAVE & SOLD", command=self._save_and_sold, style="Accent.TButton").pack(side=tk.RIGHT, padx=20)
 
     def on_show(self):
         self.ent_scan.focus_set()
 
-    def _mark_cart_as_sold(self):
+    def _save_and_sold(self):
         if not self.cart_items:
             messagebox.showwarning("Empty", "Cart is empty")
             return
 
+        # 1. First Save the Invoice
+        path = self._generate_file()
+        if not path:
+            return # Generation failed or cancelled
+
+        # 2. Then Mark as Sold
         buyer_name = self.ent_name.get().strip()
         buyer_contact = self.ent_contact.get().strip()
         
-        if not buyer_name:
-            if not messagebox.askyesno("Confirm", "No Buyer Name entered. Mark as SOLD anyway?"):
-                self.ent_name.focus_set()
-                return
-
         count = 0
         updates = {
             "status": "OUT",
@@ -578,7 +589,7 @@ class BillingScreen(BaseScreen):
             if self.app.inventory.update_item_data(item['unique_id'], updates):
                 count += 1
                 
-        messagebox.showinfo("Success", f"Marked {count} items as SOLD (OUT).")
+        messagebox.showinfo("Success", f"Invoice saved.\nMarked {count} items as SOLD (OUT).")
         self.clear_cart()
 
     def _on_scan(self, event):
@@ -645,11 +656,18 @@ class BillingScreen(BaseScreen):
     def _calculate_totals(self, event=None):
         subtotal = sum(float(item.get('price', 0)) for item in self.cart_items)
         try:
-            disc = float(self.ent_disc_amt.get())
+            val = float(self.ent_disc_amt.get())
         except ValueError:
-            disc = 0.0
+            val = 0.0
+            
+        disc_amt = 0.0
+        if self.var_disc_type.get() == "PERCENT":
+            disc_amt = subtotal * (val / 100.0)
+        else:
+            disc_amt = val
         
-        final = subtotal - disc
+        final = subtotal - disc_amt
+        # Show details in label? For now just Payable
         self.lbl_grand_total.config(text=f"Payable: ₹{final:,.2f}")
 
     def _refresh_cart(self):
@@ -699,10 +717,20 @@ class BillingScreen(BaseScreen):
         
         discount = None
         try:
-            d_amt = float(self.ent_disc_amt.get())
-            if d_amt > 0:
+            val = float(self.ent_disc_amt.get())
+            if val > 0:
+                reason = self.ent_disc_reason.get().strip() or "Discount"
+                subtotal = sum(float(item.get('price', 0)) for item in self.cart_items)
+                
+                d_amt = 0.0
+                if self.var_disc_type.get() == "PERCENT":
+                    d_amt = subtotal * (val / 100.0)
+                    reason += f" ({val}%)"
+                else:
+                    d_amt = val
+                
                 discount = {
-                    "reason": self.ent_disc_reason.get().strip() or "Adjustment",
+                    "reason": reason,
                     "amount": d_amt
                 }
         except:
@@ -763,7 +791,7 @@ class InvoiceHistoryScreen(BaseScreen):
         
         # List
         cols = ('date', 'name', 'filename', 'size')
-        self.tree = ttk.Treeview(self, columns=cols, show='headings')
+        self.tree = ttk.Treeview(self, columns=cols, show='headings', selectmode='extended')
         self.tree.heading('date', text='Date')
         self.tree.column('date', width=120)
         self.tree.heading('name', text='Customer Name')
@@ -802,21 +830,25 @@ class InvoiceHistoryScreen(BaseScreen):
     def _get_selected(self):
         sel = self.tree.selection()
         if not sel:
-            messagebox.showwarning("Select", "Please select an invoice.")
+            messagebox.showwarning("Select", "Please select at least one invoice.")
             return None
-        return sel[0] # Returns full path as iid
+        return sel # Return list of iids
 
     def _open_pdf(self):
-        path = self._get_selected()
-        if path:
-            try:
-                os.startfile(path)
-            except Exception as e:
-                messagebox.showerror("Error", f"Cannot open file: {e}")
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Select", "Please select an invoice.")
+            return
+            
+        path = sel[0] # Open only first
+        try:
+            os.startfile(path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Cannot open file: {e}")
 
     def _print_pdf(self):
-        path = self._get_selected()
-        if not path: return
+        selection = self._get_selected()
+        if not selection: return
         
         printers = self.app.printer.get_system_printers()
         if not printers:
@@ -824,20 +856,26 @@ class InvoiceHistoryScreen(BaseScreen):
             return
 
         def on_printer_select(printer_name):
-            if self.app.printer.print_pdf(path, printer_name):
-                messagebox.showinfo("Sent", f"Sent to {printer_name}")
+            success_count = 0
+            for path in selection:
+                if self.app.printer.print_pdf(path, printer_name):
+                    success_count += 1
+            
+            if success_count > 0:
+                messagebox.showinfo("Sent", f"Sent {success_count} files to {printer_name}")
             else:
-                messagebox.showerror("Error", "Failed to print.")
+                messagebox.showerror("Error", "Failed to print files.")
 
         PrinterSelectionDialog(self.winfo_toplevel(), printers, on_printer_select)
 
     def _delete_invoice(self):
-        path = self._get_selected()
-        if not path: return
+        selection = self._get_selected()
+        if not selection: return
         
-        if messagebox.askyesno("Confirm", "Delete this invoice permanently?"):
+        if messagebox.askyesno("Confirm", f"Delete {len(selection)} invoice(s) permanently?"):
             try:
-                os.remove(path)
+                for path in selection:
+                    os.remove(path)
                 self._refresh_list()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete: {e}")
