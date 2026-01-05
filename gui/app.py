@@ -7,6 +7,7 @@ from core.barcode_utils import BarcodeGenerator
 from core.printer import PrinterManager
 from core.billing import BillingManager
 from core.activity_log import ActivityLogger
+from core.updater import UpdateChecker
 from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 
@@ -44,6 +45,7 @@ class MainApp(tk.Tk):
         # --- Core Initialization ---
         self.app_config = ConfigManager()
         self.activity_logger = ActivityLogger(self.app_config)
+        self.updater = UpdateChecker()
         self.inventory = InventoryManager(self.app_config, self.activity_logger)
         self.barcode_gen = BarcodeGenerator(self.app_config)
         self.printer = PrinterManager(self.app_config, self.barcode_gen)
@@ -66,6 +68,9 @@ class MainApp(tk.Tk):
         splash.destroy()
         self.deiconify() # Show main window
         
+        # Check for updates
+        self.updater.check_for_updates(self._on_update_found)
+        
         # Force refresh of default screen to ensure data is visible
         if 'inventory' in self.screens:
              self.screens['inventory'].on_show()
@@ -75,6 +80,11 @@ class MainApp(tk.Tk):
         # Check if first run (no files)
         if not self.app_config.mappings:
             WelcomeDialog(self, self._on_welcome_choice)
+
+    def _on_update_found(self, available, tag, url):
+        if available:
+            self.btn_update.config(text=f"⬇ Update Available ({tag})")
+            self.btn_update.pack(side=tk.RIGHT, padx=20)
 
     def _on_welcome_choice(self, choice):
         if choice == "files":
@@ -124,6 +134,9 @@ class MainApp(tk.Tk):
         # App Title in Nav
         lbl_title = tk.Label(nav_frame, text="4BROS MANAGER", font=('Segoe UI', 14, 'bold'), bg=NAV_BG, fg="white")
         lbl_title.pack(side=tk.LEFT, padx=20)
+        
+        # Update Button (Hidden by default)
+        self.btn_update = ttk.Button(nav_frame, text="⬇ Update Available", style="Accent.TButton", command=lambda: self.updater.open_download_page())
         
         # Nav Buttons
         btn_bar = tk.Frame(nav_frame, bg=NAV_BG)
