@@ -10,11 +10,39 @@ class FileChangeHandler(FileSystemEventHandler):
         self.watched_files = set(os.path.abspath(f) for f in watched_files)
         self.debounce_timer = None
 
+    def on_moved(self, event):
+        if not event.is_directory:
+            self._check(event.dest_path)
+
+    def on_created(self, event):
+        if not event.is_directory:
+            self._check(event.src_path)
+
     def on_modified(self, event):
         if not event.is_directory:
-            abs_path = os.path.abspath(event.src_path)
+            self._check(event.src_path)
+
+    def _check(self, path):
+        try:
+            # Check against absolute paths
+            abs_path = os.path.abspath(path)
             if abs_path in self.watched_files:
                 self._debounce_callback()
+                return
+
+            # Excel Logic: Excel saves as temp then renames/moves.
+            # Sometimes we just see the final file creation or move.
+            # Also, check if filename matches any watched file regardless of folder 
+            # (though we only watch specific folders, this adds safety)
+            fname = os.path.basename(abs_path)
+            
+            # Simple check: Does this filename match any of our watched files?
+            for w in self.watched_files:
+                if os.path.basename(w) == fname:
+                    self._debounce_callback()
+                    return
+        except Exception as e:
+            print(f"Watcher check error: {e}")
 
     def _debounce_callback(self):
         if self.debounce_timer:
