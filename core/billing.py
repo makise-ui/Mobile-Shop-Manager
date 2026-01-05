@@ -7,8 +7,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 import datetime
 
 class BillingManager:
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, activity_logger=None):
         self.config = config_manager
+        self.activity_logger = activity_logger
 
     def calculate_tax(self, price, tax_rate_percent, is_interstate=False, is_inclusive=False):
         """
@@ -161,4 +162,8 @@ class BillingManager:
         elements.append(t_footer)
         
         doc.build(elements)
+        
+        if self.activity_logger:
+            self.activity_logger.log("INVOICE_GEN", f"Invoice {invoice_number} generated for Rs. {final_total:.2f}")
+            
         return True

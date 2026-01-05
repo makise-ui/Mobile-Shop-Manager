@@ -6,7 +6,8 @@ from core.watcher import InventoryWatcher
 from core.barcode_utils import BarcodeGenerator
 from core.printer import PrinterManager
 from core.billing import BillingManager
-from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen, InvoiceHistoryScreen
+from core.activity_log import ActivityLogger
+from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 
 class MainApp(tk.Tk):
@@ -42,10 +43,11 @@ class MainApp(tk.Tk):
         
         # --- Core Initialization ---
         self.app_config = ConfigManager()
-        self.inventory = InventoryManager(self.app_config)
+        self.activity_logger = ActivityLogger(self.app_config)
+        self.inventory = InventoryManager(self.app_config, self.activity_logger)
         self.barcode_gen = BarcodeGenerator(self.app_config)
         self.printer = PrinterManager(self.app_config, self.barcode_gen)
-        self.billing = BillingManager(self.app_config)
+        self.billing = BillingManager(self.app_config, self.activity_logger)
         
         # --- Watcher ---
         self.watcher = InventoryWatcher(self.inventory, self._on_inventory_update)
@@ -149,6 +151,8 @@ class MainApp(tk.Tk):
         
         menu.add_command(label="Manage Files", command=lambda: self.show_screen('files'))
         menu.add_command(label="Manage Data", command=lambda: self.show_screen('managedata'))
+        menu.add_command(label="Activity Log", command=lambda: self.show_screen('activity'))
+        menu.add_command(label="Conflicts", command=lambda: self.show_screen('conflicts'))
         menu.add_separator()
         menu.add_command(label="User Guide & Help", command=lambda: self.show_screen('help'))
         menu.add_command(label="Settings", command=lambda: self.show_screen('settings'))
@@ -172,6 +176,8 @@ class MainApp(tk.Tk):
         self.screens['files'] = FilesScreen(self.content_area, self)
         self.screens['billing'] = BillingScreen(self.content_area, self)
         self.screens['invoices'] = InvoiceHistoryScreen(self.content_area, self)
+        self.screens['activity'] = ActivityLogScreen(self.content_area, self)
+        self.screens['conflicts'] = ConflictScreen(self.content_area, self)
         self.screens['analytics'] = AnalyticsScreen(self.content_area, self)
         self.screens['settings'] = SettingsScreen(self.content_area, self)
         self.screens['managedata'] = ManageDataScreen(self.content_area, self)
