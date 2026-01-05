@@ -59,14 +59,14 @@ class BillingManager:
         # Store Name (Top Center)
         style_store_header = styles['Heading1']
         style_store_header.fontName = 'Helvetica-Bold'
-        style_store_header.fontSize = 20
+        style_store_header.fontSize = 24 # Big Font
         style_store_header.textColor = ACCENT_COLOR
         style_store_header.alignment = 1 # Center
         
         # Invoice Title (Smaller)
         style_inv_title = styles['Normal']
         style_inv_title.fontName = 'Helvetica-Bold'
-        style_inv_title.fontSize = 14
+        style_inv_title.fontSize = 12 # Smaller
         style_inv_title.textColor = ACCENT_COLOR
         style_inv_title.alignment = 2 # Right
         
@@ -100,7 +100,7 @@ class BillingManager:
         inv_date = buyer_details.get('date', datetime.date.today())
         
         # Combine Title and Details in one Right-Aligned cell
-        inv_text = f"""<font size=14 color={ACCENT_COLOR}><b>TAX INVOICE</b></font><br/>
+        inv_text = f"""<font size=12 color={ACCENT_COLOR}><b>TAX INVOICE</b></font><br/>
         <b>INVOICE NO:</b> {invoice_number}<br/>
         <b>DATE:</b> {inv_date}"""
         p_inv_details = Paragraph(inv_text, style_right)
