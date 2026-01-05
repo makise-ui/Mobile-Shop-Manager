@@ -43,8 +43,18 @@ def backup_excel_file(file_path):
     if not path.exists():
         return None
         
+    # Store in Documents/4BrosManager/backups
+    backup_dir = Path.home() / "Documents" / "4BrosManager" / "backups"
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"Failed to create backup dir: {e}")
+        return None
+        
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = path.parent / f"{path.stem}_{ts}.bak{path.suffix}"
+    # Clean filename to avoid issues
+    safe_name = f"{path.stem}_{ts}{path.suffix}.bak"
+    backup_path = backup_dir / safe_name
     
     try:
         shutil.copy2(path, backup_path)
