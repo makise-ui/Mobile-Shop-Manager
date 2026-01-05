@@ -444,16 +444,19 @@ class ItemSelectionDialog(tk.Toplevel):
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Populate
+        # Populate safe
+        self.item_map = {}
         first_iid = None
+        
         for item in self.items:
-            iid = str(item.get('unique_id'))
-            self.tree.insert('', tk.END, values=(
+            # Let Treeview generate IID to avoid 'Item already exists' if duplicates passed
+            iid = self.tree.insert('', tk.END, values=(
                 item.get('unique_id', ''),
                 item.get('imei', ''),
                 item.get('model', ''),
                 f"{item.get('price', 0):.2f}"
-            ), iid=iid)
+            ))
+            self.item_map[iid] = item
             if not first_iid: first_iid = iid
             
         # Auto-select first
@@ -474,13 +477,11 @@ class ItemSelectionDialog(tk.Toplevel):
         sel = self.tree.selection()
         if not sel: return
         
-        uid = sel[0]
-        # Find item data
-        for item in self.items:
-            if str(item.get('unique_id')) == str(uid):
-                self.destroy()
-                self.on_select(item)
-                return
+        iid = sel[0]
+        item = self.item_map.get(iid)
+        if item:
+            self.destroy()
+            self.on_select(item)
 
 class ConflictResolutionDialog(tk.Toplevel):
     def __init__(self, parent, conflict_data, on_resolve):
