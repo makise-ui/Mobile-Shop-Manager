@@ -88,3 +88,13 @@ For more detailed instructions, please check the [docs](docs/) folder:
 *   [**User Guide**](docs/UserGuide.md): How to use the inventory, billing, and printing features.
 *   [**Configuration**](docs/Configuration.md): Advanced settings and file mapping details.
 *   [**Troubleshooting**](docs/Troubleshooting.md): Common issues and fixes.
+
+---
+
+## ⚖️ License
+
+**Proprietary Software.** 
+
+Copyright (c) 2026 4Bros Mobile / makise-ui. All rights reserved.
+
+Unauthorized use, copying, modification, or distribution of this software is strictly prohibited without explicit written permission from the owner. See the [LICENSE](LICENSE) file for more details.
