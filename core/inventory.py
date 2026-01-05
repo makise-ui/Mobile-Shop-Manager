@@ -352,7 +352,10 @@ class InventoryManager:
                 try:
                     row = self.inventory_df[mask].iloc[0]
                     # Use the generic writer for status too
-                    self._write_excel_generic(row, {"status": new_status})
+                    success, msg = self._write_excel_generic(row, {"status": new_status})
+                    if not success:
+                        print(f"Excel Update Failed: {msg}")
+                        return False
                 except Exception as e:
                     print(f"Excel write error: {e}")
                     return False
@@ -383,7 +386,10 @@ class InventoryManager:
         # 3. Update Excel (Best Effort)
         try:
             row = self.inventory_df[mask].iloc[0]
-            self._write_excel_generic(row, updates)
+            success, msg = self._write_excel_generic(row, updates)
+            if not success:
+                 print(f"Update failed: {msg}")
+                 return False
             return True
         except Exception as e:
             print(f"Update error: {e}")
@@ -401,14 +407,12 @@ class InventoryManager:
             file_path = key.split('::')[0]
 
         if not os.path.exists(file_path): 
-            print(f"Error: Source file not found: {file_path}")
-            return
+            return False, f"Source file not found: {file_path}"
 
         # SAFETY 1: Backup
         backup_path = backup_excel_file(file_path)
         if not backup_path:
-            print("Failed to create backup, aborting write for safety.")
-            return
+            return False, "Failed to create backup, aborting write for safety."
             
         # Use the original KEY to get mapping data (it might be keyed by "path::sheet")
         mapping_data = self.config_manager.get_file_mapping(key)
@@ -428,27 +432,45 @@ class InventoryManager:
             if k in field_to_col:
                 excel_updates[field_to_col[k]] = v
         
-        # If excel_updates empty, check if we need to CREATE columns
-        # even if not mapped.
-        
         try:
             wb = load_workbook(file_path)
-            # Handle specific sheet if part of key or mapping
+            
+            # Determine Sheet
             sheet_name = mapping_data.get('sheet_name', 0)
             if '::' in key:
                  try:
                      sheet_part = key.split('::')[1]
-                     if sheet_part: sheet_name = sheet_part
+                     if sheet_part: 
+                         # Try converting to int if it looks like one
+                         if sheet_part.isdigit():
+                             sheet_name = int(sheet_part)
+                         else:
+                             sheet_name = sheet_part
                  except: pass
 
-            if sheet_name and sheet_name != 0:
-                 if str(sheet_name) in wb.sheetnames:
-                     ws = wb[str(sheet_name)]
-                 else:
-                     ws = wb.active # Fallback
-            else:
-                 ws = wb.active
+            ws = None
+            # 1. Try Integer Index
+            if isinstance(sheet_name, int):
+                try:
+                    ws = wb.worksheets[sheet_name]
+                except IndexError:
+                    print(f"Sheet index {sheet_name} out of range, falling back to active.")
             
+            # 2. Try String Name
+            elif isinstance(sheet_name, str):
+                 if sheet_name in wb.sheetnames:
+                     ws = wb[sheet_name]
+                 elif sheet_name.isdigit(): # "0" as string?
+                     try:
+                         ws = wb.worksheets[int(sheet_name)]
+                     except: pass
+
+            # 3. Fallback
+            if ws is None:
+                ws = wb.active
+                
+            print(f"DEBUG: Writing to Sheet '{ws.title}' in '{file_path}'")
+
             # Find Header Columns
             col_indices = {}
             max_col_idx = 0
@@ -559,12 +581,12 @@ class InventoryManager:
             
             if not row_found:
                 print(f"Warning: No matching row found in Excel for {target_imei} / {target_model}")
+                return False, f"Row not found for {target_imei}"
                 
             wb.save(file_path)
+            return True, "Success"
             
         except PermissionError:
-            print(f"Error: File {file_path} is open in Excel. Cannot save.")
-            raise Exception("File is open in Excel. Please close it.")
+            return False, "File is open in Excel. Please close it."
         except Exception as e:
-            print(f"Excel Write Error: {e}")
-            raise
+            return False, f"Excel Write Error: {e}"
