@@ -886,18 +886,23 @@ class ConflictScreen(BaseScreen):
         ttk.Button(tb, text="Resolve Selected", command=self._resolve).pack(side=tk.RIGHT, padx=5)
         
         # Info
-        ttk.Label(self, text="Conflicts occur when the same IMEI appears in multiple Excel files.", font=('Segoe UI', 9, 'italic')).pack(fill=tk.X, pady=(0,10))
+        ttk.Label(self, text="Conflicts occur when the same IMEI appears in multiple Excel files or rows.", font=('Segoe UI', 9, 'italic')).pack(fill=tk.X, pady=(0,10))
         
         # Container for Tree + Scrollbars
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
         
         # Tree
-        cols = ('imei', 'model', 'sources')
+        cols = ('ids', 'imei', 'model', 'sources')
         self.tree = ttk.Treeview(container, columns=cols, show='headings')
+        self.tree.heading('ids', text='Unique IDs')
         self.tree.heading('imei', text='IMEI')
         self.tree.heading('model', text='Model')
         self.tree.heading('sources', text='Found In (Files)')
+        
+        self.tree.column('ids', width=100)
+        self.tree.column('imei', width=150)
+        self.tree.column('model', width=200)
         self.tree.column('sources', width=600)
         
         # Scrollbars
@@ -919,7 +924,8 @@ class ConflictScreen(BaseScreen):
         conflicts = self.app.inventory.conflicts
         for i, c in enumerate(conflicts):
             src_str = ", ".join(c['sources'])
-            self.tree.insert('', tk.END, iid=str(i), values=(c['imei'], c['model'], src_str))
+            ids_str = ", ".join(map(str, c.get('unique_ids', [])))
+            self.tree.insert('', tk.END, iid=str(i), values=(ids_str, c['imei'], c['model'], src_str))
 
     def _resolve(self):
         sel = self.tree.selection()
