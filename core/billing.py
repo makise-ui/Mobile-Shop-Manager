@@ -57,7 +57,7 @@ class BillingManager:
         # Custom Styles
         style_title = styles['Heading1']
         style_title.fontName = 'Helvetica-Bold'
-        style_title.fontSize = 24
+        style_title.fontSize = 18 # Reduced from 24
         style_title.textColor = ACCENT_COLOR
         style_title.alignment = 2 # Right
         
@@ -142,12 +142,17 @@ class BillingManager:
             else:
                 tax_str = f"CGST: {tax_calc['cgst']:.2f}\nSGST: {tax_calc['sgst']:.2f}"
             
+            # Extract IMEI with logic (clean raw string)
+            raw_imei = str(item.get('unique_id', ''))
+            # If 'imei' key exists, prefer it, else fallback to unique_id
+            real_imei = str(item.get('imei', '')) or raw_imei
+            
             row = [
                 str(idx + 1),
-                Paragraph(f"<b>{item.get('model', '')}</b><br/>SN/IMEI: {item.get('unique_id','')}", style_body),
-                f"₹{tax_calc['taxable_value']:.2f}",
+                Paragraph(f"<b>{item.get('model', 'Unknown Model')}</b><br/>IMEI: {real_imei}", style_body),
+                f"Rs. {tax_calc['taxable_value']:.2f}", # Fixed: Rs instead of Rupee Symbol
                 Paragraph(tax_str, style_body),
-                f"₹{tax_calc['total_amount']:.2f}"
+                f"Rs. {tax_calc['total_amount']:.2f}"
             ]
             data.append(row)
             grand_total += tax_calc['total_amount']
@@ -183,13 +188,13 @@ class BillingManager:
         if discount and discount.get('amount', 0) > 0:
             d_amt = float(discount['amount'])
             d_reason = discount.get('reason', 'Discount')
-            discount_rows = [[f"Less: {d_reason}", f"- ₹{d_amt:.2f}"]]
+            discount_rows = [[f"Less: {d_reason}", f"- Rs. {d_amt:.2f}"]]
             final_total -= d_amt
             
         summary_data = [
-            ['Sub Total:', f"₹{grand_total:.2f}"],
+            ['Sub Total:', f"Rs. {grand_total:.2f}"],
         ] + discount_rows + [
-            ['Grand Total:', f"₹{final_total:.2f}"]
+            ['Grand Total:', f"Rs. {final_total:.2f}"]
         ]
         
         t_summary = Table(summary_data, colWidths=[40*mm, 35*mm])
