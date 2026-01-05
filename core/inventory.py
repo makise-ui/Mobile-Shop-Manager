@@ -262,26 +262,26 @@ class InventoryManager:
                     imei_map[p].append(idx)
             
             # Find conflicts
+            processed_groups = set()
+            
             for p, indices in imei_map.items():
                 if len(indices) > 1:
-                    # Get rows for these indices
+                    # Group Key: Sorted Tuple of Row Indices
+                    # This prevents reporting the same set of rows multiple times 
+                    # (e.g. if they share multiple IMEIs)
+                    group_key = tuple(sorted(indices))
+                    if group_key in processed_groups: continue
+                    processed_groups.add(group_key)
+                    
                     rows = full_df.loc[indices]
                     
-                    # Deduplicate by Unique ID (avoid flagging same row twice if it has multiple matching IMEIs)
-                    rows = rows.drop_duplicates(subset=['unique_id'])
-                    
-                    if len(rows) > 1:
-                        # Conflict Key: Sorted Tuple of IDs
-                        ids = tuple(sorted(rows['unique_id'].tolist()))
-                        if ids in processed_indices: continue
-                        processed_indices.add(ids)
-                        
-                        self.conflicts.append({
-                            "imei": p,
-                            "model": rows.iloc[0]['model'],
-                            "sources": list(rows['source_file'].unique()),
-                            "rows": rows.to_dict('records')
-                        })
+                    self.conflicts.append({
+                        "imei": p,
+                        "unique_ids": rows['unique_id'].tolist(),
+                        "model": rows.iloc[0]['model'],
+                        "sources": list(rows['source_file'].unique()),
+                        "rows": rows.to_dict('records')
+                    })
             
             self.inventory_df = full_df
         else:
