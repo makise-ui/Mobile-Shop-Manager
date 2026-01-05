@@ -45,53 +45,87 @@ class BillingManager:
         return breakdown
 
     def generate_invoice(self, items, buyer_details, invoice_number, filename, discount=None):
-        doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=18)
+        doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
         elements = []
         styles = getSampleStyleSheet()
         
-        # Styles
-        style_heading = styles['Heading1']
-        style_heading.alignment = 1 # Center
-        style_normal = styles['Normal']
+        # --- Modern Palette & Styles ---
+        ACCENT_COLOR = colors.HexColor("#2c3e50") # Dark Blue-Grey
+        LIGHT_BG = colors.HexColor("#f8f9fa")     # Very Light Grey
+        TEXT_COLOR = colors.HexColor("#2c3e50")
         
-        # --- Header Section ---
+        # Custom Styles
+        style_title = styles['Heading1']
+        style_title.fontName = 'Helvetica-Bold'
+        style_title.fontSize = 24
+        style_title.textColor = ACCENT_COLOR
+        style_title.alignment = 2 # Right
+        
+        style_store = styles['Normal']
+        style_store.fontName = 'Helvetica-Bold'
+        style_store.fontSize = 14
+        style_store.textColor = colors.black
+        
+        style_body = styles['Normal']
+        style_body.fontName = 'Helvetica'
+        style_body.fontSize = 9
+        style_body.leading = 12
+        
+        # --- 1. Header Section ---
         store_name = self.config.get('store_name', 'My Store')
         store_addr = self.config.get('store_address', 'Address Line 1\nCity, State - Zip')
         store_gstin = self.config.get('store_gstin', '')
+        store_contact = self.config.get('store_contact', '')
         
-        # Store Info (Left) vs Invoice Info (Right)
-        # We use a table for layout
+        # Left: Store Info
+        store_info = f"{store_addr}<br/>GSTIN: {store_gstin}<br/>Phone: {store_contact}"
+        p_store_name = Paragraph(store_name, style_store)
+        p_store_info = Paragraph(store_info, style_body)
+        
+        # Right: Invoice Title & Details
+        inv_date = buyer_details.get('date', datetime.date.today())
+        p_inv_title = Paragraph("TAX INVOICE", style_title)
+        inv_details = f"<b>INVOICE NO:</b> {invoice_number}<br/><b>DATE:</b> {inv_date}"
+        p_inv_details = Paragraph(inv_details, style_body)
+        
+        # Header Table
         header_data = [
-            [Paragraph(f"<b>{store_name}</b>", style_heading), ''],
-            [Paragraph(f"{store_addr}<br/>GSTIN: {store_gstin}", style_normal), 
-             Paragraph(f"<b>INVOICE NO:</b> {invoice_number}<br/><b>DATE:</b> {buyer_details.get('date', datetime.date.today())}", style_normal)]
+            [p_store_name, p_inv_title],
+            [p_store_info, p_inv_details]
         ]
         
-        t_header = Table(header_data, colWidths=[100*mm, 80*mm])
+        t_header = Table(header_data, colWidths=[100*mm, 90*mm])
         t_header.setStyle(TableStyle([
-            ('SPAN', (0,0), (1,0)), # Title spans across
-            ('ALIGN', (0,0), (1,0), 'CENTER'),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('ALIGN', (1,1), (1,1), 'RIGHT'),
+            ('ALIGN', (1,0), (1,1), 'RIGHT'),
+            ('BOTTOMPADDING', (0,1), (-1,1), 15),
+            ('LINEBELOW', (0,1), (-1,1), 1, colors.lightgrey), # Separator line
         ]))
         elements.append(t_header)
-        elements.append(Spacer(1, 10))
-        elements.append(Paragraph("_" * 100, style_normal)) # Horizontal Line
-        elements.append(Spacer(1, 10))
+        elements.append(Spacer(1, 15))
 
-        # --- Bill To Section ---
+        # --- 2. Bill To Section ---
         buyer_name = buyer_details.get('name', 'N/A')
         buyer_contact = buyer_details.get('contact', '')
         
-        bill_to_text = f"<b>BILL TO:</b><br/>{buyer_name}<br/>Contact: {buyer_contact}"
-        elements.append(Paragraph(bill_to_text, style_normal))
+        # Grey Box for Customer
+        cust_data = [[Paragraph(f"<b>BILL TO:</b><br/>{buyer_name}<br/>Phone: {buyer_contact}", style_body)]]
+        t_cust = Table(cust_data, colWidths=[190*mm])
+        t_cust.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), LIGHT_BG),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.lightgrey),
+            ('topPadding', (0,0), (-1,-1), 8),
+            ('bottomPadding', (0,0), (-1,-1), 8),
+            ('leftPadding', (0,0), (-1,-1), 10),
+        ]))
+        elements.append(t_cust)
         elements.append(Spacer(1, 15))
 
-        # --- Items Table ---
-        # Columns: SN, Item/Model, HSN/SAC, Qty, Rate, Tax%, Tax Amt, Amount
-        # Simplified: Item, Model, Rate, Tax, Total
-        data = [['SN', 'Model / Description', 'Taxable Val', 'CGST', 'SGST', 'IGST', 'Total']]
+        # --- 3. Items Table ---
+        # Columns: SN, Description, Taxable, Tax, Total
+        headers = ['SN', 'Description', 'Taxable', 'Tax (GST)', 'Amount']
         
+        data = [headers]
         grand_total = 0.0
         
         is_interstate = buyer_details.get('is_interstate', False)
@@ -102,64 +136,93 @@ class BillingManager:
             price = float(item.get('price', 0))
             tax_calc = self.calculate_tax(price, default_tax, is_interstate, is_inclusive)
             
+            # Format Taxes
+            if is_interstate:
+                tax_str = f"IGST {default_tax}%: {tax_calc['igst']:.2f}"
+            else:
+                tax_str = f"CGST: {tax_calc['cgst']:.2f}\nSGST: {tax_calc['sgst']:.2f}"
+            
             row = [
                 str(idx + 1),
-                item.get('model', '') + f"\nSN: {item.get('unique_id','')}",
-                f"{tax_calc['taxable_value']:.2f}",
-                f"{tax_calc['cgst']:.2f}",
-                f"{tax_calc['sgst']:.2f}",
-                f"{tax_calc['igst']:.2f}",
-                f"{tax_calc['total_amount']:.2f}"
+                Paragraph(f"<b>{item.get('model', '')}</b><br/>SN/IMEI: {item.get('unique_id','')}", style_body),
+                f"₹{tax_calc['taxable_value']:.2f}",
+                Paragraph(tax_str, style_body),
+                f"₹{tax_calc['total_amount']:.2f}"
             ]
             data.append(row)
             grand_total += tax_calc['total_amount']
             
-        # Summary Rows
-        data.append(['', 'Subtotal', '', '', '', '', f"{grand_total:.2f}"])
+        # Table Styling
+        col_widths = [12*mm, 85*mm, 28*mm, 35*mm, 30*mm]
+        t_items = Table(data, colWidths=col_widths, repeatRows=1)
+        
+        style_table = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), ACCENT_COLOR),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            # Data Rows
+            ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'), # Right align numbers
+            ('ALIGN', (0, 1), (0, -1), 'CENTER'), # Center SN
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ])
+        t_items.setStyle(style_table)
+        elements.append(t_items)
+        
+        # --- 4. Summary & Totals ---
+        # Right aligned summary table
         final_total = grand_total
+        discount_rows = []
         
         if discount and discount.get('amount', 0) > 0:
             d_amt = float(discount['amount'])
             d_reason = discount.get('reason', 'Discount')
-            data.append(['', f"Less: {d_reason}", '', '', '', '', f"-{d_amt:.2f}"])
+            discount_rows = [[f"Less: {d_reason}", f"- ₹{d_amt:.2f}"]]
             final_total -= d_amt
             
-        data.append(['', 'Grand Total', '', '', '', '', f"{final_total:.2f}"])
+        summary_data = [
+            ['Sub Total:', f"₹{grand_total:.2f}"],
+        ] + discount_rows + [
+            ['Grand Total:', f"₹{final_total:.2f}"]
+        ]
         
-        t = Table(data, colWidths=[10*mm, 60*mm, 25*mm, 20*mm, 20*mm, 20*mm, 30*mm])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            # Data rows
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey), # Grid for items
-            ('BOX', (0, 0), (-1, -1), 1, colors.black), # Outer Box
-            # Total Row
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.whitesmoke),
+        t_summary = Table(summary_data, colWidths=[40*mm, 35*mm])
+        t_summary.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'), # Bold Grand Total
+            ('FONTSIZE', (0,-1), (-1,-1), 12),
+            ('TEXTCOLOR', (0,-1), (-1,-1), ACCENT_COLOR),
+            ('LINEABOVE', (0,-1), (-1,-1), 1, colors.black),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
         ]))
         
-        elements.append(t)
-        elements.append(Spacer(1, 20))
+        # Layout Summary to the Right
+        summary_container = Table([[ '', t_summary]], colWidths=[115*mm, 75*mm])
+        elements.append(summary_container)
+        elements.append(Spacer(1, 30))
         
-        # --- Footer: Amount in Words & Signatory ---
-        # Note: num2words lib would be good here, but standard python only for now.
+        # --- 5. Footer ---
+        terms = self.config.get('invoice_terms', 'Goods once sold will not be taken back.')
         
-        footer_data = [
-            [Paragraph("<b>Terms & Conditions:</b><br/>1. Goods once sold will not be taken back.<br/>2. Warranty as per manufacturer terms.", styles['Normal']),
-             Paragraph(f"<br/><br/>_______________________<br/><b>Auth. Signatory</b><br/>For {store_name}", styles['Normal'])]
-        ]
-        t_footer = Table(footer_data, colWidths=[120*mm, 60*mm])
+        footer_left = Paragraph(f"<b>Terms & Conditions:</b><br/>{terms}", style_body)
+        footer_right = Paragraph(f"<br/><br/>_______________________<br/><b>Authorized Signatory</b><br/>For {store_name}", style_body)
+        
+        t_footer = Table([[footer_left, footer_right]], colWidths=[120*mm, 70*mm])
         t_footer.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('ALIGN', (1,0), (1,0), 'CENTER'),
         ]))
         elements.append(t_footer)
+        
+        # Bottom "Thank You"
+        elements.append(Spacer(1, 20))
+        elements.append(Paragraph("Thank you for your business!", styles['Heading4'])) # Centered by default style? No.
         
         doc.build(elements)
         
