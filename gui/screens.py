@@ -1,7 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 from PIL import ImageTk
-from .dialogs import MapColumnsDialog, ZPLPreviewDialog, PrinterSelectionDialog
+from .dialogs import MapColumnsDialog, ZPLPreviewDialog, PrinterSelectionDialog, FileSelectionDialog, ItemSelectionDialog
 import pandas as pd
 import datetime
 import os
@@ -474,7 +474,14 @@ class BillingScreen(BaseScreen):
         # 0. Scan Bar
         scan_frame = ttk.Frame(self)
         scan_frame.pack(fill=tk.X, pady=(0, 10))
-        ttk.Label(scan_frame, text="SCAN ID:", font=('Segoe UI', 12, 'bold')).pack(side=tk.LEFT, padx=5)
+        
+        # Search Mode
+        ttk.Label(scan_frame, text="Search By:", font=('Segoe UI', 10)).pack(side=tk.LEFT, padx=5)
+        self.var_search_mode = tk.StringVar(value="ID")
+        self.combo_mode = ttk.Combobox(scan_frame, textvariable=self.var_search_mode, values=["ID", "IMEI", "Model"], state="readonly", width=8)
+        self.combo_mode.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(scan_frame, text="Scan/Search:", font=('Segoe UI', 12, 'bold')).pack(side=tk.LEFT, padx=5)
         self.ent_scan = ttk.Entry(scan_frame, font=('Segoe UI', 14))
         self.ent_scan.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.ent_scan.bind('<Return>', self._on_scan)
@@ -516,7 +523,7 @@ class BillingScreen(BaseScreen):
         self.tree.heading('gst', text='Tax Est.')
         self.tree.pack(fill=tk.BOTH, expand=True)
         
-        # 3. Discount & Totals (NEW)
+        # 3. Discount & Totals
         adj_frame = ttk.Frame(self)
         adj_frame.pack(fill=tk.X, pady=5)
         
@@ -538,8 +545,8 @@ class BillingScreen(BaseScreen):
         btn_frame.pack(fill=tk.X, pady=10)
         
         ttk.Button(btn_frame, text="Clear Cart", command=self.clear_cart).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Edit Price", command=self._edit_price).pack(side=tk.LEFT, padx=10)
         
-        # Right Side Buttons
         ttk.Button(btn_frame, text="Print Invoice", command=self._print_invoice).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="Save PDF", command=self._save_invoice).pack(side=tk.RIGHT, padx=5)
 
@@ -547,19 +554,50 @@ class BillingScreen(BaseScreen):
         self.ent_scan.focus_set()
 
     def _on_scan(self, event):
-        iid = self.ent_scan.get().strip()
-        if not iid: return
+        q = self.ent_scan.get().strip()
+        if not q: return
         
+        mode = self.var_search_mode.get()
         df = self.app.inventory.get_inventory()
-        match = df[df['unique_id'].astype(str) == iid]
+        match = pd.DataFrame()
         
-        if not match.empty:
+        if mode == "ID":
+            match = df[df['unique_id'].astype(str) == q]
+        elif mode == "IMEI":
+            match = df[df['imei'].astype(str).str.contains(q, na=False)]
+        elif mode == "Model":
+            match = df[df['model'].astype(str).str.contains(q, case=False, na=False)]
+            
+        if match.empty:
+            messagebox.showwarning("Not Found", f"No item found for {mode}: {q}")
+            self.ent_scan.select_range(0, tk.END)
+            return
+            
+        if len(match) == 1:
             item = match.iloc[0].to_dict()
             self.add_items([item])
             self.ent_scan.delete(0, tk.END)
         else:
-            messagebox.showwarning("Not Found", f"ID {iid} not found in inventory.")
-            self.ent_scan.select_range(0, tk.END)
+            # Multiple matches
+            items = match.to_dict('records')
+            ItemSelectionDialog(self.winfo_toplevel(), items, lambda item: self.add_items([item]))
+            self.ent_scan.delete(0, tk.END)
+
+    def _edit_price(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Selection", "Select an item in the cart to edit price.")
+            return
+            
+        idx = self.tree.index(sel[0])
+        if idx < len(self.cart_items):
+            item = self.cart_items[idx]
+            old = item.get('price', 0)
+            new_p = simpledialog.askfloat("Edit Price", f"New price for {item.get('model')}:", initialvalue=old, parent=self)
+            
+            if new_p is not None:
+                item['price'] = new_p
+                self._refresh_cart()
 
     def add_items(self, items):
         self.cart_items.extend(items)
@@ -593,7 +631,6 @@ class BillingScreen(BaseScreen):
             price = float(item.get('price', 0))
             
             if is_inclusive:
-                # Tax is included in price
                 taxable = price / (1 + tax_rate/100)
                 tax_amt = price - taxable
             else:
@@ -628,7 +665,6 @@ class BillingScreen(BaseScreen):
             "is_tax_inclusive": self.var_inclusive.get()
         }
         
-        # Prepare Discount
         discount = None
         try:
             d_amt = float(self.ent_disc_amt.get())
@@ -654,14 +690,11 @@ class BillingScreen(BaseScreen):
         if path:
             messagebox.showinfo("Success", f"Invoice saved to:\n{path}")
             self.clear_cart()
-            # Try to open folder?
-            # os.startfile(os.path.dirname(path))
 
     def _print_invoice(self):
         path = self._generate_file()
         if not path: return
         
-        # Open Printer Selector
         printers = self.app.printer.get_system_printers()
         if not printers:
             messagebox.showwarning("No Printers", "No Windows printers found. PDF saved only.")
@@ -694,6 +727,7 @@ class InvoiceHistoryScreen(BaseScreen):
         actions.pack(fill=tk.X, pady=5)
         ttk.Button(actions, text="Open PDF", command=self._open_pdf).pack(side=tk.LEFT, padx=5)
         ttk.Button(actions, text="Print", command=self._print_pdf).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions, text="Delete", command=self._delete_invoice).pack(side=tk.LEFT, padx=5)
         
         # List
         cols = ('date', 'name', 'filename', 'size')
@@ -764,6 +798,137 @@ class InvoiceHistoryScreen(BaseScreen):
                 messagebox.showerror("Error", "Failed to print.")
 
         PrinterSelectionDialog(self.winfo_toplevel(), printers, on_printer_select)
+
+    def _delete_invoice(self):
+        path = self._get_selected()
+        if not path: return
+        
+        if messagebox.askyesno("Confirm", "Delete this invoice permanently?"):
+            try:
+                os.remove(path)
+                self._refresh_list()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete: {e}")
+
+class ActivityLogScreen(BaseScreen):
+    def __init__(self, parent, app_context):
+        super().__init__(parent, app_context)
+        self._init_ui()
+
+    def _init_ui(self):
+        # Header
+        tb = ttk.Frame(self)
+        tb.pack(fill=tk.X, pady=10)
+        ttk.Label(tb, text="Activity Log", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        ttk.Button(tb, text="Refresh", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(tb, text="Clear Logs", command=self._clear_logs).pack(side=tk.RIGHT, padx=5)
+        
+        # Tree
+        cols = ('time', 'action', 'details')
+        self.tree = ttk.Treeview(self, columns=cols, show='headings')
+        self.tree.heading('time', text='Timestamp')
+        self.tree.column('time', width=150)
+        self.tree.heading('action', text='Action')
+        self.tree.column('action', width=120)
+        self.tree.heading('details', text='Details')
+        self.tree.column('details', width=400)
+        
+        # Scroll
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=vsb.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def on_show(self):
+        self._refresh_list()
+
+    def _refresh_list(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        if not self.app.activity_logger:
+            return
+            
+        logs = self.app.activity_logger.get_logs(limit=200)
+        for log in logs:
+            # Format time for readability
+            ts = log.get('timestamp', '')
+            try:
+                dt = datetime.datetime.fromisoformat(ts)
+                ts = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                pass
+                
+            self.tree.insert('', tk.END, values=(ts, log.get('action'), log.get('details')))
+
+    def _clear_logs(self):
+        if messagebox.askyesno("Confirm", "Clear all activity logs?"):
+            if self.app.activity_logger:
+                self.app.activity_logger.clear()
+            self._refresh_list()
+
+class ConflictScreen(BaseScreen):
+    def __init__(self, parent, app_context):
+        super().__init__(parent, app_context)
+        self._init_ui()
+
+    def _init_ui(self):
+        # Header
+        tb = ttk.Frame(self)
+        tb.pack(fill=tk.X, pady=10)
+        ttk.Label(tb, text="Data Conflicts", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        ttk.Button(tb, text="Refresh", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(tb, text="Resolve Selected", command=self._resolve).pack(side=tk.RIGHT, padx=5)
+        
+        # Info
+        ttk.Label(self, text="Conflicts occur when the same IMEI appears in multiple Excel files.", font=('Segoe UI', 9, 'italic')).pack(fill=tk.X, pady=(0,10))
+        
+        # Container for Tree + Scrollbars
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+        
+        # Tree
+        cols = ('imei', 'model', 'sources')
+        self.tree = ttk.Treeview(container, columns=cols, show='headings')
+        self.tree.heading('imei', text='IMEI')
+        self.tree.heading('model', text='Model')
+        self.tree.heading('sources', text='Found In (Files)')
+        self.tree.column('sources', width=600)
+        
+        # Scrollbars
+        vsb = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscroll=vsb.set, xscroll=hsb.set)
+        
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+    def on_show(self):
+        self._refresh_list()
+
+    def _refresh_list(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        conflicts = self.app.inventory.conflicts
+        for i, c in enumerate(conflicts):
+            src_str = ", ".join(c['sources'])
+            self.tree.insert('', tk.END, iid=str(i), values=(c['imei'], c['model'], src_str))
+
+    def _resolve(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Selection", "Select a conflict to resolve.")
+            return
+            
+        idx = int(sel[0])
+        conflicts = self.app.inventory.conflicts
+        if idx < len(conflicts):
+            c_data = conflicts[idx]
+            from .dialogs import ConflictResolutionDialog
+            ConflictResolutionDialog(self.winfo_toplevel(), c_data, self.app._resolve_conflict_callback)
 
 # --- Analytics Screen ---
 class AnalyticsScreen(BaseScreen):
@@ -1693,7 +1858,13 @@ class EditDataScreen(BaseScreen):
         # Search
         frame_search = ttk.Frame(self)
         frame_search.pack(fill=tk.X, pady=10)
-        ttk.Label(frame_search, text="Enter ID:").pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(frame_search, text="Search By:").pack(side=tk.LEFT, padx=5)
+        self.var_mode = tk.StringVar(value="ID")
+        self.combo_mode = ttk.Combobox(frame_search, textvariable=self.var_mode, values=["ID", "IMEI", "Model"], state="readonly", width=8)
+        self.combo_mode.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(frame_search, text="Value:").pack(side=tk.LEFT, padx=5)
         self.ent_search = ttk.Entry(frame_search)
         self.ent_search.pack(side=tk.LEFT, padx=5)
         self.ent_search.bind('<Return>', self._lookup)
@@ -1725,23 +1896,37 @@ class EditDataScreen(BaseScreen):
         self.ent_search.focus_set()
 
     def _lookup(self, event=None):
-        iid = self.ent_search.get().strip()
-        if not iid: return
+        q = self.ent_search.get().strip()
+        if not q: return
         
+        mode = self.var_mode.get()
         df = self.app.inventory.get_inventory()
-        match = df[df['unique_id'].astype(str) == iid]
+        match = pd.DataFrame()
         
+        if mode == "ID":
+            match = df[df['unique_id'].astype(str) == q]
+        elif mode == "IMEI":
+            match = df[df['imei'].astype(str).str.contains(q, na=False)]
+        elif mode == "Model":
+            match = df[df['model'].astype(str).str.contains(q, case=False, na=False)]
+            
         if match.empty:
-            messagebox.showwarning("Error", "ID not found")
+            messagebox.showwarning("Error", f"No item found for {mode}: {q}")
             return
             
-        row = match.iloc[0]
-        self.current_id = iid
-        self.vars['model'].set(row.get('model', ''))
-        self.vars['imei'].set(row.get('imei', ''))
-        self.vars['price_original'].set(str(row.get('price_original', '')))
-        self.vars['color'].set(row.get('color', ''))
-        self.vars['notes'].set(row.get('notes', ''))
+        if len(match) == 1:
+            self._load_item_dict(match.iloc[0].to_dict())
+        else:
+            items = match.to_dict('records')
+            ItemSelectionDialog(self.winfo_toplevel(), items, self._load_item_dict)
+
+    def _load_item_dict(self, data):
+        self.current_id = str(data.get('unique_id', ''))
+        self.vars['model'].set(data.get('model', ''))
+        self.vars['imei'].set(data.get('imei', ''))
+        self.vars['price_original'].set(str(data.get('price_original', '')))
+        self.vars['color'].set(data.get('color', ''))
+        self.vars['notes'].set(data.get('notes', ''))
 
     def _save(self):
         if not self.current_id: return

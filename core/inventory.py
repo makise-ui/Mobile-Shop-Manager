@@ -2,13 +2,15 @@ import pandas as pd
 import os
 import datetime
 import hashlib
+import re
 from .config import ConfigManager
 from .id_registry import IDRegistry
 from .utils import backup_excel_file
 
 class InventoryManager:
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: ConfigManager, activity_logger=None):
         self.config_manager = config_manager
+        self.activity_logger = activity_logger
         self.id_registry = IDRegistry()
         self.inventory_df = pd.DataFrame()
         self.file_status = {}  # Keep track of file read status
@@ -75,11 +77,23 @@ class InventoryManager:
             return None
 
         # Map fields
-        # Note: We fillna('') immediately after converting to object to be safe
         
-        # IMEI
+        # IMEI Cleaning & Dual Support
         col_imei = get_col('imei')
-        canonical['imei'] = col_imei.fillna('').astype(str) if col_imei is not None else ''
+        if col_imei is not None:
+            def clean_imei(val):
+                if pd.isna(val): return ""
+                s = str(val).strip()
+                # Find sequences of 14-16 digits
+                nums = re.findall(r'\d{14,16}', s)
+                if len(nums) > 1:
+                    return " / ".join(sorted(list(set(nums)))) # Unique, sorted
+                elif len(nums) == 1:
+                    return nums[0]
+                return s
+            canonical['imei'] = col_imei.apply(clean_imei)
+        else:
+            canonical['imei'] = ''
         
         # Model
         col_model = get_col('model')
@@ -148,9 +162,6 @@ class InventoryManager:
         col_contact = get_col('buyer_contact')
         canonical['buyer_contact'] = col_contact.fillna('').astype(str) if col_contact is not None else ''
 
-        # Fill missing basics if any were missed
-        # ... (Already handled above)
-        
         # Metadata
         canonical['source_file'] = str(file_path)
         canonical['last_updated'] = datetime.datetime.now()
@@ -171,11 +182,6 @@ class InventoryManager:
                 app_status = norm_status(meta['status'])
                 row['status'] = app_status
                 
-                # Check for conflict (only if excel has explicit status)
-                if excel_status != app_status:
-                    # We trust App status usually, but let's note the conflict
-                    pass
-
             if 'notes' in meta:
                 row['notes'] = meta['notes']
             if 'color' in meta:
@@ -231,46 +237,90 @@ class InventoryManager:
         if all_frames:
             full_df = pd.concat(all_frames, ignore_index=True)
             
-            # Detect Duplicates (IMEI based)
-            # Filter valid IMEIs
-            valid_imeis = full_df[full_df['imei'].str.len() > 10]
-            dupes = valid_imeis[valid_imeis.duplicated('imei', keep=False)]
+            # Filter Hidden Items (Merge Logic)
+            def is_visible(uid):
+                meta = self.id_registry.get_metadata(uid)
+                return not meta.get('is_hidden', False)
             
-            if not dupes.empty:
-                # Group by IMEI to identify source files
-                for imei, group in dupes.groupby('imei'):
-                    sources = group['source_file'].unique()
-                    if len(sources) > 1:
+            # Apply visibility filter
+            full_df = full_df[full_df['unique_id'].apply(is_visible)]
+            
+            # Detect Duplicates (Dual IMEI Aware)
+            # Map: Single_IMEI -> list of Row Indices (in full_df)
+            imei_map = {}
+            processed_indices = set()
+            
+            # Iterate using index
+            for idx in full_df.index:
+                row = full_df.loc[idx]
+                raw_imei = str(row['imei'])
+                if not raw_imei: continue
+                
+                parts = [p.strip() for p in raw_imei.split('/') if len(p.strip()) > 10]
+                for p in parts:
+                    if p not in imei_map: imei_map[p] = []
+                    imei_map[p].append(idx)
+            
+            # Find conflicts
+            for p, indices in imei_map.items():
+                if len(indices) > 1:
+                    # Get rows for these indices
+                    rows = full_df.loc[indices]
+                    
+                    # Deduplicate by Unique ID (avoid flagging same row twice if it has multiple matching IMEIs)
+                    rows = rows.drop_duplicates(subset=['unique_id'])
+                    
+                    if len(rows) > 1:
+                        # Conflict Key: Sorted Tuple of IDs
+                        ids = tuple(sorted(rows['unique_id'].tolist()))
+                        if ids in processed_indices: continue
+                        processed_indices.add(ids)
+                        
                         self.conflicts.append({
-                            "imei": imei,
-                            "model": group.iloc[0]['model'],
-                            "sources": list(sources),
-                            "rows": group.to_dict('records')
+                            "imei": p,
+                            "model": rows.iloc[0]['model'],
+                            "sources": list(rows['source_file'].unique()),
+                            "rows": rows.to_dict('records')
                         })
             
             self.inventory_df = full_df
         else:
             self.inventory_df = pd.DataFrame(columns=['unique_id', 'imei', 'model', 'ram_rom', 'price', 'price_original', 'supplier', 'source_file', 'last_updated', 'status', 'color'])
             
+        if self.activity_logger:
+            self.activity_logger.log("RELOAD", f"Loaded {len(self.inventory_df)} items from {len(mappings)} sources.")
+            
         return self.inventory_df
     
     def resolve_conflict(self, conflict_data, action, keep_source=None):
         """
         Resolves an IMEI conflict.
-        action: 'merge' (not really applicable for physical goods, usually means keep one) or 'keep_one'
-        keep_source: The file path to keep the record from.
+        action: 'merge' (hides duplicates)
         """
-        # Logic: If 'keep_one', we effectively want to IGNORE the other rows in future loads?
-        # Or just tell the user to fix the Excel file?
-        # For now, we can flag the 'duplicate' in the ID Registry to be ignored or just log it.
-        # But real resolution involves modifying the source file to remove the duplicate.
-        
-        if action == 'keep_one' and keep_source:
-            # We can't easily delete from the source excel here without risk.
-            # Best approach: Add to a 'blacklist' or 'ignore' list in config?
-            # Or just update the registry to map this IMEI -> Specific Source File preferred?
-            pass
-        return True # Placeholder
+        if action == 'merge':
+            rows = conflict_data.get('rows', [])
+            if not rows: return False
+            
+            # Strategy: Keep the first one (or specific if logic allows), hide others
+            keeper = rows[0]
+            others = rows[1:]
+            
+            for row in others:
+                uid = row['unique_id']
+                self.id_registry.update_metadata(uid, {
+                    'is_hidden': True, 
+                    'merged_into': keeper['unique_id'],
+                    'merge_reason': 'Conflict Resolution'
+                })
+                # Log
+                self.id_registry.add_history_log(uid, "MERGED", f"Merged into {keeper['unique_id']}")
+                if self.activity_logger:
+                    self.activity_logger.log("MERGE", f"Merged {uid} into {keeper['unique_id']}")
+            
+            self.reload_all()
+            return True
+            
+        return False
 
     def get_inventory(self):
         return self.inventory_df
@@ -280,12 +330,18 @@ class InventoryManager:
         # 1. Get Previous Status for logging
         mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
         old_status = "UNKNOWN"
+        item_model = ""
         if mask.any():
-            old_status = self.inventory_df.loc[mask, 'status'].values[0]
+            row = self.inventory_df[mask].iloc[0]
+            old_status = row['status']
+            item_model = row['model']
 
         # 2. Update Internal Registry
         self.id_registry.update_metadata(item_id, {"status": new_status})
         self.id_registry.add_history_log(item_id, "STATUS_CHANGE", f"Moved from {old_status} to {new_status}")
+        
+        if self.activity_logger:
+            self.activity_logger.log("STATUS_UPDATE", f"Item {item_id} ({item_model}) marked as {new_status}")
         
         # 3. Update Memory
         if mask.any():
@@ -307,12 +363,17 @@ class InventoryManager:
         mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
         if not mask.any(): return False
         
+        item_model = self.inventory_df.loc[mask, 'model'].values[0]
+        
         # 1. Update Persistent Registry (App DB)
         self.id_registry.update_metadata(item_id, updates)
         
         # Log generic updates
         log_details = ", ".join([f"{k}={v}" for k, v in updates.items()])
         self.id_registry.add_history_log(item_id, "DATA_UPDATE", log_details)
+        
+        if self.activity_logger:
+            self.activity_logger.log("ITEM_UPDATE", f"Updated {item_id} ({item_model}): {log_details}")
         
         # 2. Update Memory
         for k, v in updates.items():
@@ -330,6 +391,7 @@ class InventoryManager:
 
     def _write_excel_generic(self, row_data, updates):
         from openpyxl import load_workbook
+        from copy import copy
         
         file_path = row_data['source_file']
         if not os.path.exists(file_path): return
@@ -412,10 +474,30 @@ class InventoryManager:
                     match = True # Weak match
                 
                 if match:
+                    # Capture Style from the first cell of the row to preserve consistency
+                    # This ensures if the row is Bold/Centered, the new values match.
+                    ref_cell = row[0]
+                    ref_font = copy(ref_cell.font)
+                    ref_align = copy(ref_cell.alignment)
+                    ref_border = copy(ref_cell.border)
+                    ref_fill = copy(ref_cell.fill)
+
                     # Apply updates
                     for col_name, new_val in excel_updates.items():
                         if col_name in col_indices:
-                            ws.cell(row=row[0].row, column=col_indices[col_name]).value = new_val
+                            cell = ws.cell(row=row[0].row, column=col_indices[col_name])
+                            
+                            # Enforce Uppercase for strings
+                            if isinstance(new_val, str):
+                                new_val = new_val.upper()
+                                
+                            cell.value = new_val
+                            
+                            # Apply preserved style
+                            cell.font = ref_font
+                            cell.alignment = ref_align
+                            cell.border = ref_border
+                            cell.fill = ref_fill
                     break
             
             wb.save(file_path)

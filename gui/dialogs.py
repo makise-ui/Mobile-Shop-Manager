@@ -370,6 +370,109 @@ class PrinterSelectionDialog(tk.Toplevel):
         else:
             messagebox.showwarning("Warning", "Please select a printer.")
 
+class FileSelectionDialog(tk.Toplevel):
+    def __init__(self, parent, file_list, title, on_confirm):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("400x150")
+        self.file_list = file_list
+        self.on_confirm = on_confirm
+        
+        # Modal
+        self.transient(parent)
+        self.grab_set()
+        
+        self._init_ui()
+        self.focus_set()
+        
+    def _init_ui(self):
+        ttk.Label(self, text="Select a file:", font=('Segoe UI', 10)).pack(pady=10)
+        
+        self.combo = ttk.Combobox(self, values=self.file_list, state="readonly", width=40)
+        if self.file_list:
+            self.combo.current(0)
+        self.combo.pack(pady=5, padx=20)
+        
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(fill=tk.X, pady=15)
+        
+        ttk.Button(btn_frame, text="OK", command=self._ok).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=10)
+
+    def _ok(self):
+        sel = self.combo.get()
+        if sel:
+            self.destroy()
+            self.on_confirm(sel)
+        else:
+            messagebox.showwarning("Warning", "Please select a file.")
+
+class ItemSelectionDialog(tk.Toplevel):
+    def __init__(self, parent, items, on_select):
+        super().__init__(parent)
+        self.title("Select Item")
+        self.geometry("600x400")
+        self.items = items
+        self.on_select = on_select
+        
+        # Modal
+        self.transient(parent)
+        self.grab_set()
+        
+        self._init_ui()
+        self.focus_set()
+        
+    def _init_ui(self):
+        ttk.Label(self, text="Multiple items found. Please select one:", font=('Segoe UI', 10, 'bold')).pack(pady=10)
+        
+        # Tree
+        cols = ('id', 'imei', 'model', 'price')
+        self.tree = ttk.Treeview(self, columns=cols, show='headings')
+        self.tree.heading('id', text='ID')
+        self.tree.heading('imei', text='IMEI')
+        self.tree.heading('model', text='Model')
+        self.tree.heading('price', text='Price')
+        
+        self.tree.column('id', width=60)
+        self.tree.column('imei', width=120)
+        self.tree.column('model', width=200)
+        self.tree.column('price', width=80)
+        
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=vsb.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Populate
+        for item in self.items:
+            self.tree.insert('', tk.END, values=(
+                item.get('unique_id', ''),
+                item.get('imei', ''),
+                item.get('model', ''),
+                f"{item.get('price', 0):.2f}"
+            ), iid=str(item.get('unique_id')))
+            
+        # Buttons
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
+        ttk.Button(btn_frame, text="Select", command=self._confirm).pack(side=tk.RIGHT, padx=20)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.RIGHT)
+        
+        self.tree.bind("<Double-1>", lambda e: self._confirm())
+
+    def _confirm(self):
+        sel = self.tree.selection()
+        if not sel: return
+        
+        uid = sel[0]
+        # Find item data
+        for item in self.items:
+            if str(item.get('unique_id')) == str(uid):
+                self.destroy()
+                self.on_select(item)
+                return
+
 class ConflictResolutionDialog(tk.Toplevel):
     def __init__(self, parent, conflict_data, on_resolve):
         super().__init__(parent)
