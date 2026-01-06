@@ -7,13 +7,16 @@ from core.printer import PrinterManager
 from core.billing import BillingManager
 from core.updater import UpdateChecker
 from core.version import APP_VERSION
+from core.activity_log import ActivityLogger
+from core.barcode_utils import BarcodeGenerator
+from core.watcher import InventoryWatcher
 from gui.screens import (
     DashboardScreen, InventoryScreen, StatusScreen, 
     BillingScreen, InvoiceHistoryScreen, ActivityLogScreen,
     ManageFilesScreen, EditDataScreen, HelpScreen
 )
 from gui.quick_entry import QuickEntryScreen
-from gui.dialogs import SettingsDialog
+from gui.dialogs import SettingsDialog, SplashScreen, WelcomeDialog, ConflictResolutionDialog
 
 class MainApp(tk.Tk):
     def __init__(self):
