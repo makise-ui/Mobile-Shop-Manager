@@ -891,6 +891,47 @@ class InvoiceHistoryScreen(BaseScreen):
         
         self.tree.pack(fill=tk.BOTH, expand=True)
 
+        # --- Verification UI ---
+        ttk.Separator(self, orient='horizontal').pack(fill=tk.X, pady=10)
+        
+        v_frame = ttk.LabelFrame(self, text="Verify Digital Signature", padding=10)
+        v_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        ttk.Label(v_frame, text="Enter Code from Invoice:").pack(side=tk.LEFT)
+        self.ent_verify = ttk.Entry(v_frame, width=30, font=('Courier', 10))
+        self.ent_verify.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(v_frame, text="CHECK VALIDITY", command=self._verify_code, style="Accent.TButton").pack(side=tk.LEFT)
+
+    def _verify_code(self):
+        code = self.ent_verify.get().strip().upper()
+        if not code: return
+        
+        # Load Registry
+        import json
+        from pathlib import Path
+        reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+        
+        if not reg_path.exists():
+            messagebox.showerror("Error", "No invoice registry found. Cannot verify.")
+            return
+            
+        try:
+            with open(reg_path, 'r') as f:
+                registry = json.load(f)
+                
+            clean_code = code.replace(" ", "")
+            data = registry.get(clean_code)
+            
+            if data:
+                msg = f"✅ VALID SIGNATURE\n\nInvoice: {data.get('inv_no')}\nDate: {data.get('date')}\nAmount: {data.get('amount')}\nBuyer: {data.get('buyer')}"
+                messagebox.showinfo("Legit", msg)
+            else:
+                messagebox.showerror("FAKE", "❌ INVALID SIGNATURE\n\nThis code does not match any invoice in the system.")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Verification failed: {e}")
+
     def on_show(self):
         self._refresh_list()
 
