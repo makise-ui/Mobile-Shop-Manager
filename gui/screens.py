@@ -352,19 +352,158 @@ class InventoryScreen(BaseScreen):
         self.app.switch_to_billing(items)
 
     def _bulk_update_status(self, new_status):
-        items = self._get_checked_data()
+        items = self.tree.selection()
         if not items:
-            messagebox.showwarning("None Checked", "Please check items [x] to update status.")
+            # Fallback to checked items if any
+            if self.checked_ids:
+                # Convert checked IDs to iids
+                # In tree render, iid=uid.
+                items = list(self.checked_ids)
+            else:
+                messagebox.showwarning("Select", "Please check or select items to update.")
+                return
+
+        # --- "Mark Sold" Enhanced Flow ---
+        if new_status == "OUT":
+            self._show_mark_sold_dialog(items)
+            return
+
+        # --- Standard Flow (for RTN/IN) ---
+        if not messagebox.askyesno("Confirm", f"Mark {len(items)} items as {new_status}?"):
             return
             
-        if not messagebox.askyesno("Confirm", f"Update status to {new_status} for {len(items)} items?"):
-            return
+        success_count = 0
+        for iid in items:
+            # iid is the unique_id (or uid_idx, but we stripped idx in _render_tree? 
+            # Wait, _render_tree handles duplicates by appending _idx.
+            # We need the real unique_id.
+            real_uid = str(iid).split('_')[0]
             
-        for item in items:
-            self.app.inventory.update_item_status(item['unique_id'], new_status)
-            
-        messagebox.showinfo("Success", "Statuses updated.")
+            if self.app.inventory.update_item_status(real_uid, new_status, write_to_excel=True):
+                success_count += 1
+                
+        messagebox.showinfo("Done", f"Updated {success_count} items to {new_status}")
+        self.checked_ids.clear()
         self.refresh_data()
+
+    def _show_mark_sold_dialog(self, items):
+        # items is a list of iids
+        
+        # 1. Gather Data
+        df = self.app.inventory.get_inventory()
+        selected_rows = []
+        for iid in items:
+            real_uid = str(iid).split('_')[0]
+            # Find row
+            mask = df['unique_id'].astype(str) == real_uid
+            if mask.any():
+                selected_rows.append(df[mask].iloc[0])
+        
+        if not selected_rows: return
+
+        # 2. Dialog UI
+        dlg = tk.Toplevel(self)
+        dlg.title("Mark as Sold")
+        dlg.geometry("400x350")
+        dlg.transient(self)
+        dlg.grab_set()
+        
+        ttk.Label(dlg, text=f"Marking {len(selected_rows)} items as SOLD (OUT)", font=('Segoe UI', 11, 'bold')).pack(pady=10)
+        
+        # Auto Invoice Options
+        frame_opts = ttk.LabelFrame(dlg, text="Invoice Options", padding=10)
+        frame_opts.pack(fill=tk.X, padx=10, pady=5)
+        
+        var_auto = tk.BooleanVar(value=True)
+        ttk.Checkbutton(frame_opts, text="Generate Invoice Automatically", variable=var_auto).pack(anchor=tk.W)
+        
+        # Date
+        f_date = ttk.Frame(frame_opts)
+        f_date.pack(fill=tk.X, pady=5)
+        ttk.Label(f_date, text="Date:").pack(side=tk.LEFT)
+        ent_date = ttk.Entry(f_date, width=12)
+        ent_date.insert(0, str(datetime.date.today()))
+        ent_date.pack(side=tk.LEFT, padx=5)
+        
+        # Buyer
+        f_buyer = ttk.Frame(frame_opts)
+        f_buyer.pack(fill=tk.X, pady=5)
+        ttk.Label(f_buyer, text="Buyer:").pack(side=tk.LEFT)
+        ent_buyer = ttk.Entry(f_buyer, width=20)
+        ent_buyer.insert(0, "Walk-in")
+        ent_buyer.pack(side=tk.LEFT, padx=5)
+        
+        # Tax
+        var_inc = tk.BooleanVar(value=False)
+        ttk.Checkbutton(frame_opts, text="Tax Inclusive Prices", variable=var_inc).pack(anchor=tk.W, pady=5)
+        
+        def do_confirm():
+            # 1. Update Status
+            success_count = 0
+            for row in selected_rows:
+                if self.app.inventory.update_item_status(row['unique_id'], "OUT", write_to_excel=True):
+                    success_count += 1
+            
+            # 2. Generate Invoice
+            if var_auto.get() and success_count > 0:
+                self._create_auto_invoice(selected_rows, ent_buyer.get(), ent_date.get(), var_inc.get())
+                
+            dlg.destroy()
+            self.checked_ids.clear()
+            self.refresh_data()
+            messagebox.showinfo("Success", f"Sold {success_count} items." + ("\nInvoice Generated." if var_auto.get() else ""))
+
+        ttk.Button(dlg, text="CONFIRM SOLD", command=do_confirm, style="Accent.TButton").pack(pady=20)
+
+    def _create_auto_invoice(self, rows, buyer_name, date_str, is_inclusive):
+        # Convert rows to cart_item format
+        cart = []
+        for row in rows:
+            cart.append({
+                'unique_id': row['unique_id'],
+                'model': row['model'],
+                'price': float(row.get('price', 0)),
+                'imei': row.get('imei', '')
+            })
+            
+        buyer = {
+            "name": buyer_name,
+            "contact": "",
+            "date": date_str,
+            "is_interstate": False,
+            "is_tax_inclusive": is_inclusive
+        }
+        
+        ts = int(datetime.datetime.now().timestamp())
+        safe_name = "".join([c for c in buyer_name if c.isalnum() or c in (' ', '-', '_')]).strip()
+        filename = f"{safe_name}_{ts}.pdf"
+        save_path = self.app.app_config.get_invoices_dir() / filename
+        inv_num = f"INV-{ts}"
+        
+        try:
+            success, verify_hash, pdf_total = self.app.billing.generate_invoice(cart, buyer, inv_num, str(save_path))
+            
+            if success:
+                # Save Registry
+                try:
+                    import json
+                    from pathlib import Path
+                    reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+                    registry = {}
+                    if reg_path.exists():
+                        with open(reg_path, 'r') as f: registry = json.load(f)
+                        
+                    registry[verify_hash] = {
+                        "inv_no": inv_num,
+                        "date": date_str,
+                        "amount": f"{pdf_total:.2f}",
+                        "buyer": buyer_name
+                    }
+                    with open(reg_path, 'w') as f: json.dump(registry, f, indent=4)
+                except: pass
+                
+        except Exception as e:
+            messagebox.showerror("Invoice Error", f"Failed to auto-generate invoice: {e}")
 
 # --- Files Screen ---
 class FilesScreen(BaseScreen):
