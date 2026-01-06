@@ -251,7 +251,8 @@ class BillingManager:
         terms = self.config.get('invoice_terms', 'Goods once sold will not be taken back.')
         
         import hashlib
-        verify_str = f"{invoice_number}|{buyer_name}|{grand_total}|{store_name}"
+        # Use formatted total for consistency
+        verify_str = f"{invoice_number}|{buyer_name}|{final_total:.2f}|{store_name}"
         verify_hash = hashlib.sha256(verify_str.encode()).hexdigest()[:16].upper()
         formatted_hash = " ".join([verify_hash[i:i+4] for i in range(0, len(verify_hash), 4)])
         
@@ -277,4 +278,5 @@ class BillingManager:
         doc.build(elements)
         if self.activity_logger:
             self.activity_logger.log("INVOICE_GEN", f"Invoice {invoice_number} generated for Rs. {final_total:.2f}")
-        return True
+            
+        return True, verify_hash, final_total
