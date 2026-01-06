@@ -100,17 +100,23 @@ class BillingManager:
         inv_date = buyer_details.get('date', datetime.date.today())
         
         # Combine Title and Details in one Right-Aligned cell
+        # Using <br/> for line breaks within the paragraph
         inv_text = f"""<font size=12 color={ACCENT_COLOR}><b>TAX INVOICE</b></font><br/>
         <b>INVOICE NO:</b> {invoice_number}<br/>
         <b>DATE:</b> {inv_date}"""
+        
+        # Force Right Alignment on the Paragraph
         p_inv_details = Paragraph(inv_text, style_right)
         
         header_data = [[p_store_info, p_inv_details]]
         
-        t_header = Table(header_data, colWidths=[100*mm, 90*mm])
+        # Table Layout: 50% Left, 50% Right
+        # Use simple 50/50 split or adjust based on content
+        t_header = Table(header_data, colWidths=[95*mm, 95*mm])
         t_header.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('ALIGN', (1,0), (1,0), 'RIGHT'),
+            ('ALIGN', (0,0), (0,0), 'LEFT'),   # Left Column -> Left Align
+            ('ALIGN', (1,0), (1,0), 'RIGHT'),  # Right Column -> Right Align
             ('BOTTOMPADDING', (0,0), (-1,-1), 10),
             ('LINEBELOW', (0,0), (-1,-1), 1, colors.lightgrey),
         ]))
