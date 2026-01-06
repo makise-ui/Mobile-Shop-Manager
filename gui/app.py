@@ -1,16 +1,17 @@
 import tkinter as tk
 from tkinter import ttk
+import sys
 from core.config import ConfigManager
 from core.inventory import InventoryManager
-from core.watcher import InventoryWatcher
-from core.barcode_utils import BarcodeGenerator
 from core.printer import PrinterManager
 from core.billing import BillingManager
-from core.activity_log import ActivityLogger
-from core.updater import UpdateChecker
-from core.version import APP_VERSION
-from gui.screens import InventoryScreen, FilesScreen, BillingScreen, AnalyticsScreen, SettingsScreen, ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen
-from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
+from gui.screens import (
+    DashboardScreen, InventoryScreen, StatusScreen, 
+    BillingScreen, InvoiceHistoryScreen, ActivityLogScreen,
+    ManageFilesScreen, EditDataScreen, HelpScreen
+)
+from gui.quick_entry import QuickEntryScreen
+from gui.dialogs import SettingsDialog
 
 class MainApp(tk.Tk):
     def __init__(self):
@@ -202,6 +203,7 @@ class MainApp(tk.Tk):
         btn_bar.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
         
         nav_items = [
+            ("Quick Entry", "quick_entry"),
             ("Inventory", "inventory"),
             ("Search", "search"),
             ("Quick Status", "status"),
@@ -241,6 +243,7 @@ class MainApp(tk.Tk):
         
         # Initialize Screens
         self.screens = {}
+        self.screens['quick_entry'] = QuickEntryScreen(self.content_area, self)
         self.screens['inventory'] = InventoryScreen(self.content_area, self)
         self.screens['search'] = SearchScreen(self.content_area, self)
         self.screens['status'] = StatusScreen(self.content_area, self)

@@ -162,6 +162,13 @@ class InventoryManager:
         col_contact = get_col('buyer_contact')
         canonical['buyer_contact'] = col_contact.fillna('').astype(str) if col_contact is not None else ''
 
+        # Grade/Condition
+        col_grade = get_col('grade')
+        canonical['grade'] = col_grade.fillna('').astype(str) if col_grade is not None else ''
+
+        col_condition = get_col('condition')
+        canonical['condition'] = col_condition.fillna('').astype(str) if col_condition is not None else ''
+
         # Metadata
         canonical['source_file'] = str(file_path)
         canonical['last_updated'] = datetime.datetime.now()
