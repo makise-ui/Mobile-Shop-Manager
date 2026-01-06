@@ -354,9 +354,18 @@ class QuickEntryScreen(ttk.Frame):
             # Find next empty row
             next_row = ws.max_row + 1
             
+            from openpyxl.styles import Font, Alignment, Border, Side
+            thin = Side(border_style="thin", color="000000")
+            border = Border(top=thin, left=thin, right=thin, bottom=thin)
+            font = Font(name='Times New Roman', size=11, bold=True)
+            align = Alignment(horizontal='center', vertical='center')
+
             for col_name, val in row_dict.items():
                 if col_name in col_map:
-                    ws.cell(row=next_row, column=col_map[col_name], value=val)
+                    cell = ws.cell(row=next_row, column=col_map[col_name], value=val)
+                    cell.font = font
+                    cell.border = border
+                    cell.alignment = align
             
             wb.save(path)
             return True

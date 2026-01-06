@@ -404,7 +404,7 @@ class InventoryManager:
 
     def _write_excel_generic(self, row_data, updates):
         from openpyxl import load_workbook
-        from openpyxl.styles import Font, Alignment
+        from openpyxl.styles import Font, Alignment, Border, Side
         from copy import copy
         
         # Handle composite keys (path::sheet)
@@ -493,7 +493,9 @@ class InventoryManager:
                 'notes': 'Notes',
                 'status': 'Status',
                 'color': 'Color',
-                'price': 'Selling Price'
+                'price': 'Selling Price',
+                'grade': 'Grade',
+                'condition': 'Condition'
             }
             
             for field, value in updates.items():
@@ -543,13 +545,6 @@ class InventoryManager:
                 
                 if match:
                     row_found = True
-                    # Capture Style from the first cell of the row to preserve consistency
-                    ref_cell = row[0]
-                    ref_font = copy(ref_cell.font)
-                    ref_align = copy(ref_cell.alignment)
-                    ref_border = copy(ref_cell.border)
-                    ref_fill = copy(ref_cell.fill)
-
                     # Apply updates
                     for col_name, new_val in excel_updates.items():
                         if col_name in col_indices:
@@ -561,28 +556,12 @@ class InventoryManager:
                                 
                             cell.value = new_val
                             
-                            # Apply preserved style first
-                            cell.font = ref_font
-                            cell.alignment = ref_align
-                            cell.border = ref_border
-                            cell.fill = ref_fill
-
-                            # SPECIAL FORMATTING: Status, Buyer, Contact
-                            col_status = field_to_col.get('status') or default_headers.get('status')
-                            col_buyer = field_to_col.get('buyer') or default_headers.get('buyer')
-                            col_contact = field_to_col.get('buyer_contact') or default_headers.get('buyer_contact')
-                            
-                            val_str = str(new_val).strip()
-                            
-                            # Status = OUT -> Bold + Center
-                            if col_name == col_status and val_str == "OUT":
-                                cell.font = Font(bold=True)
-                                cell.alignment = Alignment(horizontal='center')
-                                
-                            # Buyer/Contact (if present) -> Bold + Center
-                            elif (col_name == col_buyer or col_name == col_contact) and val_str:
-                                cell.font = Font(bold=True)
-                                cell.alignment = Alignment(horizontal='center')
+                            # --- ENFORCE USER STYLE ---
+                            # Times New Roman, 11, Bold, Center, All Borders
+                            thin = Side(border_style="thin", color="000000")
+                            cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                            cell.font = Font(name='Times New Roman', size=11, bold=True)
+                            cell.alignment = Alignment(horizontal='center', vertical='center')
                                 
                     break
             
