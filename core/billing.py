@@ -239,13 +239,26 @@ class BillingManager:
         # --- 5. Footer ---
         terms = self.config.get('invoice_terms', 'Goods once sold will not be taken back.')
         
+        # Digital Signature / Verification Code
+        import hashlib
+        verify_str = f"{invoice_number}|{buyer_name}|{grand_total}|{store_name}"
+        verify_hash = hashlib.sha256(verify_str.encode()).hexdigest()[:16].upper()
+        formatted_hash = " ".join([verify_hash[i:i+4] for i in range(0, len(verify_hash), 4)])
+        
         footer_left = Paragraph(f"<b>Terms & Conditions:</b><br/>{terms}", style_body)
-        footer_right = Paragraph(f"<br/><br/>_______________________<br/><b>Authorized Signatory</b><br/>For {store_name}", style_body)
+        
+        # Signatory + Digital Code
+        sign_text = f"""<br/><br/>_______________________<br/>
+        <b>Authorized Signatory</b><br/>
+        For {store_name}<br/><br/>
+        <font size=7 name="Courier">Digital Verify: {formatted_hash}</font>
+        """
+        footer_right = Paragraph(sign_text, style_body)
         
         t_footer = Table([[footer_left, footer_right]], colWidths=[120*mm, 70*mm])
         t_footer.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('ALIGN', (1,0), (1,0), 'CENTER'),
+            ('ALIGN', (1,0), (1,0), 'CENTER'), # Right column center aligned
         ]))
         elements.append(t_footer)
         
