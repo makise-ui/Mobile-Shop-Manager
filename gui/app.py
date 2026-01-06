@@ -11,10 +11,12 @@ from core.activity_log import ActivityLogger
 from core.barcode_utils import BarcodeGenerator
 from core.watcher import InventoryWatcher
 from gui.screens import (
-    DashboardScreen, InventoryScreen, StatusScreen, 
-    BillingScreen, InvoiceHistoryScreen, ActivityLogScreen,
-    ManageFilesScreen, EditDataScreen, HelpScreen
+    InventoryScreen, BillingScreen, AnalyticsScreen, SettingsScreen, 
+    ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, 
+    HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen,
+    DashboardScreen, ManageFilesScreen
 )
+from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 from gui.quick_entry import QuickEntryScreen
 from gui.dialogs import SettingsDialog, SplashScreen, WelcomeDialog, ConflictResolutionDialog
 
@@ -253,7 +255,7 @@ class MainApp(tk.Tk):
         self.screens['search'] = SearchScreen(self.content_area, self)
         self.screens['status'] = StatusScreen(self.content_area, self)
         self.screens['edit'] = EditDataScreen(self.content_area, self)
-        self.screens['files'] = FilesScreen(self.content_area, self)
+        self.screens['files'] = ManageFilesScreen(self.content_area, self)
         self.screens['billing'] = BillingScreen(self.content_area, self)
         self.screens['invoices'] = InvoiceHistoryScreen(self.content_area, self)
         self.screens['activity'] = ActivityLogScreen(self.content_area, self)
