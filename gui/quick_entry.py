@@ -1,7 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 import datetime
+import threading
+import os
+from pathlib import Path
 from core.scraper import PhoneScraper
 
 class QuickEntryScreen(ttk.Frame):
@@ -13,8 +16,7 @@ class QuickEntryScreen(ttk.Frame):
         # State Variables
         self.var_imei = tk.StringVar()
         self.var_model = tk.StringVar()
-        self.var_ram = tk.StringVar()
-        self.var_rom = tk.StringVar()
+        self.var_ram_rom = tk.StringVar() # Combined
         self.var_price = tk.StringVar()
         self.var_color = tk.StringVar()
         self.var_supplier = tk.StringVar()
@@ -40,13 +42,14 @@ class QuickEntryScreen(ttk.Frame):
         top_bar.pack(fill=tk.X)
         
         ttk.Label(top_bar, text="Target File:", font=('bold')).pack(side=tk.LEFT)
-        self.combo_file = ttk.Combobox(top_bar, textvariable=self.target_file_key, state="readonly", width=30)
+        self.combo_file = ttk.Combobox(top_bar, textvariable=self.target_file_key, state="readonly", width=25)
         self.combo_file.pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(top_bar, text="Refresh Files", command=self._refresh_files).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_bar, text="+ New", command=self._create_new_file, width=6).pack(side=tk.LEFT)
+        ttk.Button(top_bar, text="Refresh", command=self._refresh_files).pack(side=tk.LEFT, padx=5)
         
-        ttk.Checkbutton(top_bar, text="Auto-Fetch Info (API)", variable=self.var_auto_fetch).pack(side=tk.RIGHT, padx=10)
-        ttk.Checkbutton(top_bar, text="Manual Model Entry", variable=self.var_manual_model, command=self._toggle_model_entry).pack(side=tk.RIGHT, padx=10)
+        ttk.Checkbutton(top_bar, text="Auto-Fetch (Bg)", variable=self.var_auto_fetch).pack(side=tk.RIGHT, padx=10)
+        ttk.Checkbutton(top_bar, text="Manual Model", variable=self.var_manual_model, command=self._toggle_model_entry).pack(side=tk.RIGHT, padx=10)
 
         # --- Main Form ---
         self.form_frame = ttk.LabelFrame(self, text="New Entry Details", padding=15)
@@ -69,7 +72,7 @@ class QuickEntryScreen(ttk.Frame):
         self.ent_imei = ttk.Entry(self.form_frame, textvariable=self.var_imei, width=30, font=('Consolas', 11))
         self.ent_imei.grid(row=r, column=1, sticky=tk.EW, padx=5, pady=5)
         self.ent_imei.bind('<Return>', self._on_imei_enter) # Special Handler
-        ttk.Button(self.form_frame, text="Fetch", command=self._fetch_info).grid(row=r, column=2, padx=5)
+        ttk.Button(self.form_frame, text="Fetch Now", command=lambda: self._fetch_info_bg(self.var_imei.get())).grid(row=r, column=2, padx=5)
         r += 1
         
         # 2. Model
@@ -79,22 +82,22 @@ class QuickEntryScreen(ttk.Frame):
         self.ent_model.grid(row=r, column=1, sticky=tk.EW, padx=5, pady=5)
         r += 1
 
-        # 3. Spec Row (RAM / ROM / Color)
+        # 3. Spec Row (RAM/ROM / Color)
         f_specs = ttk.Frame(self.form_frame)
         f_specs.grid(row=r, column=0, columnspan=3, sticky=tk.EW, pady=5)
         
-        ttk.Label(f_specs, text="RAM:").pack(side=tk.LEFT)
-        ttk.Entry(f_specs, textvariable=self.var_ram, width=6).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Label(f_specs, text="ROM:").pack(side=tk.LEFT, padx=(10,0))
-        ttk.Entry(f_specs, textvariable=self.var_rom, width=6).pack(side=tk.LEFT, padx=5)
+        ttk.Label(f_specs, text="RAM/ROM:").pack(side=tk.LEFT)
+        self.ent_ram_rom = ttk.Entry(f_specs, textvariable=self.var_ram_rom, width=15)
+        self.ent_ram_rom.pack(side=tk.LEFT, padx=5)
+        self.ent_ram_rom.bind('<Return>', lambda e: self.cb_col.focus_set())
         
         ttk.Label(f_specs, text="Color:").pack(side=tk.LEFT, padx=(10,0))
         # Color Combo
         from core.data_registry import DataRegistry
         colors = DataRegistry().get_colors()
-        cb_col = ttk.Combobox(f_specs, textvariable=self.var_color, values=colors, width=10)
-        cb_col.pack(side=tk.LEFT, padx=5)
+        self.cb_col = ttk.Combobox(f_specs, textvariable=self.var_color, values=colors, width=15)
+        self.cb_col.pack(side=tk.LEFT, padx=5)
+        self.cb_col.bind('<Return>', lambda e: self.ent_price.focus_set())
         r += 1
 
         # 4. Price & Supplier
@@ -102,11 +105,15 @@ class QuickEntryScreen(ttk.Frame):
         f_ps.grid(row=r, column=0, columnspan=3, sticky=tk.EW, pady=5)
         
         ttk.Label(f_ps, text="Price:").pack(side=tk.LEFT)
-        ttk.Entry(f_ps, textvariable=self.var_price, width=10).pack(side=tk.LEFT, padx=5)
+        self.ent_price = ttk.Entry(f_ps, textvariable=self.var_price, width=10)
+        self.ent_price.pack(side=tk.LEFT, padx=5)
+        self.ent_price.bind('<Return>', lambda e: self.ent_supplier.focus_set())
         
         ttk.Label(f_ps, text="Supplier:").pack(side=tk.LEFT, padx=(15,0))
-        ttk.Entry(f_ps, textvariable=self.var_supplier, width=15).pack(side=tk.LEFT, padx=5)
+        self.ent_supplier = ttk.Entry(f_ps, textvariable=self.var_supplier, width=15)
+        self.ent_supplier.pack(side=tk.LEFT, padx=5)
         ttk.Checkbutton(f_ps, text="🔒", variable=self.var_lock_supplier).pack(side=tk.LEFT)
+        self.ent_supplier.bind('<Return>', lambda e: self.cb_grade.focus_set())
         r += 1
         
         # 5. Grade & Condition
@@ -115,11 +122,15 @@ class QuickEntryScreen(ttk.Frame):
         
         ttk.Label(f_gc, text="Grade:").pack(side=tk.LEFT)
         grades = ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "C", "D", "E"]
-        ttk.Combobox(f_gc, textvariable=self.var_grade, values=grades, width=5).pack(side=tk.LEFT, padx=5)
+        self.cb_grade = ttk.Combobox(f_gc, textvariable=self.var_grade, values=grades, width=5)
+        self.cb_grade.pack(side=tk.LEFT, padx=5)
+        self.cb_grade.bind('<Return>', lambda e: self.ent_cond.focus_set())
         ttk.Checkbutton(f_gc, text="🔒", variable=self.var_lock_grade).pack(side=tk.LEFT)
         
         ttk.Label(f_gc, text="Condition:").pack(side=tk.LEFT, padx=(15,0))
-        ttk.Entry(f_gc, textvariable=self.var_condition, width=20).pack(side=tk.LEFT, padx=5)
+        self.ent_cond = ttk.Entry(f_gc, textvariable=self.var_condition, width=20)
+        self.ent_cond.pack(side=tk.LEFT, padx=5)
+        self.ent_cond.bind('<Return>', lambda e: self._save_entry()) # Enter on last field saves
         r += 1
 
         # --- Action Bar ---
@@ -159,38 +170,82 @@ class QuickEntryScreen(ttk.Frame):
         val = self.var_imei.get().strip()
         if not val: return
         
+        # 1. Move focus immediately to RAM/ROM (Speed!)
+        self.ent_ram_rom.focus_set()
+        
+        # 2. Trigger Background Fetch
         if self.var_auto_fetch.get() and not self.var_manual_model.get():
-            self._fetch_info()
-        else:
-            # Just move focus
-            self.ent_model.focus_set()
+            self._fetch_info_bg(val)
 
-    def _fetch_info(self):
-        imei = self.var_imei.get().strip()
-        if not imei: return
-        
+    def _fetch_info_bg(self, imei):
         self.lbl_status.config(text="Fetching info...", foreground="blue")
-        self.update_idletasks()
         
-        # Threading would be better, but blocking for now is safer for stability
-        data = self.scraper.fetch_details(imei)
-        
+        def run():
+            data = self.scraper.fetch_details(imei)
+            # Update UI on Main Thread
+            self.after(0, lambda: self._on_fetch_complete(data))
+            
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_fetch_complete(self, data):
         if data.get("error"):
-            self.lbl_status.config(text=f"Error: {data['error']}", foreground="red")
-            if not self.var_manual_model.get():
-                # Allow manual edit on failure
-                if messagebox.askyesno("Fetch Failed", "Could not fetch details. Enable manual entry?"):
-                    self.var_manual_model.set(True)
-                    self._toggle_model_entry()
-                    self.ent_model.focus_set()
+            self.lbl_status.config(text=f"Fetch Error: {data['error']}", foreground="red")
+            # Don't interrupt user typing if possible, but show error
         else:
             name = data.get("name", "")
-            self.var_model.set(name)
-            self.lbl_status.config(text="Details Fetched!", foreground="green")
+            if name:
+                self.var_model.set(name)
+                self.lbl_status.config(text="Details Fetched!", foreground="green")
+            else:
+                self.lbl_status.config(text="Model not found.", foreground="orange")
+
+    def _create_new_file(self):
+        name = simpledialog.askstring("New File", "Enter filename (e.g. Stock_Jan.xlsx):")
+        if not name: return
+        
+        if not name.endswith('.xlsx'): name += '.xlsx'
+        
+        # Check output folder
+        folder = self.app.app_config.get('output_folder', '.')
+        path = os.path.join(folder, name)
+        
+        if os.path.exists(path):
+            messagebox.showerror("Error", "File already exists!")
+            return
             
-            # Jump to Price/Specs
-            self.ent_model.focus_set()
-            # self.tk_focusNext().focus() # Or jump further
+        # Create Empty Excel with standard headers
+        try:
+            df = pd.DataFrame(columns=["IMEI", "Model", "RAM/ROM", "Color", "Price", "Supplier", "Grade", "Condition", "Status"])
+            df.to_excel(path, index=False)
+            
+            # Add to mapping
+            # Auto-map standard columns since we created them
+            mapping = {
+                "IMEI": "imei",
+                "Model": "model",
+                "RAM/ROM": "ram_rom",
+                "Color": "color",
+                "Price": "price",
+                "Supplier": "supplier",
+                "Grade": "grade",
+                "Condition": "condition",
+                "Status": "status"
+            }
+            save_data = {
+                "file_path": path,
+                "mapping": mapping,
+                "supplier": "",
+                "sheet_name": "Sheet1"
+            }
+            self.app.app_config.set_file_mapping(path, save_data)
+            
+            # Refresh
+            self._refresh_files()
+            self.combo_file.set(path)
+            messagebox.showinfo("Success", f"Created {name}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create file: {e}")
 
     def _save_entry(self):
         # Validate
@@ -200,6 +255,7 @@ class QuickEntryScreen(ttk.Frame):
         
         if not imei or not model:
             messagebox.showwarning("Missing Data", "IMEI and Model are required.")
+            self.ent_imei.focus_set()
             return
             
         if not target or target == "No Configured Files":
@@ -207,11 +263,6 @@ class QuickEntryScreen(ttk.Frame):
             return
 
         # Prepare Data
-        # Combine RAM/ROM
-        ram = self.var_ram.get().strip()
-        rom = self.var_rom.get().strip()
-        ram_rom = f"{ram}/{rom}" if ram and rom else (ram or rom)
-        
         price = 0.0
         try:
             p_str = self.var_price.get().strip()
@@ -221,7 +272,7 @@ class QuickEntryScreen(ttk.Frame):
         new_data = {
             "imei": imei,
             "model": model,
-            "ram_rom": ram_rom,
+            "ram_rom": self.var_ram_rom.get().strip(),
             "color": self.var_color.get().strip(),
             "price_original": price,
             "supplier": self.var_supplier.get().strip(),
@@ -236,12 +287,6 @@ class QuickEntryScreen(ttk.Frame):
         new_data['unique_id'] = uid
         
         # 2. Append to Excel
-        # We need a method in InventoryManager to "add_new_row".
-        # Since _write_excel_generic updates existing, we need a slight variant or just append.
-        # Actually, if we just add it to the DF and save?
-        # NO, InventoryManager relies on reloading.
-        
-        # Let's implement a simple `add_item_to_file` in InventoryManager or helper.
         success = self._append_to_excel(target, new_data)
         
         if success:
@@ -254,8 +299,7 @@ class QuickEntryScreen(ttk.Frame):
             # 4. Clear Fields (Respect Locks)
             self.var_imei.set("")
             self.var_model.set("")
-            self.var_ram.set("")
-            self.var_rom.set("")
+            self.var_ram_rom.set("")
             self.var_price.set("")
             self.var_color.set("")
             
@@ -266,9 +310,6 @@ class QuickEntryScreen(ttk.Frame):
                 self.var_condition.set("")
                 
             self.ent_imei.focus_set()
-            
-            # Reload inventory in background or next refresh
-            # self.app.inventory.reload_all() # Might be slow
         else:
             messagebox.showerror("Error", "Failed to save to Excel file.")
 
@@ -281,12 +322,11 @@ class QuickEntryScreen(ttk.Frame):
             path = parts[0]
             sheet = parts[1]
             
-        # Get Mapping to convert Internal -> Column Name
+        # Get Mapping
         mapping_data = self.app.app_config.get_file_mapping(file_key)
         if not mapping_data: return False
         
         mapping = mapping_data.get('mapping', {})
-        # Inverse mapping: Internal -> Col Name
         field_to_col = {v: k for k, v in mapping.items()}
         
         row_dict = {}
@@ -295,8 +335,6 @@ class QuickEntryScreen(ttk.Frame):
             if field in field_to_col:
                 row_dict[field_to_col[field]] = val
         
-        # Append using Pandas? Slow to load/save entire file.
-        # Use openpyxl
         try:
             from openpyxl import load_workbook
             wb = load_workbook(path)
@@ -307,8 +345,8 @@ class QuickEntryScreen(ttk.Frame):
             else:
                 ws = wb.active
                 
-            # Find Column Indices based on Headers (Row 1)
-            col_map = {} # HeaderName -> ColIndex
+            # Find Column Indices
+            col_map = {}
             for cell in ws[1]:
                 if cell.value:
                     col_map[str(cell.value).strip()] = cell.column
@@ -319,10 +357,6 @@ class QuickEntryScreen(ttk.Frame):
             for col_name, val in row_dict.items():
                 if col_name in col_map:
                     ws.cell(row=next_row, column=col_map[col_name], value=val)
-                else:
-                    # Column doesn't exist? Create it?
-                    # For now, skip or log
-                    pass
             
             wb.save(path)
             return True
@@ -331,19 +365,8 @@ class QuickEntryScreen(ttk.Frame):
             return False
 
     def _print_label(self, item):
-        # 1-up print for immediate entry
-        # Use existing printer logic
-        # Need to wrap item in list for ZPL generator
-        
         printers = self.app.printer.get_system_printers()
         if not printers: return
-        
-        # Default to first or saved
         target = printers[0]
-        
-        # Construct ZPL
-        zpl = self.app.printer.generate_zpl_2up([item]) # Logic is 2-up, but works for 1 if list is short?
-        # Actually generate_zpl_2up puts 2 on one label.
-        # If we print 1 item, it occupies left side.
-        
+        zpl = self.app.printer.generate_zpl_2up([item]) 
         self.app.printer.send_raw_zpl(zpl, target)
