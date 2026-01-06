@@ -26,36 +26,76 @@ class DashboardScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Dashboard", font=('Segoe UI', 20, 'bold')).pack(pady=20)
+        # Scrollable Container
+        canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        self.scroll_frame = ttk.Frame(canvas)
+        self.scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        ttk.Label(self.scroll_frame, text="Dashboard", font=('Segoe UI', 20, 'bold')).pack(pady=20, padx=20, anchor=tk.W)
         
-        # Cards Frame
-        f_cards = ttk.Frame(self)
+        # 1. Main KPI Cards
+        f_cards = ttk.Frame(self.scroll_frame)
         f_cards.pack(fill=tk.X, padx=20, pady=10)
         
-        # Card 1: Total Stock
-        self.card_stock = self._create_card(f_cards, "Total Items", "0")
+        self.card_stock = self._create_card(f_cards, "Total Items (In Stock)", "0")
         self.card_stock.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
         
-        # Card 2: Total Value
         self.card_value = self._create_card(f_cards, "Stock Value", "₹0")
         self.card_value.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
         
-        # Card 3: Today's Sales (Placeholder)
-        self.card_sales = self._create_card(f_cards, "Today's Sales", "0")
-        self.card_sales.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self.card_aging = self._create_card(f_cards, "Items Aging (>60 Days)", "0")
+        self.card_aging.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
 
-        # Recent Activity
-        ttk.Label(self, text="Recent Activity", font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W, padx=20, pady=(20, 10))
+        # 2. Alerts Section
+        f_alerts = ttk.LabelFrame(self.scroll_frame, text=" Inventory Health Alerts ", bootstyle="danger")
+        f_alerts.pack(fill=tk.X, padx=20, pady=20)
         
-        self.tree_log = ttk.Treeview(self, columns=('time', 'action', 'details'), show='headings', height=10)
+        # Split Alerts: Aging & Low Stock
+        f_split = ttk.Frame(f_alerts, padding=10)
+        f_split.pack(fill=tk.BOTH, expand=True)
+        
+        # Aging Table
+        f_old = ttk.LabelFrame(f_split, text=" Old Stock (Risk) ", bootstyle="warning")
+        f_old.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        cols_old = ('model', 'days', 'price')
+        self.tree_aging = ttk.Treeview(f_old, columns=cols_old, show='headings', height=6)
+        self.tree_aging.heading('model', text='Model')
+        self.tree_aging.heading('days', text='Days in Stock')
+        self.tree_aging.heading('price', text='Price')
+        self.tree_aging.column('days', width=80, anchor='center')
+        self.tree_aging.column('price', width=80, anchor='e')
+        self.tree_aging.pack(fill=tk.BOTH, expand=True)
+        
+        # Low Stock Table
+        f_low = ttk.LabelFrame(f_split, text=" Low Stock Models (< 2 units) ", bootstyle="info")
+        f_low.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        cols_low = ('model', 'count', 'sold_last_30')
+        self.tree_low = ttk.Treeview(f_low, columns=cols_low, show='headings', height=6)
+        self.tree_low.heading('model', text='Model Family')
+        self.tree_low.heading('count', text='In Stock')
+        self.tree_low.heading('sold_last_30', text='Sold (30d)')
+        self.tree_low.column('count', width=80, anchor='center')
+        self.tree_low.pack(fill=tk.BOTH, expand=True)
+
+        # 3. Recent Activity
+        ttk.Label(self.scroll_frame, text="Recent Activity", font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W, padx=20, pady=(20, 10))
+        
+        self.tree_log = ttk.Treeview(self.scroll_frame, columns=('time', 'action', 'details'), show='headings', height=8)
         self.tree_log.heading('time', text='Time')
-        self.tree_log.column('time', width=100)
+        self.tree_log.column('time', width=150)
         self.tree_log.heading('action', text='Action')
         self.tree_log.column('action', width=120)
         self.tree_log.heading('details', text='Details')
         self.tree_log.column('details', width=400)
         
-        self.tree_log.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        self.tree_log.pack(fill=tk.X, padx=20, pady=10)
 
     def _create_card(self, parent, title, value):
         f = ttk.LabelFrame(parent, text=title, padding=15)
@@ -73,15 +113,57 @@ class DashboardScreen(BaseScreen):
         if df.empty:
             count = 0
             val = 0
+            self._update_alerts(pd.DataFrame(), pd.DataFrame())
         else:
             # Filter Available
             available = df[df['status'] == 'IN']
             count = len(available)
             val = available['price'].sum()
             
+            # Aging Logic
+            now = datetime.datetime.now()
+            def get_age(row):
+                try:
+                    # Parse date (flexible)
+                    d = row.get('last_updated')
+                    if isinstance(d, str): d = datetime.datetime.fromisoformat(d)
+                    if not isinstance(d, datetime.datetime): return 0
+                    return (now - d).days
+                except: return 0
+            
+            # Add Age column safely
+            if not available.empty:
+                available = available.copy()
+                available['age_days'] = available.apply(get_age, axis=1)
+                aging_stock = available[available['age_days'] > 60].sort_values('age_days', ascending=False)
+            else:
+                aging_stock = pd.DataFrame()
+                
+            self.card_aging.lbl_val.config(text=str(len(aging_stock)), foreground="red" if not aging_stock.empty else "green")
+            self._update_alerts(available, aging_stock)
+            
         self.card_stock.lbl_val.config(text=str(count))
         self.card_value.lbl_val.config(text=f"₹{val:,.0f}")
-        self.card_sales.lbl_val.config(text="-")
+
+    def _update_alerts(self, available_df, aging_df):
+        # 1. Aging Tree
+        for i in self.tree_aging.get_children(): self.tree_aging.delete(i)
+        if not aging_df.empty:
+            for _, row in aging_df.head(20).iterrows():
+                self.tree_aging.insert('', tk.END, values=(row['model'], f"{row['age_days']} days", f"₹{row['price']:,.0f}"))
+                
+        # 2. Low Stock Logic (Model Families)
+        for i in self.tree_low.get_children(): self.tree_low.delete(i)
+        if not available_df.empty:
+            # Normalize model names (First 2 words) to group "iPhone 11 64GB" and "iPhone 11 128GB"
+            # This is a heuristic.
+            available_df['model_fam'] = available_df['model'].apply(lambda x: " ".join(str(x).split()[:2]))
+            
+            counts = available_df['model_fam'].value_counts()
+            low_stock = counts[counts < 2] # Threshold: Less than 2
+            
+            for model, count in low_stock.head(20).items():
+                self.tree_low.insert('', tk.END, values=(model, count, "-"))
 
     def _refresh_log(self):
         for i in self.tree_log.get_children():
