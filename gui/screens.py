@@ -2413,50 +2413,158 @@ class EditDataScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
         self.current_id = None
+        self.entry_widgets = [] # Ordered list for navigation
+        self.skip_vars = {}
+        self.vars = {}
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Edit Mobile Data", font=('Segoe UI', 14, 'bold')).pack(pady=10)
+        ttk.Label(self, text="High-Speed Edit", font=('Segoe UI', 16, 'bold'), bootstyle="primary").pack(pady=10)
         
-        # Search
-        frame_search = ttk.Frame(self)
-        frame_search.pack(fill=tk.X, pady=10)
+        # Search Bar
+        frame_search = ttk.Frame(self, padding=10)
+        frame_search.pack(fill=tk.X, padx=20)
         
-        ttk.Label(frame_search, text="Search By:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(frame_search, text="Search By:").pack(side=tk.LEFT, padx=(0,5))
         self.var_mode = tk.StringVar(value="ID")
         self.combo_mode = ttk.Combobox(frame_search, textvariable=self.var_mode, values=["ID", "IMEI", "Model"], state="readonly", width=8)
         self.combo_mode.pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(frame_search, text="Value:").pack(side=tk.LEFT, padx=5)
-        self.ent_search = ttk.Entry(frame_search)
+        self.ent_search = ttk.Entry(frame_search, width=30)
         self.ent_search.pack(side=tk.LEFT, padx=5)
         self.ent_search.bind('<Return>', self._lookup)
-        ttk.Button(frame_search, text="Load", command=self._lookup).pack(side=tk.LEFT)
         
-        # Form
-        self.form_frame = ttk.LabelFrame(self, text="Edit Details", padding=15)
-        self.form_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        self.vars = {}
-        fields = ['model', 'imei', 'price_original', 'color', 'notes']
-        
-        for idx, f in enumerate(fields):
-            ttk.Label(self.form_frame, text=f.title()).grid(row=idx, column=0, sticky=tk.W, pady=5)
-            var = tk.StringVar()
-            self.vars[f] = var
-            
-            if f == 'color':
-                from core.data_registry import DataRegistry
-                colors = DataRegistry().get_colors()
-                combo = ttk.Combobox(self.form_frame, textvariable=var, values=colors)
-                combo.grid(row=idx, column=1, padx=10, pady=5, sticky=tk.EW)
-            else:
-                ttk.Entry(self.form_frame, textvariable=var, width=40).grid(row=idx, column=1, padx=10, pady=5)
-            
-        ttk.Button(self.form_frame, text="Save Changes", command=self._save).grid(row=len(fields), column=1, pady=20, sticky=tk.E)
+        ttk.Button(frame_search, text="Load", command=self._lookup, bootstyle="outline-primary").pack(side=tk.LEFT, padx=5)
 
-    def on_show(self):
-        self.ent_search.focus_set()
+        # Form Container
+        self.form_frame = ttk.Frame(self, padding=20)
+        self.form_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Fields Config
+        self.fields = [
+            # Label, Key, Width
+            ('Model Name', 'model', 50),
+            ('IMEI No', 'imei', 30),
+            ('Price (Orig)', 'price_original', 15),
+            ('Color', 'color', 20),
+            ('Grade', 'grade', 10),
+            ('Condition', 'condition', 30),
+            ('Other / Notes', 'notes', 50)
+        ]
+        
+        self._build_form()
+        
+        # Save Button Area
+        btn_frame = ttk.Frame(self, padding=20)
+        btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        self.btn_save = ttk.Button(btn_frame, text="Save Changes [Enter]", command=self._save, bootstyle="success", width=20)
+        self.btn_save.pack(side=tk.RIGHT)
+
+    def _build_form(self):
+        from core.data_registry import DataRegistry
+        colors = DataRegistry().get_colors()
+
+        for idx, (lbl, key, w) in enumerate(self.fields):
+            # 1. Label
+            ttk.Label(self.form_frame, text=lbl, width=15, font=('Segoe UI', 10)).grid(row=idx, column=0, sticky=tk.W, pady=5)
+            
+            # 2. Input Widget
+            var = tk.StringVar()
+            self.vars[key] = var
+            
+            if key == 'color':
+                ent = ttk.Combobox(self.form_frame, textvariable=var, values=colors, width=w)
+            elif key in ['grade', 'condition']:
+                 # Suggestions
+                 vals = ['A+', 'A', 'B', 'C'] if key == 'grade' else ['New', 'Refurb', 'Used', 'Damaged']
+                 ent = ttk.Combobox(self.form_frame, textvariable=var, values=vals, width=w)
+            else:
+                ent = ttk.Entry(self.form_frame, textvariable=var, width=w)
+            
+            ent.grid(row=idx, column=1, sticky=tk.W, padx=10, pady=5)
+            self.entry_widgets.append(ent)
+            
+            # 3. Skip Checkbox
+            skip_var = tk.BooleanVar(value=False)
+            self.skip_vars[key] = skip_var
+            
+            # Checkbox calls _toggle_skip on change
+            cb = ttk.Checkbutton(self.form_frame, text="Skip", variable=skip_var, bootstyle="round-toggle", command=lambda k=key, e=ent, v=skip_var: self._toggle_skip(k, e, v))
+            cb.grid(row=idx, column=2, padx=10)
+            
+            # Bind Enter Key Navigation
+            # We use a closure to capture the current index
+            ent.bind('<Return>', lambda e, i=idx: self._on_enter(i))
+
+    def _toggle_skip(self, key, widget, var):
+        if var.get():
+            widget.configure(state='disabled')
+        else:
+            # For Combobox, 'normal' means editable, 'readonly' means select-only.
+            # We want to allow typing? Assuming yes for productivity.
+            widget.configure(state='normal')
+
+    def _on_enter(self, current_index):
+        # Find next ENABLED widget
+        next_idx = current_index + 1
+        found = False
+        
+        while next_idx < len(self.entry_widgets):
+            # Check if skipped
+            key = self.fields[next_idx][1]
+            if not self.skip_vars[key].get():
+                # Found enabled widget
+                target = self.entry_widgets[next_idx]
+                target.focus_set()
+                # Select all text if Entry
+                try: target.select_range(0, tk.END) 
+                except: pass
+                found = True
+                break
+            next_idx += 1
+            
+        if not found:
+            # If no more fields, focus Save button or Submit
+            self.btn_save.focus_set()
+            self.btn_save.invoke()
+
+    def _load_item_dict(self, data):
+        self.current_id = str(data.get('unique_id', ''))
+        for lbl, key, w in self.fields:
+            val = data.get(key, '')
+            self.vars[key].set(str(val))
+            
+        # Focus first enabled field
+        self.after(100, lambda: self._on_enter(-1))
+
+    def _save(self):
+        if not self.current_id: return
+        
+        # Collect data
+        updates = {k: v.get() for k, v in self.vars.items()}
+        
+        # Validate Price
+        try:
+            updates['price_original'] = float(updates['price_original'])
+        except:
+            pass # Allow empty or invalid for now, or handle stricter
+            
+        # Update Inventory
+        success = self.app.inventory.update_item(self.current_id, updates)
+        
+        if success:
+            # Optional: Show Toast
+            from ttkbootstrap.toast import ToastNotification
+            ToastNotification(title="Updated", message=f"Item {self.current_id} saved.", bootstyle="success", duration=2000).show_toast()
+            
+            # Clear / Focus Search for next item
+            self.ent_search.delete(0, tk.END)
+            self.ent_search.focus_set()
+            self.current_id = None
+            # Clear vars?
+            for v in self.vars.values(): v.set('')
+        else:
+            messagebox.showerror("Error", "Failed to update item.")
 
     def _lookup(self, event=None):
         q = self.ent_search.get().strip()
@@ -2473,7 +2581,6 @@ class EditDataScreen(BaseScreen):
         elif mode == "Model":
             match = df[df['model'].astype(str).str.contains(q, case=False, na=False)]
             
-        # Deduplicate
         if not match.empty:
             match = match.drop_duplicates(subset=['unique_id'])
             
@@ -2486,27 +2593,6 @@ class EditDataScreen(BaseScreen):
         else:
             items = match.to_dict('records')
             ItemSelectionDialog(self.winfo_toplevel(), items, self._load_item_dict)
-
-    def _load_item_dict(self, data):
-        self.current_id = str(data.get('unique_id', ''))
-        self.vars['model'].set(data.get('model', ''))
-        self.vars['imei'].set(data.get('imei', ''))
-        self.vars['price_original'].set(str(data.get('price_original', '')))
-        self.vars['color'].set(data.get('color', ''))
-        self.vars['notes'].set(data.get('notes', ''))
-
-    def _save(self):
-        if not self.current_id: return
-        
-        # Collect data
-        updates = {k: v.get() for k, v in self.vars.items()}
-        
-        # Validate Price
-        try:
-            updates['price_original'] = float(updates['price_original'])
-        except:
-            messagebox.showerror("Error", "Price must be numeric")
-            return
 
         # Update Logic (Need to add generic update_excel_row to inventory)
         if self.app.inventory.update_item_data(self.current_id, updates):
