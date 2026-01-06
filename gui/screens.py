@@ -787,6 +787,46 @@ class BillingScreen(BaseScreen):
         
         inv_num = f"INV-{ts}"
         
+        # --- Signature Registry Logic ---
+        try:
+            # 1. Calculate Totals matches billing.py logic
+            subtotal = sum(float(item.get('price', 0)) for item in self.cart_items)
+            final_total = subtotal
+            if discount:
+                final_total -= float(discount['amount'])
+            
+            store_name = self.app.app_config.get('store_name', 'My Store')
+            
+            # 2. Generate Hash
+            import hashlib
+            verify_str = f"{inv_num}|{buyer_name}|{final_total}|{store_name}"
+            verify_hash = hashlib.sha256(verify_str.encode()).hexdigest()[:16].upper()
+            
+            # 3. Save to Registry
+            import json
+            from pathlib import Path
+            reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+            
+            registry = {}
+            if reg_path.exists():
+                try:
+                    with open(reg_path, 'r') as f:
+                        registry = json.load(f)
+                except: pass
+            
+            registry[verify_hash] = {
+                "inv_no": inv_num,
+                "date": str(datetime.date.today()),
+                "amount": f"{final_total:.2f}",
+                "buyer": buyer_name
+            }
+            
+            with open(reg_path, 'w') as f:
+                json.dump(registry, f, indent=4)
+                
+        except Exception as e:
+            print(f"Registry Save Error: {e}")
+
         try:
             self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, str(save_path), discount=discount)
             return str(save_path)
@@ -928,6 +968,52 @@ class InvoiceHistoryScreen(BaseScreen):
                 self._refresh_list()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete: {e}")
+
+    # --- Verification UI ---
+        
+        # Separator
+        ttk.Separator(self, orient='horizontal').pack(fill=tk.X, pady=10)
+        
+        # Verify Frame
+        v_frame = ttk.LabelFrame(self, text="Verify Digital Signature", padding=10)
+        v_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        ttk.Label(v_frame, text="Enter Code from Invoice:").pack(side=tk.LEFT)
+        self.ent_verify = ttk.Entry(v_frame, width=30, font=('Courier', 10))
+        self.ent_verify.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(v_frame, text="CHECK VALIDITY", command=self._verify_code, style="Accent.TButton").pack(side=tk.LEFT)
+        
+    def _verify_code(self):
+        code = self.ent_verify.get().strip().upper()
+        if not code: return
+        
+        # Load Registry
+        import json
+        from pathlib import Path
+        reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+        
+        if not reg_path.exists():
+            messagebox.showerror("Error", "No invoice registry found. Cannot verify.")
+            return
+            
+        try:
+            with open(reg_path, 'r') as f:
+                registry = json.load(f)
+                
+            # Registry format: { "CODE": { "inv_no": "...", "amount": "..." } }
+            # Code on paper is formatted with spaces "AAAA BBBB...", strip them
+            clean_code = code.replace(" ", "")
+            
+            data = registry.get(clean_code)
+            if data:
+                msg = f"✅ VALID SIGNATURE\n\nInvoice: {data.get('inv_no')}\nDate: {data.get('date')}\nAmount: {data.get('amount')}\nBuyer: {data.get('buyer')}"
+                messagebox.showinfo("Legit", msg)
+            else:
+                messagebox.showerror("FAKE", "❌ INVALID SIGNATURE\n\nThis code does not match any invoice in the system.")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Verification failed: {e}")
 
 class ActivityLogScreen(BaseScreen):
     def __init__(self, parent, app_context):
