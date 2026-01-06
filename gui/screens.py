@@ -1942,6 +1942,25 @@ class StatusScreen(BaseScreen):
         self.ent_contact.pack(fill=tk.X, pady=(0,5))
         self.ent_contact.bind('<Return>', self._confirm_update)
         
+        # --- Auto Invoice Options ---
+        self.frame_inv_opts = ttk.LabelFrame(right_pane, text="Invoice Options", padding=5)
+        # We pack this conditionally in _toggle_buyer_fields or just always keep it but disable?
+        # Let's pack it always but it only matters for OUT
+        self.frame_inv_opts.pack(fill=tk.X, pady=5)
+        
+        self.var_auto_inv = tk.BooleanVar(value=True)
+        ttk.Checkbutton(self.frame_inv_opts, text="Auto-Generate Invoice", variable=self.var_auto_inv).pack(anchor=tk.W)
+        
+        f_date = ttk.Frame(self.frame_inv_opts)
+        f_date.pack(fill=tk.X, pady=2)
+        ttk.Label(f_date, text="Date:").pack(side=tk.LEFT)
+        self.ent_inv_date = ttk.Entry(f_date, width=12)
+        self.ent_inv_date.insert(0, str(datetime.date.today()))
+        self.ent_inv_date.pack(side=tk.LEFT, padx=5)
+        
+        self.var_tax_inc = tk.BooleanVar(value=False)
+        ttk.Checkbutton(f_date, text="Tax Inc.", variable=self.var_tax_inc).pack(side=tk.LEFT, padx=5)
+
         # Update Button
         self.btn_update = ttk.Button(right_pane, text="CONFIRM UPDATE", command=self._confirm_update, style="Accent.TButton")
         self.btn_update.pack(fill=tk.X, pady=(20, 10))
@@ -2011,12 +2030,15 @@ class StatusScreen(BaseScreen):
         status = self.var_status.get()
         if status == "OUT":
             self.frame_buyer.pack(fill=tk.X, pady=10)
+            self.frame_inv_opts.pack(fill=tk.X, pady=5) # Show Invoice Opts
             self.btn_update.config(text="CONFIRM SALE")
         elif status == "RTN":
             self.frame_buyer.pack_forget()
+            self.frame_inv_opts.pack_forget() # Hide
             self.btn_update.config(text="CONFIRM RETURN")
         else:
             self.frame_buyer.pack_forget()
+            self.frame_inv_opts.pack_forget() # Hide
             self.btn_update.config(text="CONFIRM STOCK IN")
 
     def _pick_from_list(self, matches):
@@ -2170,7 +2192,16 @@ class StatusScreen(BaseScreen):
                 if self.app.inventory.update_item_data(item['unique_id'], updates):
                     count += 1
             
-            messagebox.showinfo("Done", f"Updated {count} items successfully.")
+            # --- Auto Invoice for Batch ---
+            if status == "OUT" and self.var_auto_inv.get():
+                try:
+                    self._generate_silent_invoice(self.batch_list, buyer, self.ent_inv_date.get(), self.var_tax_inc.get())
+                    messagebox.showinfo("Done", f"Updated {count} items & Generated Invoice.")
+                except Exception as e:
+                    messagebox.showinfo("Done", f"Updated {count} items.\nWarning: Invoice failed {e}")
+            else:
+                messagebox.showinfo("Done", f"Updated {count} items successfully.")
+                
             self.batch_list = []
             self._refresh_batch_list()
             self.ent_id.delete(0, tk.END)
@@ -2206,7 +2237,12 @@ class StatusScreen(BaseScreen):
             self._log(f"Updated ID {uid} -> {status}")
             self.history.append({"id": uid, "prev_status": self.current_item['status']})
             
-            messagebox.showinfo("Success", f"Item marked as {status}")
+            # --- Auto Invoice Single ---
+            if status == "OUT" and self.var_auto_inv.get():
+                self._generate_silent_invoice([self.current_item], updates.get('buyer'), self.ent_inv_date.get(), self.var_tax_inc.get())
+                messagebox.showinfo("Success", f"Item marked as {status}\nInvoice Generated.")
+            else:
+                messagebox.showinfo("Success", f"Item marked as {status}")
             
             # Reset UI
             self.ent_id.delete(0, tk.END)
@@ -2233,6 +2269,52 @@ class StatusScreen(BaseScreen):
             messagebox.showinfo("Undo", f"Reverted ID {iid} to {prev}")
         else:
             messagebox.showerror("Undo Error", f"Failed to revert {iid}")
+
+    def _generate_silent_invoice(self, items, buyer_name, date_str, is_inclusive):
+        # Convert items to cart format
+        cart = []
+        for item in items:
+            cart.append({
+                'unique_id': item['unique_id'],
+                'model': item['model'],
+                'price': float(item.get('price', 0)),
+                'imei': item.get('imei', '')
+            })
+            
+        buyer = {
+            "name": buyer_name,
+            "contact": "",
+            "date": date_str,
+            "is_interstate": False,
+            "is_tax_inclusive": is_inclusive
+        }
+        
+        ts = int(datetime.datetime.now().timestamp())
+        safe_name = "".join([c for c in buyer_name if c.isalnum() or c in (' ', '-', '_')]).strip()
+        filename = f"{safe_name}_{ts}.pdf"
+        save_path = self.app.app_config.get_invoices_dir() / filename
+        inv_num = f"INV-{ts}"
+        
+        success, verify_hash, pdf_total = self.app.billing.generate_invoice(cart, buyer, inv_num, str(save_path))
+        
+        if success:
+            # Save Registry
+            try:
+                import json
+                from pathlib import Path
+                reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+                registry = {}
+                if reg_path.exists():
+                    with open(reg_path, 'r') as f: registry = json.load(f)
+                    
+                registry[verify_hash] = {
+                    "inv_no": inv_num,
+                    "date": date_str,
+                    "amount": f"{pdf_total:.2f}",
+                    "buyer": buyer_name
+                }
+                with open(reg_path, 'w') as f: json.dump(registry, f, indent=4)
+            except: pass
 
 # --- Edit Data Screen ---
 class EditDataScreen(BaseScreen):
