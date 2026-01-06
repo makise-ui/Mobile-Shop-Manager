@@ -215,12 +215,13 @@ class QuickEntryScreen(ttk.Frame):
             
         # Create Empty Excel with standard headers
         try:
-            headers = ["S.NO", "MODEL NAME", "RAM/ROM", "IMEI NO", "RATE", "STATUS", "BUYERS", "COLOR", "GRADE", "CONDITION"]
+            headers = ["S.NO", "SUPPLIER", "MODEL NAME", "RAM/ROM", "IMEI NO", "RATE", "STATUS", "BUYERS", "COLOR", "GRADE", "CONDITION"]
             df = pd.DataFrame(columns=headers)
             df.to_excel(path, index=False)
             
             # Add to mapping
             mapping = {
+                "SUPPLIER": "supplier",
                 "MODEL NAME": "model",
                 "RAM/ROM": "ram_rom",
                 "IMEI NO": "imei",
