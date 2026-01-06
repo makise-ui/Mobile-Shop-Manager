@@ -5,6 +5,8 @@ from core.config import ConfigManager
 from core.inventory import InventoryManager
 from core.printer import PrinterManager
 from core.billing import BillingManager
+from core.updater import UpdateChecker
+from core.version import APP_VERSION
 from gui.screens import (
     DashboardScreen, InventoryScreen, StatusScreen, 
     BillingScreen, InvoiceHistoryScreen, ActivityLogScreen,
