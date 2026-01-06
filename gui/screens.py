@@ -17,6 +17,77 @@ class BaseScreen(ttk.Frame):
         """Called when screen becomes visible"""
         pass
 
+# --- Dashboard Screen ---
+class DashboardScreen(BaseScreen):
+    def __init__(self, parent, app_context):
+        super().__init__(parent, app_context)
+        self._init_ui()
+
+    def _init_ui(self):
+        ttk.Label(self, text="Dashboard", font=('Segoe UI', 20, 'bold')).pack(pady=20)
+        
+        # Cards Frame
+        f_cards = ttk.Frame(self)
+        f_cards.pack(fill=tk.X, padx=20, pady=10)
+        
+        # Card 1: Total Stock
+        self.card_stock = self._create_card(f_cards, "Total Items", "0")
+        self.card_stock.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        
+        # Card 2: Total Value
+        self.card_value = self._create_card(f_cards, "Stock Value", "₹0")
+        self.card_value.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        
+        # Card 3: Today's Sales (Placeholder)
+        self.card_sales = self._create_card(f_cards, "Today's Sales", "0")
+        self.card_sales.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+
+        # Recent Activity
+        ttk.Label(self, text="Recent Activity", font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W, padx=20, pady=(20, 10))
+        
+        self.tree_log = ttk.Treeview(self, columns=('time', 'action', 'details'), show='headings', height=10)
+        self.tree_log.heading('time', text='Time')
+        self.tree_log.column('time', width=100)
+        self.tree_log.heading('action', text='Action')
+        self.tree_log.column('action', width=120)
+        self.tree_log.heading('details', text='Details')
+        self.tree_log.column('details', width=400)
+        
+        self.tree_log.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+    def _create_card(self, parent, title, value):
+        f = ttk.LabelFrame(parent, text=title, padding=15)
+        lbl = ttk.Label(f, text=value, font=('Segoe UI', 24, 'bold'), foreground="#007acc")
+        lbl.pack()
+        f.lbl_val = lbl # Store ref
+        return f
+
+    def on_show(self):
+        self._refresh_stats()
+        self._refresh_log()
+
+    def _refresh_stats(self):
+        df = self.app.inventory.get_inventory()
+        if df.empty:
+            count = 0
+            val = 0
+        else:
+            # Filter Available
+            available = df[df['status'] == 'IN']
+            count = len(available)
+            val = available['price'].sum()
+            
+        self.card_stock.lbl_val.config(text=str(count))
+        self.card_value.lbl_val.config(text=f"₹{val:,.0f}")
+        self.card_sales.lbl_val.config(text="-")
+
+    def _refresh_log(self):
+        for i in self.tree_log.get_children():
+            self.tree_log.delete(i)
+        logs = self.app.activity_logger.get_logs(limit=20)
+        for log in logs:
+            self.tree_log.insert('', tk.END, values=(log['timestamp'], log['action'], log['details']))
+
 # --- Inventory Screen ---
 class InventoryScreen(BaseScreen):
     def __init__(self, parent, app_context):
