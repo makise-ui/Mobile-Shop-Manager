@@ -219,48 +219,98 @@ class MapColumnsDialog(tk.Toplevel):
         self.on_save(key, save_data)
         self.destroy()
 
+from ttkbootstrap.toast import ToastNotification
+import ttkbootstrap as tb
+
 class SettingsDialog(tk.Toplevel):
     def __init__(self, parent, config_manager):
         super().__init__(parent)
         self.app_config = config_manager
         self.title("Settings")
-        self.geometry("400x300")
+        self.geometry("500x500")
+        self.style = tb.Style()
         
         self._init_ui()
         
     def _init_ui(self):
-        frame = ttk.LabelFrame(self, text="General", padding=10)
-        frame.pack(fill=tk.X, padx=10, pady=10)
+        # Tabs
+        tabs = ttk.Notebook(self)
+        tabs.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Label Size
-        ttk.Label(frame, text="Label Width (mm):").grid(row=0, column=0)
-        self.ent_w = ttk.Entry(frame)
-        self.ent_w.insert(0, str(self.app_config.get('label_width_mm')))
-        self.ent_w.grid(row=0, column=1)
-        
-        ttk.Label(frame, text="Label Height (mm):").grid(row=1, column=0)
-        self.ent_h = ttk.Entry(frame)
-        self.ent_h.insert(0, str(self.app_config.get('label_height_mm')))
-        self.ent_h.grid(row=1, column=1)
+        # Tab 1: General
+        tab_gen = ttk.Frame(tabs, padding=15)
+        tabs.add(tab_gen, text="General")
         
         # Store Name
-        ttk.Label(frame, text="Store Name:").grid(row=2, column=0)
-        self.ent_store = ttk.Entry(frame)
-        self.ent_store.insert(0, self.app_config.get('store_name'))
-        self.ent_store.grid(row=2, column=1)
+        ttk.Label(tab_gen, text="Store Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.ent_store = ttk.Entry(tab_gen, width=30)
+        self.ent_store.insert(0, self.app_config.get('store_name', ''))
+        self.ent_store.grid(row=0, column=1, sticky=tk.EW, padx=10)
+        
+        # Tab 2: Printing
+        tab_print = ttk.Frame(tabs, padding=15)
+        tabs.add(tab_print, text="Printing")
+        
+        ttk.Label(tab_print, text="Label Width (mm):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.ent_w = ttk.Entry(tab_print, width=10)
+        self.ent_w.insert(0, str(self.app_config.get('label_width_mm')))
+        self.ent_w.grid(row=0, column=1, sticky=tk.W, padx=10)
+        
+        ttk.Label(tab_print, text="Label Height (mm):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.ent_h = ttk.Entry(tab_print, width=10)
+        self.ent_h.insert(0, str(self.app_config.get('label_height_mm')))
+        self.ent_h.grid(row=1, column=1, sticky=tk.W, padx=10)
+        
+        # Tab 3: Appearance (Interactive Theme)
+        tab_app = ttk.Frame(tabs, padding=15)
+        tabs.add(tab_app, text="Appearance")
+        
+        ttk.Label(tab_app, text="Application Theme:", font=('bold')).pack(anchor=tk.W, pady=(0, 10))
+        
+        themes = self.style.theme_names()
+        self.var_theme = tk.StringVar(value=self.app_config.get('theme_name', 'cosmo'))
+        
+        cb_theme = ttk.Combobox(tab_app, textvariable=self.var_theme, values=themes, state="readonly")
+        cb_theme.pack(fill=tk.X, pady=5)
+        cb_theme.bind("<<ComboboxSelected>>", self._on_theme_change)
+        
+        ttk.Label(tab_app, text="* Select a theme to preview instantly.", foreground="gray").pack(anchor=tk.W)
 
-        btn = ttk.Button(self, text="Save", command=self._save)
-        btn.pack(pady=10)
+        # Actions
+        btn_frame = ttk.Frame(self, padding=15)
+        btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        
+        ttk.Button(btn_frame, text="Save Settings", command=self._save, style="success.TButton").pack(side=tk.RIGHT)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy, style="secondary.TButton").pack(side=tk.RIGHT, padx=5)
+
+    def _on_theme_change(self, event):
+        new_theme = self.var_theme.get()
+        self.style.theme_use(new_theme)
 
     def _save(self):
         try:
-            self.app_config.set('label_width_mm', float(self.ent_w.get()))
-            self.app_config.set('label_height_mm', float(self.ent_h.get()))
+            # Validate
+            w = float(self.ent_w.get())
+            h = float(self.ent_h.get())
+            
+            # Save
+            self.app_config.set('label_width_mm', w)
+            self.app_config.set('label_height_mm', h)
             self.app_config.set('store_name', self.ent_store.get())
-            messagebox.showinfo("Saved", "Settings saved.")
+            self.app_config.set('theme_name', self.var_theme.get())
+            
+            # Toast
+            toast = ToastNotification(
+                title="Settings Saved",
+                message="Your preferences have been updated successfully.",
+                duration=3000,
+                bootstyle="success"
+            )
+            toast.show_toast()
+            
             self.destroy()
         except ValueError:
-            messagebox.showerror("Error", "Invalid numeric values")
+            messagebox.showerror("Error", "Invalid numeric values for Label Size.")
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 class ZPLPreviewDialog(tk.Toplevel):

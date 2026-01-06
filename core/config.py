@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "invoice_terms": "Goods once sold will not be taken back.",
     "output_folder": str(APP_DIR),
     "auto_unique_id_prefix": "4BM",
+    "theme_name": "cosmo",    # Default Theme
     "theme_color": "#007acc", # Added customization
     "font_size_ui": 10        # Added customization
 }
