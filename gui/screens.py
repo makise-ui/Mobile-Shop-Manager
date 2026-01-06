@@ -1557,6 +1557,8 @@ class SettingsScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
         self.style = tb.Style()
+        self.vars = {}
+        self.text_widgets = {}
         self._init_ui()
 
     def _init_ui(self):
@@ -1566,35 +1568,63 @@ class SettingsScreen(BaseScreen):
         tabs = ttk.Notebook(self)
         tabs.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
-        # Tab 1: General
+        # --- Tab 1: General ---
         tab_gen = ttk.Frame(tabs, padding=20)
         tabs.add(tab_gen, text="General")
         
-        ttk.Label(tab_gen, text="Store Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.ent_store = ttk.Entry(tab_gen, width=30)
-        self.ent_store.insert(0, self.app.app_config.get('store_name', ''))
-        self.ent_store.grid(row=0, column=1, padx=10)
+        # Helper for grid
+        def add_entry(parent, label, key, r, width=30):
+            ttk.Label(parent, text=label).grid(row=r, column=0, sticky=tk.W, pady=5)
+            var = tk.StringVar(value=str(self.app.app_config.get(key, '')))
+            self.vars[key] = var
+            ttk.Entry(parent, textvariable=var, width=width).grid(row=r, column=1, padx=10, sticky=tk.W)
+            return r + 1
+
+        r = 0
+        r = add_entry(tab_gen, "Store Name:", "store_name", r)
+        r = add_entry(tab_gen, "Auto-ID Prefix:", "auto_unique_id_prefix", r, width=10)
+        r = add_entry(tab_gen, "Price Markup %:", "price_markup_percent", r, width=10)
         
-        # Tab 2: Printing
+        self.var_buyer = tk.BooleanVar(value=self.app.app_config.get("enable_buyer_tracking", True))
+        ttk.Checkbutton(tab_gen, text="Enable Buyer Tracking (Save to Excel)", variable=self.var_buyer).grid(row=r, column=0, columnspan=2, sticky=tk.W, pady=10)
+
+        # --- Tab 2: Printing ---
         tab_print = ttk.Frame(tabs, padding=20)
         tabs.add(tab_print, text="Printing")
         
-        ttk.Label(tab_print, text="Label Width (mm):").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.ent_w = ttk.Entry(tab_print, width=10)
-        self.ent_w.insert(0, str(self.app.app_config.get('label_width_mm')))
-        self.ent_w.grid(row=0, column=1, padx=10)
+        r = 0
+        r = add_entry(tab_print, "Label Width (mm):", "label_width_mm", r, width=10)
+        r = add_entry(tab_print, "Label Height (mm):", "label_height_mm", r, width=10)
+
+        # --- Tab 3: Invoice ---
+        tab_inv = ttk.Frame(tabs, padding=20)
+        tabs.add(tab_inv, text="Invoice")
         
-        ttk.Label(tab_print, text="Label Height (mm):").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.ent_h = ttk.Entry(tab_print, width=10)
-        self.ent_h.insert(0, str(self.app.app_config.get('label_height_mm')))
-        self.ent_h.grid(row=1, column=1, padx=10)
+        r = 0
+        r = add_entry(tab_inv, "GSTIN:", "store_gstin", r)
+        r = add_entry(tab_inv, "Phone / Contact:", "store_contact", r)
+        r = add_entry(tab_inv, "GST Default %:", "gst_default_percent", r, width=10)
         
-        # Tab 3: Appearance
+        # Address
+        ttk.Label(tab_inv, text="Store Address:").grid(row=r, column=0, sticky=tk.NW, pady=5)
+        txt_addr = tk.Text(tab_inv, height=4, width=40, font=('Segoe UI', 10))
+        txt_addr.insert('1.0', self.app.app_config.get('store_address', ''))
+        txt_addr.grid(row=r, column=1, padx=10, pady=5)
+        self.text_widgets['store_address'] = txt_addr
+        r += 1
+        
+        # Terms
+        ttk.Label(tab_inv, text="Invoice Terms:").grid(row=r, column=0, sticky=tk.NW, pady=5)
+        txt_terms = tk.Text(tab_inv, height=4, width=40, font=('Segoe UI', 10))
+        txt_terms.insert('1.0', self.app.app_config.get('invoice_terms', ''))
+        txt_terms.grid(row=r, column=1, padx=10, pady=5)
+        self.text_widgets['invoice_terms'] = txt_terms
+        
+        # --- Tab 4: Appearance ---
         tab_app = ttk.Frame(tabs, padding=20)
         tabs.add(tab_app, text="Appearance")
         
         ttk.Label(tab_app, text="Theme:", font=('bold')).pack(anchor=tk.W)
-        
         themes = self.style.theme_names()
         current = self.app.app_config.get('theme_name', 'cosmo')
         self.var_theme = tk.StringVar(value=current)
@@ -1611,9 +1641,22 @@ class SettingsScreen(BaseScreen):
 
     def _save(self):
         try:
-            self.app.app_config.set('label_width_mm', float(self.ent_w.get()))
-            self.app.app_config.set('label_height_mm', float(self.ent_h.get()))
-            self.app.app_config.set('store_name', self.ent_store.get())
+            # Save Vars
+            for key, var in self.vars.items():
+                val = var.get()
+                # Try convert to float if it looks like one (for mm, price)
+                try:
+                    if key in ['label_width_mm', 'label_height_mm', 'price_markup_percent', 'gst_default_percent']:
+                        val = float(val)
+                except: pass
+                self.app.app_config.set(key, val)
+            
+            # Save Text Widgets
+            for key, widget in self.text_widgets.items():
+                self.app.app_config.set(key, widget.get("1.0", tk.END).strip())
+                
+            # Save Specifics
+            self.app.app_config.set("enable_buyer_tracking", self.var_buyer.get())
             self.app.app_config.set('theme_name', self.var_theme.get())
             
             ToastNotification(
