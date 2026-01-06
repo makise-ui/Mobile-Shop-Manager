@@ -1906,6 +1906,23 @@ class StatusScreen(BaseScreen):
         self.ent_id.bind('<Return>', self._lookup_item)
         ttk.Button(f_input, text="FIND", command=self._lookup_item, width=8).pack(side=tk.LEFT, padx=5)
         
+        # --- Auto Invoice Settings (Moved to Scan Section) ---
+        self.frame_inv_opts = ttk.LabelFrame(left_pane, text="Invoice Settings (for Sold items)", padding=5)
+        self.frame_inv_opts.pack(fill=tk.X, pady=5)
+        
+        self.var_auto_inv = tk.BooleanVar(value=True)
+        ttk.Checkbutton(self.frame_inv_opts, text="Auto-Generate Invoice", variable=self.var_auto_inv).pack(anchor=tk.W)
+        
+        f_date = ttk.Frame(self.frame_inv_opts)
+        f_date.pack(fill=tk.X, pady=2)
+        ttk.Label(f_date, text="Date:").pack(side=tk.LEFT)
+        self.ent_inv_date = ttk.Entry(f_date, width=12)
+        self.ent_inv_date.insert(0, str(datetime.date.today()))
+        self.ent_inv_date.pack(side=tk.LEFT, padx=5)
+        
+        self.var_tax_inc = tk.BooleanVar(value=False)
+        ttk.Checkbutton(f_date, text="Tax Inc.", variable=self.var_tax_inc).pack(side=tk.LEFT, padx=5)
+        
         # Details Box
         self.lbl_details = tk.Label(left_pane, text="Ready to scan...", font=('Consolas', 11), bg="#e8e8e8", relief=tk.SUNKEN, height=6, justify=tk.LEFT, anchor="nw", padx=10, pady=10)
         self.lbl_details.pack(fill=tk.BOTH, expand=True, pady=10)
@@ -1942,25 +1959,6 @@ class StatusScreen(BaseScreen):
         self.ent_contact.pack(fill=tk.X, pady=(0,5))
         self.ent_contact.bind('<Return>', self._confirm_update)
         
-        # --- Auto Invoice Options ---
-        self.frame_inv_opts = ttk.LabelFrame(right_pane, text="Invoice Options", padding=5)
-        # We pack this conditionally in _toggle_buyer_fields or just always keep it but disable?
-        # Let's pack it always but it only matters for OUT
-        self.frame_inv_opts.pack(fill=tk.X, pady=5)
-        
-        self.var_auto_inv = tk.BooleanVar(value=True)
-        ttk.Checkbutton(self.frame_inv_opts, text="Auto-Generate Invoice", variable=self.var_auto_inv).pack(anchor=tk.W)
-        
-        f_date = ttk.Frame(self.frame_inv_opts)
-        f_date.pack(fill=tk.X, pady=2)
-        ttk.Label(f_date, text="Date:").pack(side=tk.LEFT)
-        self.ent_inv_date = ttk.Entry(f_date, width=12)
-        self.ent_inv_date.insert(0, str(datetime.date.today()))
-        self.ent_inv_date.pack(side=tk.LEFT, padx=5)
-        
-        self.var_tax_inc = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f_date, text="Tax Inc.", variable=self.var_tax_inc).pack(side=tk.LEFT, padx=5)
-
         # Update Button
         self.btn_update = ttk.Button(right_pane, text="CONFIRM UPDATE", command=self._confirm_update, style="Accent.TButton")
         self.btn_update.pack(fill=tk.X, pady=(20, 10))
@@ -2030,15 +2028,12 @@ class StatusScreen(BaseScreen):
         status = self.var_status.get()
         if status == "OUT":
             self.frame_buyer.pack(fill=tk.X, pady=10)
-            self.frame_inv_opts.pack(fill=tk.X, pady=5) # Show Invoice Opts
             self.btn_update.config(text="CONFIRM SALE")
         elif status == "RTN":
             self.frame_buyer.pack_forget()
-            self.frame_inv_opts.pack_forget() # Hide
             self.btn_update.config(text="CONFIRM RETURN")
         else:
             self.frame_buyer.pack_forget()
-            self.frame_inv_opts.pack_forget() # Hide
             self.btn_update.config(text="CONFIRM STOCK IN")
 
     def _pick_from_list(self, matches):
