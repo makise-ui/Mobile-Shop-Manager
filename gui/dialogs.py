@@ -12,7 +12,7 @@ class MapColumnsDialog(tk.Toplevel):
         self.current_mapping = current_mapping or {}
         
         self.mappings = {}
-        self.canonical_fields = ['imei', 'model', 'ram_rom', 'price', 'supplier', 'notes', 'status', 'color', 'buyer', 'buyer_contact']
+        self.canonical_fields = ['imei', 'model', 'ram_rom', 'price', 'supplier', 'notes', 'status', 'color', 'buyer', 'buyer_contact', 'grade', 'condition']
         
         self.sheet_names = []
         self.current_sheet = None
