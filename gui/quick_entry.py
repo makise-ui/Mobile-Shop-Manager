@@ -200,14 +200,14 @@ class QuickEntryScreen(ttk.Frame):
                 self.lbl_status.config(text="Model not found.", foreground="orange")
 
     def _create_new_file(self):
-        name = simpledialog.askstring("New File", "Enter filename (e.g. Stock_Jan.xlsx):")
-        if not name: return
-        
-        if not name.endswith('.xlsx'): name += '.xlsx'
-        
-        # Check output folder
-        folder = self.app.app_config.get('output_folder', '.')
-        path = os.path.join(folder, name)
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            title="Create New Inventory File",
+            defaultextension=".xlsx",
+            filetypes=[("Excel Files", "*.xlsx")],
+            initialdir=self.app.app_config.get('output_folder', '.')
+        )
+        if not path: return
         
         if os.path.exists(path):
             messagebox.showerror("Error", "File already exists!")
@@ -241,8 +241,8 @@ class QuickEntryScreen(ttk.Frame):
             
             # Refresh
             self._refresh_files()
-            self.combo_file.set(path)
-            messagebox.showinfo("Success", f"Created {name}")
+            self.target_file_key.set(path)
+            messagebox.showinfo("Success", f"Created {os.path.basename(path)}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create file: {e}")
