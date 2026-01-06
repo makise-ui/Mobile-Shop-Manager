@@ -1462,11 +1462,21 @@ class AnalyticsScreen(BaseScreen):
         self.brand_inner = ttk.Frame(self.brand_frame, padding=15)
         self.brand_inner.pack(fill=tk.BOTH, expand=True)
 
-        # Right Column: Top Buyers
+        # Right Column: Top Buyers (Scrollable)
         self.buyer_frame = ttk.LabelFrame(charts_frame, text=" Top Buyers Performance ", bootstyle="primary")
         self.buyer_frame.grid(row=0, column=1, sticky=tk.NSEW, padx=(10, 0))
-        self.buyer_inner = ttk.Frame(self.buyer_frame, padding=15)
-        self.buyer_inner.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollable container for buyers
+        b_canvas = tk.Canvas(self.buyer_frame, borderwidth=0, highlightthickness=0, height=200)
+        b_scroll = ttk.Scrollbar(self.buyer_frame, orient="vertical", command=b_canvas.yview)
+        self.buyer_inner = ttk.Frame(b_canvas, padding=10)
+        
+        self.buyer_inner.bind("<Configure>", lambda e: b_canvas.configure(scrollregion=b_canvas.bbox("all")))
+        b_canvas.create_window((0, 0), window=self.buyer_inner, anchor="nw")
+        b_canvas.configure(yscrollcommand=b_scroll.set)
+        
+        b_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        b_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         charts_frame.columnconfigure(0, weight=1)
         charts_frame.columnconfigure(1, weight=1)
@@ -1527,17 +1537,19 @@ class AnalyticsScreen(BaseScreen):
 
     def _show_buyer_history(self, buyer_name):
         """Populates the detail tree when a buyer is clicked."""
-        self.history_frame.config(text=f" Purchase History: {buyer_name} ")
+        clean_name = str(buyer_name).strip()
+        self.history_frame.config(text=f" Purchase History: {clean_name} ")
         for item in self.tree_history.get_children(): self.tree_history.delete(item)
         
         if hasattr(self, 'sold_data') and not self.sold_data.empty:
-            matches = self.sold_data[self.sold_data['buyer'] == buyer_name]
+            # Case-insensitive stripped match
+            matches = self.sold_data[self.sold_data['buyer'].astype(str).str.strip().str.lower() == clean_name.lower()]
             for _, row in matches.iterrows():
                 self.tree_history.insert('', tk.END, values=(
                     row.get('model', 'Unknown'),
                     row.get('imei', '-'),
                     f"₹{row.get('price', 0):,.0f}",
-                    row.get('last_updated', '-')[:10] # Just Date
+                    str(row.get('last_updated', '-'))[:10]
                 ))
 
     def refresh(self):
@@ -1579,31 +1591,38 @@ class AnalyticsScreen(BaseScreen):
 
         # 3. Top Buyers (Rankings - Clickable!)
         for w in self.buyer_inner.winfo_children(): w.destroy()
+        self.buyer_widgets = [] # To allow highlighting
+        
         if not sold_df.empty:
-            buyer_stats = sold_df.groupby('buyer').agg({'unique_id': 'count', 'price': 'sum'}).sort_values('price', ascending=False).head(5)
+            # Important: group by stripped name to avoid duplicates
+            temp_sold = sold_df.copy()
+            temp_sold['buyer_clean'] = temp_sold['buyer'].astype(str).str.strip()
+            buyer_stats = temp_sold.groupby('buyer_clean').agg({'unique_id': 'count', 'price': 'sum'}).sort_values('price', ascending=False).head(15) # Show more since scrollable
             
             for buyer, row in buyer_stats.iterrows():
                 f = ttk.Frame(self.buyer_inner, cursor="hand2")
-                f.pack(fill=tk.X, pady=5)
+                f.pack(fill=tk.X, pady=2)
                 
-                # Highlight effect on click
-                def on_click(event, b=buyer): 
+                def on_click(event, b=buyer, frame=f): 
+                    # Reset all highlights
+                    for bf in self.buyer_widgets: frame.master.nametowidget(bf).configure(bootstyle="default") # Simple reset?
+                    # Actually just call history
                     self._show_buyer_history(b)
                 
-                name_lbl = ttk.Label(f, text=f"👤 {str(buyer)[:15]}", font=('Segoe UI', 10))
-                name_lbl.pack(side=tk.LEFT)
+                name_lbl = ttk.Label(f, text=f"👤 {str(buyer)[:20]}", font=('Segoe UI', 10))
+                name_lbl.pack(side=tk.LEFT, padx=5)
                 
                 price_lbl = ttk.Label(f, text=f"₹{row['price']:,.0f}", bootstyle="primary")
-                price_lbl.pack(side=tk.RIGHT)
+                price_lbl.pack(side=tk.RIGHT, padx=5)
                 
-                count_lbl = ttk.Label(f, text=f"{int(row['unique_id'])} items | ", foreground="gray")
-                count_lbl.pack(side=tk.RIGHT)
+                count_lbl = ttk.Label(f, text=f"{int(row['unique_id'])} items", foreground="gray")
+                count_lbl.pack(side=tk.RIGHT, padx=5)
                 
-                # Bind clicks to frame and all labels inside it
-                f.bind("<Button-1>", on_click)
-                name_lbl.bind("<Button-1>", on_click)
-                price_lbl.bind("<Button-1>", on_click)
-                count_lbl.bind("<Button-1>", on_click)
+                # Bindings
+                for widget in [f, name_lbl, price_lbl, count_lbl]:
+                    widget.bind("<Button-1>", on_click)
+                
+                self.buyer_widgets.append(f)
         else:
             ttk.Label(self.buyer_inner, text="No sales data recorded yet.", foreground="gray").pack(pady=20)
 
@@ -1618,6 +1637,7 @@ class AnalyticsScreen(BaseScreen):
             
             for model, row in model_summary.iterrows():
                 self.tree_details.insert('', tk.END, values=(model, int(row['in_stock']), int(row['sold']), f"₹{row['avg_price']:,.0f}"))
+
 
 
     def _export_pdf(self):
