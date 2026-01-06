@@ -1471,9 +1471,27 @@ class AnalyticsScreen(BaseScreen):
         charts_frame.columnconfigure(0, weight=1)
         charts_frame.columnconfigure(1, weight=1)
 
-        # --- Row 3: Detail Tables ---
+        # --- Row 3: Buyer Details (Interactive) ---
+        self.history_frame = ttk.LabelFrame(self.scroll_frame, text=" Buyer Purchase History ", bootstyle="warning")
+        self.history_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        h_inner = ttk.Frame(self.history_frame, padding=10)
+        h_inner.pack(fill=tk.X)
+
+        cols_h = ('model', 'imei', 'price', 'date')
+        self.tree_history = ttk.Treeview(h_inner, columns=cols_h, show='headings', height=5)
+        self.tree_history.heading('model', text='Model Name')
+        self.tree_history.heading('imei', text='IMEI / Serial')
+        self.tree_history.heading('price', text='Sale Price')
+        self.tree_history.heading('date', text='Date')
+        
+        self.tree_history.column('model', width=250)
+        self.tree_history.column('price', width=100, anchor='e')
+        self.tree_history.pack(fill=tk.X)
+
+        # --- Row 4: Detail Tables ---
         detail_frame = ttk.LabelFrame(self.scroll_frame, text=" Model-Wise Stock Analysis ", bootstyle="secondary")
-        detail_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        detail_frame.pack(fill=tk.X, padx=20, pady=20)
         
         detail_inner = ttk.Frame(detail_frame, padding=10)
         detail_inner.pack(fill=tk.BOTH, expand=True)
@@ -1507,6 +1525,21 @@ class AnalyticsScreen(BaseScreen):
     def on_show(self):
         self.refresh()
 
+    def _show_buyer_history(self, buyer_name):
+        """Populates the detail tree when a buyer is clicked."""
+        self.history_frame.config(text=f" Purchase History: {buyer_name} ")
+        for item in self.tree_history.get_children(): self.tree_history.delete(item)
+        
+        if hasattr(self, 'sold_data') and not self.sold_data.empty:
+            matches = self.sold_data[self.sold_data['buyer'] == buyer_name]
+            for _, row in matches.iterrows():
+                self.tree_history.insert('', tk.END, values=(
+                    row.get('model', 'Unknown'),
+                    row.get('imei', '-'),
+                    f"₹{row.get('price', 0):,.0f}",
+                    row.get('last_updated', '-')[:10] # Just Date
+                ))
+
     def refresh(self):
         stats = self.analytics.get_summary()
         df = self.app.inventory.get_inventory()
@@ -1517,6 +1550,8 @@ class AnalyticsScreen(BaseScreen):
         
         # Calculate Revenue (Price of Sold items)
         sold_df = df[df['status'] == 'OUT']
+        self.sold_data = sold_df # Store for interaction
+        
         revenue = sold_df['price'].sum() if not sold_df.empty else 0
         self.kpi_revenue.config(text=f"₹{revenue:,.0f}")
         
@@ -1524,10 +1559,9 @@ class AnalyticsScreen(BaseScreen):
         p_color = "success" if p_val >= 0 else "danger"
         self.kpi_profit.config(text=f"₹{p_val:,.0f}", bootstyle=p_color)
 
-        # 2. Update Brand Distribution (Bar Chart)
+        # 2. Update Brand Distribution
         for w in self.brand_inner.winfo_children(): w.destroy()
         if not df.empty:
-            # Extract brand (first word)
             df['brand'] = df['model'].apply(lambda x: str(x).split()[0].upper())
             brand_counts = df['brand'].value_counts().head(6)
             max_val = brand_counts.max() if not brand_counts.empty else 1
@@ -1536,39 +1570,46 @@ class AnalyticsScreen(BaseScreen):
                 f = ttk.Frame(self.brand_inner)
                 f.pack(fill=tk.X, pady=5)
                 ttk.Label(f, text=f"{brand:<12}", font=('Consolas', 10)).pack(side=tk.LEFT)
-                
-                # Custom Bar
                 bar_container = ttk.Frame(f, height=15, bootstyle="secondary")
                 bar_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
-                
                 pct = (count / max_val)
                 bar = ttk.Frame(bar_container, height=15, bootstyle="info")
                 bar.place(relx=0, rely=0, relwidth=pct, relheight=1)
-                
                 ttk.Label(f, text=str(count), font=('bold')).pack(side=tk.RIGHT)
 
-        # 3. Top Buyers (Rankings)
+        # 3. Top Buyers (Rankings - Clickable!)
         for w in self.buyer_inner.winfo_children(): w.destroy()
         if not sold_df.empty:
             buyer_stats = sold_df.groupby('buyer').agg({'unique_id': 'count', 'price': 'sum'}).sort_values('price', ascending=False).head(5)
             
             for buyer, row in buyer_stats.iterrows():
-                f = ttk.Frame(self.buyer_inner)
+                f = ttk.Frame(self.buyer_inner, cursor="hand2")
                 f.pack(fill=tk.X, pady=5)
                 
-                icon = "👤"
-                name = (str(buyer)[:15] + '..') if len(str(buyer)) > 15 else buyer
-                ttk.Label(f, text=f"{icon} {name}", font=('Segoe UI', 10)).pack(side=tk.LEFT)
+                # Highlight effect on click
+                def on_click(event, b=buyer): 
+                    self._show_buyer_history(b)
                 
-                ttk.Label(f, text=f"₹{row['price']:,.0f}", bootstyle="primary").pack(side=tk.RIGHT)
-                ttk.Label(f, text=f"{int(row['unique_id'])} items | ", foreground="gray").pack(side=tk.RIGHT)
+                name_lbl = ttk.Label(f, text=f"👤 {str(buyer)[:15]}", font=('Segoe UI', 10))
+                name_lbl.pack(side=tk.LEFT)
+                
+                price_lbl = ttk.Label(f, text=f"₹{row['price']:,.0f}", bootstyle="primary")
+                price_lbl.pack(side=tk.RIGHT)
+                
+                count_lbl = ttk.Label(f, text=f"{int(row['unique_id'])} items | ", foreground="gray")
+                count_lbl.pack(side=tk.RIGHT)
+                
+                # Bind clicks to frame and all labels inside it
+                f.bind("<Button-1>", on_click)
+                name_lbl.bind("<Button-1>", on_click)
+                price_lbl.bind("<Button-1>", on_click)
+                count_lbl.bind("<Button-1>", on_click)
         else:
             ttk.Label(self.buyer_inner, text="No sales data recorded yet.", foreground="gray").pack(pady=20)
 
         # 4. Details Tree
         for item in self.tree_details.get_children(): self.tree_details.delete(item)
         if not df.empty:
-            # Group by Model
             model_summary = df.groupby('model').apply(lambda x: pd.Series({
                 'in_stock': (x['status'] == 'IN').sum(),
                 'sold': (x['status'] == 'OUT').sum(),
@@ -1577,6 +1618,7 @@ class AnalyticsScreen(BaseScreen):
             
             for model, row in model_summary.iterrows():
                 self.tree_details.insert('', tk.END, values=(model, int(row['in_stock']), int(row['sold']), f"₹{row['avg_price']:,.0f}"))
+
 
     def _export_pdf(self):
         # Implementation remains similar but with richer data
