@@ -1894,6 +1894,8 @@ UNIQUE ID   : {row.get('unique_id')}
 IMEI        : {row.get('imei')}
 RAM/ROM     : {row.get('ram_rom')}
 COLOR       : {row.get('color')}
+GRADE       : {row.get('grade', '-')}
+CONDITION   : {row.get('condition', '-')}
 SUPPLIER    : {row.get('supplier')}
 
 BUY PRICE   : ₹{row.get('price_original', 0):,.2f}
