@@ -1624,9 +1624,21 @@ class SettingsScreen(BaseScreen):
         tab_app = ttk.Frame(tabs, padding=20)
         tabs.add(tab_app, text="Appearance")
         
-        ttk.Label(tab_app, text="Theme:", font=('bold')).pack(anchor=tk.W)
-        themes = self.style.theme_names()
-        current = self.app.app_config.get('theme_name', 'cosmo')
+                ttk.Label(tab_app, text="Theme:", font=('bold')).pack(anchor=tk.W)
+        
+                
+        
+                # Ensure full sorted list of themes
+        
+                themes = sorted(self.style.theme_names())
+        
+                current = self.app.app_config.get('theme_name', 'cosmo')
+        
+                
+        
+                # Helper label for dark mode
+        
+                ttk.Label(tab_app, text="(Try 'darkly', 'superhero', 'cyborg' for Dark Mode)", font=('Segoe UI', 9), foreground='gray').pack(anchor=tk.W, pady=(0,5))
         self.var_theme = tk.StringVar(value=current)
         
         cb = ttk.Combobox(tab_app, textvariable=self.var_theme, values=themes, state="readonly", width=20)
