@@ -1428,50 +1428,80 @@ class AnalyticsScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Business Analytics Dashboard", font=('Segoe UI', 16, 'bold')).pack(pady=10)
-        
-        # 1. KPI Cards
-        kpi_frame = ttk.Frame(self)
-        kpi_frame.pack(fill=tk.X, pady=10)
-        
-        self.card_stock = self._create_card(kpi_frame, "Total Stock", "0")
-        self.card_val = self._create_card(kpi_frame, "Stock Value", "₹0")
-        self.card_sold = self._create_card(kpi_frame, "Total Sold", "0")
-        self.card_profit = self._create_card(kpi_frame, "Net Profit (Sold)", "₹0")
-        
-        # 2. Detailed Stats (Split View)
-        split_frame = tk.PanedWindow(self, orient=tk.HORIZONTAL)
-        split_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Top Models Table
-        frame_models = ttk.LabelFrame(split_frame, text="Top Selling / Stocked Models")
-        split_frame.add(frame_models, minsize=300)
-        
-        cols = ('model', 'count')
-        self.tree_models = ttk.Treeview(frame_models, columns=cols, show='headings')
-        self.tree_models.heading('model', text='Model Name')
-        self.tree_models.heading('count', text='Count')
-        self.tree_models.pack(fill=tk.BOTH, expand=True)
-        
-        # Supplier Stats (Simple Text for now or Graph placeholder)
-        frame_supp = ttk.LabelFrame(split_frame, text="Supplier Performance")
-        split_frame.add(frame_supp, minsize=250)
-        
-        self.txt_supp = tk.Text(frame_supp, font=('Consolas', 10), state='disabled')
-        self.txt_supp.pack(fill=tk.BOTH, expand=True)
+        # Main Scrollable Container (in case of small screens)
+        canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        self.scroll_frame = ttk.Frame(canvas)
 
-        # 3. Actions
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=10)
-        ttk.Button(btn_frame, text="Refresh Dashboard", command=self.refresh).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="Export Detailed Report (PDF)", command=self._export_pdf).pack(side=tk.RIGHT)
+        self.scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-    def _create_card(self, parent, title, value):
-        frame = ttk.Frame(parent, relief=tk.RAISED, borderwidth=1)
-        frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
-        ttk.Label(frame, text=title, font=('Segoe UI', 10)).pack(pady=(5,0))
-        lbl_val = ttk.Label(frame, text=value, font=('Segoe UI', 14, 'bold'), foreground='#007acc')
-        lbl_val.pack(pady=(0,5))
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Title
+        ttk.Label(self.scroll_frame, text="Business Intelligence Dashboard", font=('Segoe UI', 20, 'bold'), bootstyle="primary").pack(pady=20, padx=20, anchor=tk.W)
+
+        # --- Row 1: KPI Cards ---
+        kpi_container = ttk.Frame(self.scroll_frame)
+        kpi_container.pack(fill=tk.X, padx=20, pady=10)
+
+        self.kpi_stock = self._add_kpi_card(kpi_container, "STOCK VALUE", "₹0", "success")
+        self.kpi_sold = self._add_kpi_card(kpi_container, "ITEMS SOLD", "0", "info")
+        self.kpi_revenue = self._add_kpi_card(kpi_container, "TOTAL REVENUE", "₹0", "primary")
+        self.kpi_profit = self._add_kpi_card(kpi_container, "EST. PROFIT", "₹0", "warning")
+
+        # --- Row 2: Charts & Rankings ---
+        charts_frame = ttk.Frame(self.scroll_frame)
+        charts_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Left Column: Brand Distribution
+        self.brand_frame = ttk.LabelFrame(charts_frame, text=" Brand Distribution ", bootstyle="info")
+        self.brand_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 10))
+        self.brand_inner = ttk.Frame(self.brand_frame, padding=15)
+        self.brand_inner.pack(fill=tk.BOTH, expand=True)
+
+        # Right Column: Top Buyers
+        self.buyer_frame = ttk.LabelFrame(charts_frame, text=" Top Buyers Performance ", bootstyle="primary")
+        self.buyer_frame.grid(row=0, column=1, sticky=tk.NSEW, padx=(10, 0))
+        self.buyer_inner = ttk.Frame(self.buyer_frame, padding=15)
+        self.buyer_inner.pack(fill=tk.BOTH, expand=True)
+
+        charts_frame.columnconfigure(0, weight=1)
+        charts_frame.columnconfigure(1, weight=1)
+
+        # --- Row 3: Detail Tables ---
+        detail_frame = ttk.LabelFrame(self.scroll_frame, text=" Model-Wise Stock Analysis ", bootstyle="secondary")
+        detail_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        detail_inner = ttk.Frame(detail_frame, padding=10)
+        detail_inner.pack(fill=tk.BOTH, expand=True)
+
+        cols = ('model', 'in_stock', 'sold', 'avg_price')
+        self.tree_details = ttk.Treeview(detail_inner, columns=cols, show='headings', height=8)
+        self.tree_details.heading('model', text='Model Name')
+        self.tree_details.heading('in_stock', text='In Stock')
+        self.tree_details.heading('sold', text='Sold')
+        self.tree_details.heading('avg_price', text='Avg. Selling Price')
+        self.tree_details.pack(fill=tk.BOTH, expand=True)
+
+        # Actions
+        btn_frame = ttk.Frame(self.scroll_frame, padding=20)
+        btn_frame.pack(fill=tk.X)
+        ttk.Button(btn_frame, text="REFRESH DASHBOARD", command=self.refresh, bootstyle="success-outline", width=25).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="EXPORT ANALYTICS (PDF)", command=self._export_pdf, bootstyle="danger-outline").pack(side=tk.RIGHT)
+
+    def _add_kpi_card(self, parent, title, value, color):
+        card = ttk.Frame(parent, bootstyle=f"{color}.TFrame", padding=1) # Border effect
+        card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        
+        inner = ttk.Frame(card, padding=15)
+        inner.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(inner, text=title, font=('Segoe UI', 9, 'bold'), foreground="gray").pack(anchor=tk.W)
+        lbl_val = ttk.Label(inner, text=value, font=('Segoe UI', 18, 'bold'), bootstyle=color)
+        lbl_val.pack(anchor=tk.W, pady=(5, 0))
         return lbl_val
 
     def on_show(self):
@@ -1479,45 +1509,78 @@ class AnalyticsScreen(BaseScreen):
 
     def refresh(self):
         stats = self.analytics.get_summary()
-        s_counts = stats.get('status_counts', {})
+        df = self.app.inventory.get_inventory()
+
+        # 1. Update KPIs
+        self.kpi_stock.config(text=f"₹{stats['total_value']:,.0f}")
+        self.kpi_sold.config(text=str(stats.get('status_counts', {}).get('OUT', 0)))
         
-        # RTN is now "Return to Supplier", so it is NOT in stock.
-        total_in = s_counts.get('IN', 0)
-        total_out = s_counts.get('OUT', 0)
-        total_rtn = s_counts.get('RTN', 0)
+        # Calculate Revenue (Price of Sold items)
+        sold_df = df[df['status'] == 'OUT']
+        revenue = sold_df['price'].sum() if not sold_df.empty else 0
+        self.kpi_revenue.config(text=f"₹{revenue:,.0f}")
         
-        # Update Cards
-        # Show RTN separately or just ignore? 
-        # User said "treat as sent to supplier".
-        # Let's maybe show it in tooltip or just stick to "Stock" = IN.
-        self.card_stock.config(text=str(total_in))
-        self.card_val.config(text=f"₹{stats['total_value']:,.0f}")
-        self.card_sold.config(text=str(total_out))
-        
-        # We could show RTN count somewhere, but for now strict "Stock" is IN.
-        
-        p_color = 'green' if stats['realized_profit'] >= 0 else 'red'
-        self.card_profit.config(text=f"₹{stats['realized_profit']:,.0f}", foreground=p_color)
-        
-        # Update Tree
-        for item in self.tree_models.get_children():
-            self.tree_models.delete(item)
+        p_val = stats['realized_profit']
+        p_color = "success" if p_val >= 0 else "danger"
+        self.kpi_profit.config(text=f"₹{p_val:,.0f}", bootstyle=p_color)
+
+        # 2. Update Brand Distribution (Bar Chart)
+        for w in self.brand_inner.winfo_children(): w.destroy()
+        if not df.empty:
+            # Extract brand (first word)
+            df['brand'] = df['model'].apply(lambda x: str(x).split()[0].upper())
+            brand_counts = df['brand'].value_counts().head(6)
+            max_val = brand_counts.max() if not brand_counts.empty else 1
             
-        for m, c in stats['top_models'].items():
-            self.tree_models.insert('', tk.END, values=(m, c))
+            for brand, count in brand_counts.items():
+                f = ttk.Frame(self.brand_inner)
+                f.pack(fill=tk.X, pady=5)
+                ttk.Label(f, text=f"{brand:<12}", font=('Consolas', 10)).pack(side=tk.LEFT)
+                
+                # Custom Bar
+                bar_container = ttk.Frame(f, height=15, bootstyle="secondary")
+                bar_container.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+                
+                pct = (count / max_val)
+                bar = ttk.Frame(bar_container, height=15, bootstyle="info")
+                bar.place(relx=0, rely=0, relwidth=pct, relheight=1)
+                
+                ttk.Label(f, text=str(count), font=('bold')).pack(side=tk.RIGHT)
+
+        # 3. Top Buyers (Rankings)
+        for w in self.buyer_inner.winfo_children(): w.destroy()
+        if not sold_df.empty:
+            buyer_stats = sold_df.groupby('buyer').agg({'unique_id': 'count', 'price': 'sum'}).sort_values('price', ascending=False).head(5)
             
-        # Update Supplier Text
-        supp_txt = ""
-        for s, c in stats['supplier_dist'].items():
-            supp_txt += f"{s:<20} : {c}\n"
+            for buyer, row in buyer_stats.iterrows():
+                f = ttk.Frame(self.buyer_inner)
+                f.pack(fill=tk.X, pady=5)
+                
+                icon = "👤"
+                name = (str(buyer)[:15] + '..') if len(str(buyer)) > 15 else buyer
+                ttk.Label(f, text=f"{icon} {name}", font=('Segoe UI', 10)).pack(side=tk.LEFT)
+                
+                ttk.Label(f, text=f"₹{row['price']:,.0f}", bootstyle="primary").pack(side=tk.RIGHT)
+                ttk.Label(f, text=f"{int(row['unique_id'])} items | ", foreground="gray").pack(side=tk.RIGHT)
+        else:
+            ttk.Label(self.buyer_inner, text="No sales data recorded yet.", foreground="gray").pack(pady=20)
+
+        # 4. Details Tree
+        for item in self.tree_details.get_children(): self.tree_details.delete(item)
+        if not df.empty:
+            # Group by Model
+            model_summary = df.groupby('model').apply(lambda x: pd.Series({
+                'in_stock': (x['status'] == 'IN').sum(),
+                'sold': (x['status'] == 'OUT').sum(),
+                'avg_price': x['price'].mean()
+            }), include_groups=False).sort_values('in_stock', ascending=False).head(20)
             
-        self.txt_supp.configure(state='normal')
-        self.txt_supp.delete(1.0, tk.END)
-        self.txt_supp.insert(tk.END, supp_txt)
-        self.txt_supp.configure(state='disabled')
+            for model, row in model_summary.iterrows():
+                self.tree_details.insert('', tk.END, values=(model, int(row['in_stock']), int(row['sold']), f"₹{row['avg_price']:,.0f}"))
 
     def _export_pdf(self):
-        f = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile="Analytics_Report.pdf")
+        # Implementation remains similar but with richer data
+        f = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"Analytics_{datetime.date.today()}.pdf")
         if not f: return
         
         from reportlab.pdfgen import canvas
@@ -1525,32 +1588,50 @@ class AnalyticsScreen(BaseScreen):
         from reportlab.lib.units import mm
         
         c = canvas.Canvas(f, pagesize=A4)
-        width, height = A4
+        w, h = A4
         
-        c.setFont("Helvetica-Bold", 18)
-        c.drawString(20*mm, height - 20*mm, "Business Analytics Report")
+        # Header
+        c.setFont("Helvetica-Bold", 20)
+        c.setStrokeColorRGB(0, 0.48, 0.8) # Primary Blue
+        c.drawString(20*mm, h - 25*mm, "Business Performance Report")
+        c.line(20*mm, h-28*mm, 190*mm, h-28*mm)
         
-        c.setFont("Helvetica", 12)
-        c.drawString(20*mm, height - 30*mm, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}")
-        
-        stats = self.analytics.get_summary()
-        
-        # Summary
-        y = height - 50*mm
-        c.drawString(20*mm, y, f"Total Items: {stats['total_items']}")
-        c.drawString(20*mm, y-10*mm, f"Total Stock Value: Rs. {stats['total_value']:,.2f}")
-        c.drawString(20*mm, y-20*mm, f"Total Sold: {stats.get('status_counts', {}).get('OUT', 0)}")
-        c.drawString(20*mm, y-30*mm, f"Net Profit (Realized): Rs. {stats['realized_profit']:,.2f}")
-        
-        c.drawString(20*mm, y-50*mm, "Top Models:")
-        y_mod = y - 60*mm
         c.setFont("Helvetica", 10)
-        for m, count in stats['top_models'].items():
-            c.drawString(25*mm, y_mod, f"- {m}: {count}")
-            y_mod -= 5*mm
-            
+        c.drawString(20*mm, h - 35*mm, f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+        stats = self.analytics.get_summary()
+        df = self.app.inventory.get_inventory()
+        
+        # Stats Grid
+        y = h - 50*mm
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(25*mm, y, "FINANCIAL SUMMARY")
+        
+        c.setFont("Helvetica", 11)
+        y -= 10*mm
+        c.drawString(25*mm, y, f"Total Inventory Value : Rs. {stats['total_value']:,.2f}")
+        y -= 7*mm
+        c.drawString(25*mm, y, f"Total Items in Stock : {stats.get('status_counts', {}).get('IN', 0)}")
+        y -= 7*mm
+        c.drawString(25*mm, y, f"Total Items Sold     : {stats.get('status_counts', {}).get('OUT', 0)}")
+        y -= 7*mm
+        c.drawString(25*mm, y, f"Net Realized Profit  : Rs. {stats['realized_profit']:,.2f}")
+
+        # Top Models
+        y -= 20*mm
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(25*mm, y, "TOP STOCKING MODELS")
+        c.setFont("Helvetica", 10)
+        y -= 8*mm
+        for m, count in list(stats['top_models'].items())[:10]:
+            c.drawString(30*mm, y, f"• {m:<30} : {count} units")
+            y -= 6*mm
+            if y < 30*mm: break
+
+        c.showPage()
         c.save()
-        messagebox.showinfo("Export", "Report saved successfully.")
+        messagebox.showinfo("Export Success", f"Analytics report saved to:\n{f}")
+
 
 # --- Settings Screen ---
 class SettingsScreen(BaseScreen):
