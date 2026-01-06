@@ -23,7 +23,11 @@ from gui.dialogs import SettingsDialog, SplashScreen, WelcomeDialog, ConflictRes
 
 class MainApp(tb.Window):
     def __init__(self):
-        super().__init__(themename="cosmo")
+        # Load Theme from Config
+        conf = ConfigManager()
+        theme = conf.get('theme_name', 'cosmo')
+        
+        super().__init__(themename=theme)
         self.title(f"4 Bros Mobile Manager v{APP_VERSION}")
         self.geometry("1100x700")
         
