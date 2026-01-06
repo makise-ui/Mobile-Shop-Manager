@@ -215,21 +215,21 @@ class QuickEntryScreen(ttk.Frame):
             
         # Create Empty Excel with standard headers
         try:
-            df = pd.DataFrame(columns=["IMEI", "Model", "RAM/ROM", "Color", "Price", "Supplier", "Grade", "Condition", "Status"])
+            headers = ["S.NO", "MODEL NAME", "RAM/ROM", "IMEI NO", "RATE", "STATUS", "BUYERS", "COLOR", "GRADE", "CONDITION"]
+            df = pd.DataFrame(columns=headers)
             df.to_excel(path, index=False)
             
             # Add to mapping
-            # Auto-map standard columns since we created them
             mapping = {
-                "IMEI": "imei",
-                "Model": "model",
+                "MODEL NAME": "model",
                 "RAM/ROM": "ram_rom",
-                "Color": "color",
-                "Price": "price",
-                "Supplier": "supplier",
-                "Grade": "grade",
-                "Condition": "condition",
-                "Status": "status"
+                "IMEI NO": "imei",
+                "RATE": "price",
+                "STATUS": "status",
+                "BUYERS": "buyer",
+                "COLOR": "color",
+                "GRADE": "grade",
+                "CONDITION": "condition"
             }
             save_data = {
                 "file_path": path,
