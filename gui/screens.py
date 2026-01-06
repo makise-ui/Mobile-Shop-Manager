@@ -6,6 +6,8 @@ import pandas as pd
 import datetime
 import os
 import glob
+import ttkbootstrap as tb
+from ttkbootstrap.toast import ToastNotification
 
 # --- Base Screen Class ---
 class BaseScreen(ttk.Frame):
@@ -1554,133 +1556,75 @@ class AnalyticsScreen(BaseScreen):
 class SettingsScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
-        self.vars = {}
-        self.text_widgets = {}
-        
-        # Scrollable Canvas for Settings if it gets too long
-        canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        self.form = scrollable_frame
-        self._init_form()
+        self.style = tb.Style()
+        self._init_ui()
 
     def _init_ui(self):
-        pass # Using _init_form called above
-
-    def _init_form(self):
-        ttk.Label(self.form, text="Application Settings", font=('Segoe UI', 16, 'bold')).pack(pady=10, anchor=tk.W, padx=20)
+        ttk.Label(self, text="Application Settings", font=('Segoe UI', 16, 'bold')).pack(pady=20)
         
-        # --- Group 1: General App ---
-        frame_gen = ttk.LabelFrame(self.form, text="General & Printing", padding=15)
-        frame_gen.pack(fill=tk.X, padx=20, pady=10)
+        # Tabs
+        tabs = ttk.Notebook(self)
+        tabs.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
-        gen_fields = [
-            ("Store Name", "store_name"),
-            ("Label Width (mm)", "label_width_mm"),
-            ("Label Height (mm)", "label_height_mm"),
-            ("Auto Unique ID Prefix", "auto_unique_id_prefix"),
-            ("Price Markup %", "price_markup_percent"),
-            ("Theme Color (Hex)", "theme_color"),
-            ("UI Font Size", "font_size_ui")
-        ]
+        # Tab 1: General
+        tab_gen = ttk.Frame(tabs, padding=20)
+        tabs.add(tab_gen, text="General")
         
-        for idx, (lbl, key) in enumerate(gen_fields):
-            ttk.Label(frame_gen, text=lbl).grid(row=idx, column=0, sticky=tk.W, pady=5)
-            var = tk.StringVar()
-            self.vars[key] = var
-            ttk.Entry(frame_gen, textvariable=var, width=30).grid(row=idx, column=1, pady=5, padx=10)
-
-        # Toggle
-        self.var_buyer_track = tk.BooleanVar()
-        ttk.Checkbutton(frame_gen, text="Enable Buyer Tracking (Save to Excel)", variable=self.var_buyer_track).grid(row=len(gen_fields), column=0, columnspan=2, pady=10, sticky=tk.W)
-
-        # --- Group 2: Invoice Details ---
-        frame_inv = ttk.LabelFrame(self.form, text="Invoice Configuration", padding=15)
-        frame_inv.pack(fill=tk.X, padx=20, pady=10)
+        ttk.Label(tab_gen, text="Store Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.ent_store = ttk.Entry(tab_gen, width=30)
+        self.ent_store.insert(0, self.app.app_config.get('store_name', ''))
+        self.ent_store.grid(row=0, column=1, padx=10)
         
-        # GSTIN & Contact
-        inv_fields = [
-            ("GSTIN", "store_gstin"),
-            ("Phone / Contact", "store_contact"),
-            ("GST Default %", "gst_default_percent")
-        ]
+        # Tab 2: Printing
+        tab_print = ttk.Frame(tabs, padding=20)
+        tabs.add(tab_print, text="Printing")
         
-        r = 0
-        for lbl, key in inv_fields:
-            ttk.Label(frame_inv, text=lbl).grid(row=r, column=0, sticky=tk.W, pady=5)
-            var = tk.StringVar()
-            self.vars[key] = var
-            ttk.Entry(frame_inv, textvariable=var, width=30).grid(row=r, column=1, pady=5, padx=10)
-            r += 1
-            
-        # Address (Text)
-        ttk.Label(frame_inv, text="Store Address:").grid(row=r, column=0, sticky=tk.NW, pady=5)
-        txt_addr = tk.Text(frame_inv, height=4, width=40, font=('Segoe UI', 10))
-        txt_addr.grid(row=r, column=1, pady=5, padx=10)
-        self.text_widgets['store_address'] = txt_addr
-        r += 1
+        ttk.Label(tab_print, text="Label Width (mm):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.ent_w = ttk.Entry(tab_print, width=10)
+        self.ent_w.insert(0, str(self.app.app_config.get('label_width_mm')))
+        self.ent_w.grid(row=0, column=1, padx=10)
         
-        # Terms (Text)
-        ttk.Label(frame_inv, text="Invoice Terms:").grid(row=r, column=0, sticky=tk.NW, pady=5)
-        txt_terms = tk.Text(frame_inv, height=4, width=40, font=('Segoe UI', 10))
-        txt_terms.grid(row=r, column=1, pady=5, padx=10)
-        self.text_widgets['invoice_terms'] = txt_terms
+        ttk.Label(tab_print, text="Label Height (mm):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.ent_h = ttk.Entry(tab_print, width=10)
+        self.ent_h.insert(0, str(self.app.app_config.get('label_height_mm')))
+        self.ent_h.grid(row=1, column=1, padx=10)
+        
+        # Tab 3: Appearance
+        tab_app = ttk.Frame(tabs, padding=20)
+        tabs.add(tab_app, text="Appearance")
+        
+        ttk.Label(tab_app, text="Theme:", font=('bold')).pack(anchor=tk.W)
+        
+        themes = self.style.theme_names()
+        current = self.app.app_config.get('theme_name', 'cosmo')
+        self.var_theme = tk.StringVar(value=current)
+        
+        cb = ttk.Combobox(tab_app, textvariable=self.var_theme, values=themes, state="readonly", width=20)
+        cb.pack(anchor=tk.W, pady=5)
+        cb.bind("<<ComboboxSelected>>", self._on_theme_change)
         
         # Save Button
-        ttk.Button(self.form, text="Save All Changes", command=self._save, style="Accent.TButton").pack(pady=20, anchor=tk.E, padx=20)
+        ttk.Button(self, text="Save All Settings", command=self._save, style="success.TButton").pack(pady=20)
 
-    def on_show(self):
-        # Load values
-        for key, var in self.vars.items():
-            val = self.app.app_config.get(key)
-            var.set(str(val))
-        
-        self.var_buyer_track.set(self.app.app_config.get("enable_buyer_tracking", True))
-        
-        # Load Text widgets
-        for key, widget in self.text_widgets.items():
-            val = self.app.app_config.get(key, "")
-            widget.delete("1.0", tk.END)
-            widget.insert("1.0", str(val))
+    def _on_theme_change(self, event):
+        self.style.theme_use(self.var_theme.get())
 
     def _save(self):
         try:
-            # Validate numeric
-            float(self.vars['label_width_mm'].get())
-            float(self.vars['label_height_mm'].get())
-            float(self.vars['gst_default_percent'].get())
+            self.app.app_config.set('label_width_mm', float(self.ent_w.get()))
+            self.app.app_config.set('label_height_mm', float(self.ent_h.get()))
+            self.app.app_config.set('store_name', self.ent_store.get())
+            self.app.app_config.set('theme_name', self.var_theme.get())
             
-            # Save Vars
-            for key, var in self.vars.items():
-                val = var.get()
-                try:
-                    val = float(val)
-                except:
-                    pass
-                self.app.app_config.set(key, val)
+            ToastNotification(
+                title="Saved", 
+                message="Settings updated successfully.", 
+                duration=3000, 
+                bootstyle="success"
+            ).show_toast()
             
-            # Save Text Widgets
-            for key, widget in self.text_widgets.items():
-                val = widget.get("1.0", tk.END).strip()
-                self.app.app_config.set(key, val)
-            
-            self.app.app_config.set("enable_buyer_tracking", self.var_buyer_track.get())
-                
-            messagebox.showinfo("Saved", "Settings updated successfully.")
         except ValueError:
-            messagebox.showerror("Error", "Please check numeric fields.")# --- Manage Data Screen (Colors & Buyers) ---
+            messagebox.showerror("Error", "Invalid numeric values")# --- Manage Data Screen (Colors & Buyers) ---
 class ManageDataScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
