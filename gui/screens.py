@@ -2555,7 +2555,7 @@ class EditDataScreen(BaseScreen):
             pass # Allow empty or invalid for now, or handle stricter
             
         # Update Inventory
-        success = self.app.inventory.update_item(self.current_id, updates)
+        success = self.app.inventory.update_item_data(self.current_id, updates)
         
         if success:
             # Optional: Show Toast
@@ -2598,13 +2598,6 @@ class EditDataScreen(BaseScreen):
         else:
             items = match.to_dict('records')
             ItemSelectionDialog(self.winfo_toplevel(), items, self._load_item_dict)
-
-        # Update Logic (Need to add generic update_excel_row to inventory)
-        if self.app.inventory.update_item_data(self.current_id, updates):
-            messagebox.showinfo("Success", "Data updated in Excel and Memory.")
-            self.app.inventory.reload_all() # Refresh to be safe
-        else:
-            messagebox.showerror("Error", "Failed to update Excel.")
 
 # --- Help / User Guide Screen ---
 class HelpScreen(BaseScreen):
