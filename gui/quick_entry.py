@@ -170,6 +170,18 @@ class QuickEntryScreen(ttk.Frame):
         val = self.var_imei.get().strip()
         if not val: return
         
+        # Check if it looks like a real IMEI (all digits)
+        # Note: Some IMEIs have '/' if dual, but usually entry is one.
+        # If it has letters or symbols, it's definitely a custom ID.
+        is_real_imei = val.isdigit()
+        
+        if not is_real_imei:
+            # Auto-enable manual entry for custom IDs (e.g. DISPLAY OUT)
+            self.var_manual_model.set(True)
+            self._toggle_model_entry()
+            self.ent_model.focus_set()
+            return
+
         # 1. Move focus immediately to RAM/ROM (Speed!)
         self.ent_ram_rom.focus_set()
         
