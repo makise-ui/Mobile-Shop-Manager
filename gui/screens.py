@@ -993,259 +993,133 @@ class InvoiceHistoryScreen(BaseScreen):
         super().__init__(parent, app_context)
         self._init_ui()
 
-        def _init_ui(self):
+    def _init_ui(self):
+        # Toolbar
+        tb = ttk.Frame(self)
+        tb.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(tb, text="Generated Invoices", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        
+        # Filter Frame
+        f_filter = ttk.LabelFrame(self, text="Filter", padding=5)
+        f_filter.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(f_filter, text="Buyer:").pack(side=tk.LEFT, padx=5)
+        self.ent_filter_buyer = ttk.Entry(f_filter, width=15)
+        self.ent_filter_buyer.pack(side=tk.LEFT, padx=5)
+        self.ent_filter_buyer.bind('<Return>', lambda e: self._refresh_list())
+        
+        ttk.Label(f_filter, text="Date (YYYY-MM-DD):").pack(side=tk.LEFT, padx=5)
+        self.ent_filter_date = ttk.Entry(f_filter, width=12)
+        self.ent_filter_date.pack(side=tk.LEFT, padx=5)
+        self.ent_filter_date.bind('<Return>', lambda e: self._refresh_list())
+        
+        ttk.Button(f_filter, text="Search", command=self._refresh_list).pack(side=tk.LEFT, padx=10)
+        ttk.Button(f_filter, text="Clear", command=self._clear_filters).pack(side=tk.LEFT)
+        
+        ttk.Button(tb, text="Refresh List", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
+        
+        # Actions
+        actions = ttk.Frame(self)
+        actions.pack(fill=tk.X, pady=5)
+        ttk.Button(actions, text="Open PDF", command=self._open_pdf).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions, text="Print", command=self._print_pdf).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions, text="Delete", command=self._delete_invoice).pack(side=tk.LEFT, padx=5)
+        
+        # List
+        cols = ('date', 'name', 'filename', 'size')
+        self.tree = ttk.Treeview(self, columns=cols, show='headings', selectmode='extended')
+        self.tree.heading('date', text='Date')
+        self.tree.column('date', width=120)
+        self.tree.heading('name', text='Customer Name')
+        self.tree.column('name', width=200)
+        self.tree.heading('filename', text='Filename')
+        self.tree.heading('size', text='Size')
+        self.tree.column('size', width=80)
+        
+        self.tree.pack(fill=tk.BOTH, expand=True)
 
-            # Toolbar
+        # --- Verification UI ---
+        ttk.Separator(self, orient='horizontal').pack(fill=tk.X, pady=10)
+        
+        v_frame = ttk.LabelFrame(self, text="Verify Digital Signature", padding=10)
+        v_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        ttk.Label(v_frame, text="Enter Code from Invoice:").pack(side=tk.LEFT)
+        self.ent_verify = ttk.Entry(v_frame, width=30, font=('Courier', 10))
+        self.ent_verify.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(v_frame, text="CHECK VALIDITY", command=self._verify_code, style="Accent.TButton").pack(side=tk.LEFT)
 
-            tb = ttk.Frame(self)
-
-            tb.pack(fill=tk.X, pady=10)
-
+    def _verify_code(self):
+        code = self.ent_verify.get().strip().upper()
+        if not code: return
+        
+        # Load Registry
+        import json
+        from pathlib import Path
+        reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+        
+        if not reg_path.exists():
+            messagebox.showerror("Error", "No invoice registry found. Cannot verify.")
+            return
             
-
-            ttk.Label(tb, text="Generated Invoices", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
-
-            
-
-            # Filter Frame
-
-            f_filter = ttk.LabelFrame(self, text="Filter", padding=5)
-
-            f_filter.pack(fill=tk.X, pady=5)
-
-            
-
-            ttk.Label(f_filter, text="Buyer:").pack(side=tk.LEFT, padx=5)
-
-            self.ent_filter_buyer = ttk.Entry(f_filter, width=15)
-
-            self.ent_filter_buyer.pack(side=tk.LEFT, padx=5)
-
-            self.ent_filter_buyer.bind('<Return>', lambda e: self._refresh_list())
-
-            
-
-            ttk.Label(f_filter, text="Date (YYYY-MM-DD):").pack(side=tk.LEFT, padx=5)
-
-            self.ent_filter_date = ttk.Entry(f_filter, width=12)
-
-            self.ent_filter_date.pack(side=tk.LEFT, padx=5)
-
-            self.ent_filter_date.bind('<Return>', lambda e: self._refresh_list())
-
-            
-
-            ttk.Button(f_filter, text="Search", command=self._refresh_list).pack(side=tk.LEFT, padx=10)
-
-            ttk.Button(f_filter, text="Clear", command=self._clear_filters).pack(side=tk.LEFT)
-
-            
-
-            ttk.Button(tb, text="Refresh List", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
-
-            
-
-            # Actions
-
-            actions = ttk.Frame(self)
-
-            actions.pack(fill=tk.X, pady=5)
-
-            ttk.Button(actions, text="Open PDF", command=self._open_pdf).pack(side=tk.LEFT, padx=5)
-
-            ttk.Button(actions, text="Print", command=self._print_pdf).pack(side=tk.LEFT, padx=5)
-
-            ttk.Button(actions, text="Delete", command=self._delete_invoice).pack(side=tk.LEFT, padx=5)
-
-            
-
-            # List
-
-            cols = ('date', 'name', 'filename', 'size')
-
-            self.tree = ttk.Treeview(self, columns=cols, show='headings', selectmode='extended')
-
-            self.tree.heading('date', text='Date')
-
-            self.tree.column('date', width=120)
-
-            self.tree.heading('name', text='Customer Name')
-
-            self.tree.column('name', width=200)
-
-            self.tree.heading('filename', text='Filename')
-
-            self.tree.heading('size', text='Size')
-
-            self.tree.column('size', width=80)
-
-            
-
-            self.tree.pack(fill=tk.BOTH, expand=True)
-
-    
-
-            # --- Verification UI ---
-
-            ttk.Separator(self, orient='horizontal').pack(fill=tk.X, pady=10)
-
-            
-
-            v_frame = ttk.LabelFrame(self, text="Verify Digital Signature", padding=10)
-
-            v_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-
-            
-
-            ttk.Label(v_frame, text="Enter Code from Invoice:").pack(side=tk.LEFT)
-
-            self.ent_verify = ttk.Entry(v_frame, width=30, font=('Courier', 10))
-
-            self.ent_verify.pack(side=tk.LEFT, padx=10)
-
-            
-
-            ttk.Button(v_frame, text="CHECK VALIDITY", command=self._verify_code, style="Accent.TButton").pack(side=tk.LEFT)
-
-    
-
-        def _verify_code(self):
-
-            code = self.ent_verify.get().strip().upper()
-
-            if not code: return
-
-            
-
-            # Load Registry
-
-            import json
-
-            from pathlib import Path
-
-            reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
-
-            
-
-            if not reg_path.exists():
-
-                messagebox.showerror("Error", "No invoice registry found. Cannot verify.")
-
-                return
-
+        try:
+            with open(reg_path, 'r') as f:
+                registry = json.load(f)
                 
-
-            try:
-
-                with open(reg_path, 'r') as f:
-
-                    registry = json.load(f)
-
-                    
-
-                clean_code = code.replace(" ", "")
-
-                data = registry.get(clean_code)
-
-                if data:
-
-                    msg = f"✅ VALID SIGNATURE\n\nInvoice: {data.get('inv_no')}\nDate: {data.get('date')}\nAmount: {data.get('amount')}\nBuyer: {data.get('buyer')}"
-
-                    messagebox.showinfo("Legit", msg)
-
-                else:
-
-                    messagebox.showerror("FAKE", "❌ INVALID SIGNATURE\n\nThis code does not match any invoice in the system.")
-
-                    
-
-            except Exception as e:
-
-                messagebox.showerror("Error", f"Verification failed: {e}")
-
-    
-
-        def on_show(self):
-
-            self._refresh_list()
-
-    
-
-        def _clear_filters(self):
-
-            self.ent_filter_buyer.delete(0, tk.END)
-
-            self.ent_filter_date.delete(0, tk.END)
-
-            self._refresh_list()
-
-    
-
-        def _refresh_list(self):
-
-            for item in self.tree.get_children():
-
-                self.tree.delete(item)
-
+            clean_code = code.replace(" ", "")
+            data = registry.get(clean_code)
+            if data:
+                msg = f"✅ VALID SIGNATURE\n\nInvoice: {data.get('inv_no')}\nDate: {data.get('date')}\nAmount: {data.get('amount')}\nBuyer: {data.get('buyer')}"
+                messagebox.showinfo("Legit", msg)
+            else:
+                messagebox.showerror("FAKE", "❌ INVALID SIGNATURE\n\nThis code does not match any invoice in the system.")
                 
+        except Exception as e:
+            messagebox.showerror("Error", f"Verification failed: {e}")
 
-            inv_dir = self.app.app_config.get_invoices_dir()
+    def on_show(self):
+        self._refresh_list()
 
-            if not inv_dir.exists(): return
+    def _clear_filters(self):
+        self.ent_filter_buyer.delete(0, tk.END)
+        self.ent_filter_date.delete(0, tk.END)
+        self._refresh_list()
 
+    def _refresh_list(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
             
-
-            # Filters
-
-            f_buyer = self.ent_filter_buyer.get().strip().lower()
-
-            f_date = self.ent_filter_date.get().strip()
-
+        inv_dir = self.app.app_config.get_invoices_dir()
+        if not inv_dir.exists(): return
+        
+        # Filters
+        f_buyer = self.ent_filter_buyer.get().strip().lower()
+        f_date = self.ent_filter_date.get().strip()
+        
+        # Get PDF files
+        files = list(inv_dir.glob("*.pdf"))
+        # Sort by modification time (newest first)
+        files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        
+        for f in files:
+            stats = f.stat()
+            dt_obj = datetime.datetime.fromtimestamp(stats.st_mtime)
+            dt = dt_obj.strftime("%Y-%m-%d %H:%M")
+            date_only = dt_obj.strftime("%Y-%m-%d")
+            size = f"{stats.st_size / 1024:.1f} KB"
             
-
-            # Get PDF files
-
-            files = list(inv_dir.glob("*.pdf"))
-
-            # Sort by modification time (newest first)
-
-            files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-
+            # Try to guess name from filename: Name_Timestamp.pdf
+            name = f.stem.split('_')[0] if '_' in f.stem else "Unknown"
             
-
-            for f in files:
-
-                stats = f.stat()
-
-                dt_obj = datetime.datetime.fromtimestamp(stats.st_mtime)
-
-                dt = dt_obj.strftime("%Y-%m-%d %H:%M")
-
-                date_only = dt_obj.strftime("%Y-%m-%d")
-
-                size = f"{stats.st_size / 1024:.1f} KB"
-
-                
-
-                # Try to guess name from filename: Name_Timestamp.pdf
-
-                name = f.stem.split('_')[0] if '_' in f.stem else "Unknown"
-
-                
-
-                # Filter Logic
-
-                if f_buyer and f_buyer not in name.lower():
-
-                    continue
-
-                if f_date and f_date not in date_only:
-
-                    continue
-
-                
-
-                self.tree.insert('', tk.END, values=(dt, name, f.name, size), iid=str(f))
+            # Filter Logic
+            if f_buyer and f_buyer not in name.lower():
+                continue
+            if f_date and f_date not in date_only:
+                continue
+            
+            self.tree.insert('', tk.END, values=(dt, name, f.name, size), iid=str(f))
 
     def _get_selected(self):
         sel = self.tree.selection()
