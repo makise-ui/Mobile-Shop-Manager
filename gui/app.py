@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import ttkbootstrap as tb
 import sys
 from core.config import ConfigManager
 from core.inventory import InventoryManager
@@ -20,9 +21,9 @@ from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 from gui.quick_entry import QuickEntryScreen
 from gui.dialogs import SettingsDialog, SplashScreen, WelcomeDialog, ConflictResolutionDialog
 
-class MainApp(tk.Tk):
+class MainApp(tb.Window):
     def __init__(self):
-        super().__init__()
+        super().__init__(themename="cosmo")
         self.title(f"4 Bros Mobile Manager v{APP_VERSION}")
         self.geometry("1100x700")
         
@@ -159,38 +160,19 @@ class MainApp(tk.Tk):
     def _init_layout(self):
         # --- Styles ---
         style = ttk.Style()
-        style.theme_use('clam')
+        # Theme is handled by ttkbootstrap (cosmo)
         
-        # Colors
-        BG_COLOR = "#f0f0f0"
-        NAV_BG = "#2c3e50"
-        NAV_FG = "white"
-        ACCENT = "#007acc"
+        # Colors for Custom Nav
+        NAV_BG = "#343a40" # Dark mix
         
-        self.configure(background=BG_COLOR)
-        
-        # Configure Styles
-        style.configure("TFrame", background=BG_COLOR)
-        style.configure("TLabel", background=BG_COLOR, font=('Segoe UI', 10))
-        style.configure("TLabelframe", background=BG_COLOR)
-        style.configure("TLabelframe.Label", background=BG_COLOR, font=('Segoe UI', 11, 'bold'), foreground="#333")
-        
-        # Nav Button Style
-        style.configure("Nav.TButton", font=('Segoe UI', 10, 'bold'), background=NAV_BG, foreground=NAV_FG, borderwidth=0, focuscolor=NAV_BG)
-        style.map("Nav.TButton", background=[('active', '#34495e'), ('pressed', ACCENT)])
-        
-        # Accent Button
-        style.configure("Accent.TButton", font=('Segoe UI', 10, 'bold'), background=ACCENT, foreground="white")
-        style.map("Accent.TButton", background=[('active', '#005f9e')])
-        
-        # Treeview
-        style.configure("Treeview", rowheight=28, font=('Segoe UI', 10), background="white", fieldbackground="white")
-        style.configure("Treeview.Heading", font=('Segoe UI', 10, 'bold'), background="#e0e0e0")
+        # Customize Treeview
+        style.configure("Treeview", rowheight=30, font=('Segoe UI', 10))
+        style.configure("Treeview.Heading", font=('Segoe UI', 10, 'bold'))
         
         # --- Layout ---
         
         # 1. Top Navigation Bar
-        nav_frame = tk.Frame(self, bg=NAV_BG, height=50)
+        nav_frame = tk.Frame(self, bg=NAV_BG, height=60)
         nav_frame.pack(side=tk.TOP, fill=tk.X)
         nav_frame.pack_propagate(False) # Fixed height
         
@@ -199,10 +181,10 @@ class MainApp(tk.Tk):
         lbl_title.pack(side=tk.LEFT, padx=20)
         
         # Update Button (Hidden by default)
-        self.btn_update = ttk.Button(nav_frame, text="⬇ Update Available", style="Accent.TButton", command=self._show_update_dialog)
+        self.btn_update = ttk.Button(nav_frame, text="⬇ Update Available", style="danger.TButton", command=self._show_update_dialog)
         
         # Manual Refresh Button
-        self.btn_refresh = ttk.Button(nav_frame, text="⟳ REFRESH DATA", style="Nav.TButton", command=self.manual_refresh)
+        self.btn_refresh = ttk.Button(nav_frame, text="⟳ REFRESH", style="info.TButton", command=self.manual_refresh)
         self.btn_refresh.pack(side=tk.RIGHT, padx=10, pady=10)
 
         # Nav Buttons
@@ -222,13 +204,16 @@ class MainApp(tk.Tk):
         
         self.nav_btns = {}
         for label, key in nav_items:
-            btn = ttk.Button(btn_bar, text=label, style="Nav.TButton", command=lambda k=key: self.show_screen(k))
+            # Use 'inverse-dark' style or similar if available, or just standard
+            # We'll use standard ttk buttons which will adapt to theme, but inside dark frame might look odd.
+            # ttkbootstrap has 'link' style or 'outline'.
+            btn = ttk.Button(btn_bar, text=label, style="primary.TButton", command=lambda k=key: self.show_screen(k))
             btn.pack(side=tk.LEFT, padx=2, pady=10)
             self.nav_btns[key] = btn
 
         # Manage Dropdown (for less used items)
-        mb = ttk.Menubutton(btn_bar, text="Manage ▼", style="Nav.TButton")
-        menu = tk.Menu(mb, tearoff=0, bg=NAV_BG, fg="black", font=('Segoe UI', 10))
+        mb = ttk.Menubutton(btn_bar, text="Manage ▼", style="primary.TButton")
+        menu = tk.Menu(mb, tearoff=0, font=('Segoe UI', 10))
         
         menu.add_command(label="Manage Files", command=lambda: self.show_screen('files'))
         menu.add_command(label="Manage Data", command=lambda: self.show_screen('managedata'))
@@ -242,7 +227,7 @@ class MainApp(tk.Tk):
         mb.pack(side=tk.LEFT, padx=2, pady=10)
 
         # 2. Main Content Area (Card style)
-        self.container = tk.Frame(self, bg=BG_COLOR)
+        self.container = ttk.Frame(self) # Native theme background
         self.container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         self.content_area = ttk.Frame(self.container) # Inner frame for padding
