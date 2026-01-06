@@ -362,6 +362,10 @@ class QuickEntryScreen(ttk.Frame):
 
             for col_name, val in row_dict.items():
                 if col_name in col_map:
+                    # Enforce FULL CAPS for strings
+                    if isinstance(val, str):
+                        val = val.upper()
+                        
                     cell = ws.cell(row=next_row, column=col_map[col_name], value=val)
                     cell.font = font
                     cell.border = border
