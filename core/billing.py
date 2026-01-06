@@ -141,8 +141,8 @@ class BillingManager:
         elements.append(Spacer(1, 15))
 
         # --- 3. Items Table ---
-        # Columns: SN, Description, Taxable, Tax, Total
-        headers = ['SN', 'Description', 'Taxable', 'Tax (GST)', 'Amount']
+        # Columns: SN, Description, Taxable, CGST, SGST, IGST, Amount
+        headers = ['SN', 'Description', 'Taxable', 'CGST', 'SGST', 'IGST', 'Amount']
         
         data = [headers]
         grand_total = 0.0
@@ -155,29 +155,25 @@ class BillingManager:
             price = float(item.get('price', 0))
             tax_calc = self.calculate_tax(price, default_tax, is_interstate, is_inclusive)
             
-            # Format Taxes
-            if is_interstate:
-                tax_str = f"IGST {default_tax}%: {tax_calc['igst']:.2f}"
-            else:
-                tax_str = f"CGST: {tax_calc['cgst']:.2f}\nSGST: {tax_calc['sgst']:.2f}"
-            
             # Extract IMEI with logic (clean raw string)
             raw_imei = str(item.get('unique_id', ''))
-            # If 'imei' key exists, prefer it, else fallback to unique_id
             real_imei = str(item.get('imei', '')) or raw_imei
             
             row = [
                 str(idx + 1),
                 Paragraph(f"<b>{item.get('model', 'Unknown Model')}</b><br/>IMEI: {real_imei}", style_body),
-                f"Rs. {tax_calc['taxable_value']:.2f}", # Fixed: Rs instead of Rupee Symbol
-                Paragraph(tax_str, style_body),
-                f"Rs. {tax_calc['total_amount']:.2f}"
+                f"{tax_calc['taxable_value']:.2f}",
+                f"{tax_calc['cgst']:.2f}",
+                f"{tax_calc['sgst']:.2f}",
+                f"{tax_calc['igst']:.2f}",
+                f"{tax_calc['total_amount']:.2f}"
             ]
             data.append(row)
             grand_total += tax_calc['total_amount']
             
         # Table Styling
-        col_widths = [12*mm, 85*mm, 28*mm, 35*mm, 30*mm]
+        # Widths: SN(10), Desc(65), Taxable(25), CGST(20), SGST(20), IGST(20), Amount(30)
+        col_widths = [10*mm, 65*mm, 25*mm, 20*mm, 20*mm, 20*mm, 30*mm]
         t_items = Table(data, colWidths=col_widths, repeatRows=1)
         
         style_table = TableStyle([
@@ -185,13 +181,22 @@ class BillingManager:
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 0), (-1, 0), 9), # Slightly smaller header
             ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('TOPPADDING', (0, 0), (-1, 0), 10),
+            
             # Data Rows
             ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'), # Right align numbers
-            ('ALIGN', (0, 1), (0, -1), 'CENTER'), # Center SN
+            
+            # Col 0: SN -> Center
+            ('ALIGN', (0, 1), (0, -1), 'CENTER'),
+            
+            # Col 1: Description -> Left
+            ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+            
+            # Col 2-6: Numbers -> Right
+            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+            
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 9),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
