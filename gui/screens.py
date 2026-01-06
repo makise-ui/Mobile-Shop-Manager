@@ -1696,6 +1696,11 @@ class ManageDataScreen(BaseScreen):
         self.notebook.add(self.tab_buyers, text="Frequent Buyers")
         self._init_list_ui(self.tab_buyers, "Buyer Name", self.registry.get_buyers, self.registry.add_buyer, self.registry.remove_buyer)
 
+        # Tab 3: Grades
+        self.tab_grades = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_grades, text="Grades")
+        self._init_list_ui(self.tab_grades, "Grade", self.registry.get_grades, self.registry.add_grade, self.registry.remove_grade)
+
     def _init_list_ui(self, parent, item_name, get_func, add_func, remove_func):
         frame_add = ttk.Frame(parent, padding=10)
         frame_add.pack(fill=tk.X)
@@ -2476,7 +2481,7 @@ class EditDataScreen(BaseScreen):
                 ent = ttk.Combobox(self.form_frame, textvariable=var, values=colors, width=w)
             elif key in ['grade', 'condition']:
                  # Suggestions
-                 vals = ['A+', 'A', 'B', 'C'] if key == 'grade' else ['New', 'Refurb', 'Used', 'Damaged']
+                 vals = DataRegistry().get_grades() if key == 'grade' else ['New', 'Refurb', 'Used', 'Damaged']
                  ent = ttk.Combobox(self.form_frame, textvariable=var, values=vals, width=w)
             else:
                 ent = ttk.Entry(self.form_frame, textvariable=var, width=w)
