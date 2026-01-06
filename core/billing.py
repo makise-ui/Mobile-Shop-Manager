@@ -44,42 +44,91 @@ class BillingManager:
             
         return breakdown
 
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle, SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+import datetime
+
+class BillingManager:
+    def __init__(self, config_manager, activity_logger=None):
+        self.config = config_manager
+        self.activity_logger = activity_logger
+
+    def calculate_tax(self, price, tax_rate_percent, is_interstate=False, is_inclusive=False):
+        """
+        Returns dict with tax breakdown.
+        """
+        if is_inclusive:
+            total_amount = price
+            taxable_value = price / (1 + (tax_rate_percent / 100.0))
+            tax_amt = total_amount - taxable_value
+        else:
+            taxable_value = price
+            tax_amt = taxable_value * (tax_rate_percent / 100.0)
+            total_amount = taxable_value + tax_amt
+        
+        breakdown = {
+            "taxable_value": taxable_value,
+            "total_tax": tax_amt,
+            "total_amount": total_amount,
+            "cgst": 0.0,
+            "sgst": 0.0,
+            "igst": 0.0
+        }
+        
+        if is_interstate:
+            breakdown['igst'] = tax_amt
+        else:
+            breakdown['cgst'] = tax_amt / 2.0
+            breakdown['sgst'] = tax_amt / 2.0
+            
+        return breakdown
+
     def generate_invoice(self, items, buyer_details, invoice_number, filename, discount=None):
         doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
         elements = []
         styles = getSampleStyleSheet()
         
-        # --- Modern Palette & Styles ---
-        ACCENT_COLOR = colors.HexColor("#2c3e50") # Dark Blue-Grey
-        LIGHT_BG = colors.HexColor("#f8f9fa")     # Very Light Grey
-        TEXT_COLOR = colors.HexColor("#2c3e50")
+        # --- Modern Palette ---
+        ACCENT_COLOR = colors.HexColor("#2c3e50")
+        LIGHT_BG = colors.HexColor("#f8f9fa")
         
-        # Custom Styles
+        # --- Fixed Styles (Creating new objects to avoid contamination) ---
         
-        # Store Name (Top Center)
-        style_store_header = styles['Heading1']
-        style_store_header.fontName = 'Helvetica-Bold'
-        style_store_header.fontSize = 24 # Big Font
-        style_store_header.textColor = ACCENT_COLOR
-        style_store_header.alignment = 1 # Center
+        # Store Name (Big, Center)
+        style_store_header = ParagraphStyle(
+            'StoreHeader',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=24,
+            textColor=ACCENT_COLOR,
+            alignment=TA_CENTER,
+            spaceAfter=10
+        )
         
-        # Invoice Title (Smaller)
-        style_inv_title = styles['Normal']
-        style_inv_title.fontName = 'Helvetica-Bold'
-        style_inv_title.fontSize = 12 # Smaller
-        style_inv_title.textColor = ACCENT_COLOR
-        style_inv_title.alignment = 2 # Right
+        # Standard Body (Left)
+        style_body = ParagraphStyle(
+            'BodyLeft',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=12,
+            alignment=TA_LEFT
+        )
         
-        style_body = styles['Normal']
-        style_body.fontName = 'Helvetica'
-        style_body.fontSize = 9
-        style_body.leading = 12
-        
-        style_right = styles['Normal']
-        style_right.fontName = 'Helvetica'
-        style_right.fontSize = 9
-        style_right.leading = 12
-        style_right.alignment = 2 # Right
+        # Right Aligned Body (For Invoice Details)
+        style_right = ParagraphStyle(
+            'BodyRight',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=12,
+            alignment=TA_RIGHT
+        )
         
         # --- 1. Header Section ---
         store_name = self.config.get('store_name', 'My Store')
@@ -87,38 +136,24 @@ class BillingManager:
         store_gstin = self.config.get('store_gstin', '')
         store_contact = self.config.get('store_contact', '')
         
-        # 1. Store Name (Centered)
+        # 1. Store Name
         elements.append(Paragraph(store_name, style_store_header))
-        elements.append(Spacer(1, 10))
         
-        # 2. Details Row (Address Left | Invoice Right)
-        # Left: Store Details
+        # 2. Details Row
         store_info = f"{store_addr}<br/>GSTIN: {store_gstin}<br/>Phone: {store_contact}"
         p_store_info = Paragraph(store_info, style_body)
         
-        # Right: Invoice Details
         inv_date = buyer_details.get('date', datetime.date.today())
-        
-        # Combine Title and Details in one Right-Aligned cell
-        # Using <br/> for line breaks within the paragraph
         inv_text = f"""<font size=12 color={ACCENT_COLOR}><b>TAX INVOICE</b></font><br/>
         <b>INVOICE NO:</b> {invoice_number}<br/>
         <b>DATE:</b> {inv_date}"""
-        
-        # Force Right Alignment on the Paragraph
         p_inv_details = Paragraph(inv_text, style_right)
         
-        header_data = [[p_store_info, p_inv_details]]
-        
-        # Table Layout: 50% Left, 50% Right
-        # Use simple 50/50 split or adjust based on content
-        t_header = Table(header_data, colWidths=[95*mm, 95*mm])
+        t_header = Table([[p_store_info, p_inv_details]], colWidths=[95*mm, 95*mm])
         t_header.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('ALIGN', (0,0), (0,0), 'LEFT'),   # Left Column -> Left Align
-            ('ALIGN', (1,0), (1,0), 'RIGHT'),  # Right Column -> Right Align
-            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
             ('LINEBELOW', (0,0), (-1,-1), 1, colors.lightgrey),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
         ]))
         elements.append(t_header)
         elements.append(Spacer(1, 15))
@@ -127,7 +162,6 @@ class BillingManager:
         buyer_name = buyer_details.get('name', 'N/A')
         buyer_contact = buyer_details.get('contact', '')
         
-        # Grey Box for Customer
         cust_data = [[Paragraph(f"<b>BILL TO:</b><br/>{buyer_name}<br/>Phone: {buyer_contact}", style_body)]]
         t_cust = Table(cust_data, colWidths=[190*mm])
         t_cust.setStyle(TableStyle([
@@ -141,9 +175,7 @@ class BillingManager:
         elements.append(Spacer(1, 15))
 
         # --- 3. Items Table ---
-        # Columns: SN, Description, Taxable, CGST, SGST, IGST, Amount
         headers = ['SN', 'Description', 'Taxable', 'CGST', 'SGST', 'IGST', 'Amount']
-        
         data = [headers]
         grand_total = 0.0
         
@@ -155,7 +187,6 @@ class BillingManager:
             price = float(item.get('price', 0))
             tax_calc = self.calculate_tax(price, default_tax, is_interstate, is_inclusive)
             
-            # Extract IMEI with logic (clean raw string)
             raw_imei = str(item.get('unique_id', ''))
             real_imei = str(item.get('imei', '')) or raw_imei
             
@@ -171,8 +202,6 @@ class BillingManager:
             data.append(row)
             grand_total += tax_calc['total_amount']
             
-        # Table Styling
-        # Widths: SN(10), Desc(65), Taxable(25), CGST(20), SGST(20), IGST(20), Amount(30)
         col_widths = [10*mm, 65*mm, 25*mm, 20*mm, 20*mm, 20*mm, 30*mm]
         t_items = Table(data, colWidths=col_widths, repeatRows=1)
         
@@ -181,22 +210,13 @@ class BillingManager:
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 9), # Slightly smaller header
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('TOPPADDING', (0, 0), (-1, 0), 10),
-            
-            # Data Rows
             ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-            
-            # Col 0: SN -> Center
             ('ALIGN', (0, 1), (0, -1), 'CENTER'),
-            
-            # Col 1: Description -> Left
             ('ALIGN', (1, 1), (1, -1), 'LEFT'),
-            
-            # Col 2-6: Numbers -> Right
             ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
-            
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 9),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
@@ -205,41 +225,31 @@ class BillingManager:
         elements.append(t_items)
         
         # --- 4. Summary & Totals ---
-        # Right aligned summary table
         final_total = grand_total
         discount_rows = []
-        
         if discount and discount.get('amount', 0) > 0:
             d_amt = float(discount['amount'])
             d_reason = discount.get('reason', 'Discount')
             discount_rows = [[f"Less: {d_reason}", f"- Rs. {d_amt:.2f}"]]
             final_total -= d_amt
             
-        summary_data = [
-            ['Sub Total:', f"Rs. {grand_total:.2f}"],
-        ] + discount_rows + [
-            ['Grand Total:', f"Rs. {final_total:.2f}"]
-        ]
-        
+        summary_data = [['Sub Total:', f"Rs. {grand_total:.2f}"]] + discount_rows + [['Grand Total:', f"Rs. {final_total:.2f}"]]
         t_summary = Table(summary_data, colWidths=[40*mm, 35*mm])
         t_summary.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'), # Bold Grand Total
+            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
             ('FONTSIZE', (0,-1), (-1,-1), 12),
             ('TEXTCOLOR', (0,-1), (-1,-1), ACCENT_COLOR),
             ('LINEABOVE', (0,-1), (-1,-1), 1, colors.black),
             ('TOPPADDING', (0,0), (-1,-1), 6),
         ]))
         
-        # Layout Summary to the Right
-        summary_container = Table([[ '', t_summary]], colWidths=[115*mm, 75*mm])
-        elements.append(summary_container)
+        elements.append(Table([[ '', t_summary]], colWidths=[115*mm, 75*mm]))
         elements.append(Spacer(1, 30))
         
-        # --- 5. Footer ---
+        # --- 5. Footer & Signature ---
         terms = self.config.get('invoice_terms', 'Goods once sold will not be taken back.')
         
-        # Digital Signature / Verification Code
         import hashlib
         verify_str = f"{invoice_number}|{buyer_name}|{grand_total}|{store_name}"
         verify_hash = hashlib.sha256(verify_str.encode()).hexdigest()[:16].upper()
@@ -247,28 +257,24 @@ class BillingManager:
         
         footer_left = Paragraph(f"<b>Terms & Conditions:</b><br/>{terms}", style_body)
         
-        # Signatory + Digital Code
         sign_text = f"""<br/><br/>_______________________<br/>
         <b>Authorized Signatory</b><br/>
         For {store_name}<br/><br/>
         <font size=7 name="Courier">Digital Verify: {formatted_hash}</font>
         """
-        footer_right = Paragraph(sign_text, style_body)
+        footer_right = Paragraph(sign_text, style_right)
         
         t_footer = Table([[footer_left, footer_right]], colWidths=[120*mm, 70*mm])
         t_footer.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('ALIGN', (1,0), (1,0), 'CENTER'), # Right column center aligned
+            ('ALIGN', (1,0), (1,0), 'CENTER'),
         ]))
         elements.append(t_footer)
         
-        # Bottom "Thank You"
         elements.append(Spacer(1, 20))
-        elements.append(Paragraph("Thank you for your business!", styles['Heading4'])) # Centered by default style? No.
+        elements.append(Paragraph("Thank you for your business!", styles['Heading4']))
         
         doc.build(elements)
-        
         if self.activity_logger:
             self.activity_logger.log("INVOICE_GEN", f"Invoice {invoice_number} generated for Rs. {final_total:.2f}")
-            
         return True
