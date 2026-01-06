@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
+import os
 
 class MapColumnsDialog(tk.Toplevel):
     def __init__(self, parent, file_path, on_save_callback, current_mapping=None):
