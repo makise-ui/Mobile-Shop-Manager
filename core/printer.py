@@ -88,37 +88,35 @@ class PrinterManager:
             model = item_data.get('model', '')[:25]
             ram_rom = item_data.get('ram_rom', '')
             price = f"Rs. {item_data.get('price', 0):,.0f}"
+            grade = str(item_data.get('grade', '')).upper()
             
-            # ZPL Template Optimized for 50mm x 22mm (approx 400x176 dots at 203 DPI)
-            # Coordinates are tight.
-            # Header: Y=5
-            # Barcode: Y=35, H=40
-            # ID: Y=80
-            # Model: Y=105
-            # RAM/ROM: Y=135
-            # Price: Y=135 (Right aligned)
-            
+            grade_zpl = ""
+            if grade:
+                grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
+
             zpl = f"""
 ^XA
 ^PW400
 ^LL176
-^FO0,5^A0N,20,20
+^FO0,10^A0N,30,30
 ^FB400,1,0,C,0^FD{store_name}^FS
 
-^FO20,30^BY3,2,60^BCN,60,N,N,N
+^FO95,42^BY3,2,40^BCN,40,N,N,N
 ^FD{uid}^FS
 
-^FO0,95^A0N,20,20
+{grade_zpl}
+
+^FO0,85^A0N,25,25
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO10,120^A0N,18,18
-^FB280,2,0,L,0^FD{model}^FS
+^FO25,112^A0N,29,29
+^FB350,2,0,L,0^FD{model}^FS
 
-^FO10,150^A0N,18,18
+^FO25,145^A0N,26,26
 ^FB200,1,0,L,0^FD{ram_rom}^FS
 
-^FO200,145^A0N,25,25
-^FB190,1,0,R,0^FD{price}^FS
+^FO150,142^A0N,32,32
+^FB240,1,0,R,0^FD{price}^FS
 
 ^XZ
 """
@@ -179,49 +177,62 @@ class PrinterManager:
                     model = item.get('model', '')[:25]
                     ram = item.get('ram_rom', '')
                     pr = f"Rs. {item.get('price', 0):,.0f}"
+                    grade = str(item.get('grade', '')).upper()
 
                     if not is_right_side:
                         # LEFT SIDE
+                        grade_zpl = ""
+                        if grade:
+                            grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
+                        
                         return f"""
 ^FX --- LEFT SIDE: {model} (ID {uid}) --- ^FS
-^FO0,10^A0N,28,28
+^FO0,10^A0N,30,30
 ^FB400,1,0,C,0^FD{store}^FS
 
-^FO25,40^BY3,2,50^BCN,50,N,N,N
+^FO95,42^BY3,2,40^BCN,40,N,N,N
 ^FD{uid}^FS
 
-^FO0,95^A0N,24,24
+{grade_zpl}
+
+^FO0,85^A0N,25,25
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO30,122^A0N,24,24
-^FB340,2,0,L,0^FD{model}^FS
+^FO25,112^A0N,29,29
+^FB350,2,0,L,0^FD{model}^FS
 
-^FO30,152^A0N,24,24
+^FO25,145^A0N,26,26
 ^FB200,1,0,L,0^FD{ram}^FS
 
-^FO150,148^A0N,30,30
+^FO150,142^A0N,32,32
 ^FB240,1,0,R,0^FD{pr}^FS
 """
                     else:
                         # RIGHT SIDE
+                        grade_zpl = ""
+                        if grade:
+                            grade_zpl = f"^FO740,45^GB50,32,32^FS\n^FO740,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
+
                         return f"""
 ^FX --- RIGHT SIDE: {model} (ID {uid}) --- ^FS
-^FO416,10^A0N,28,28
+^FO416,10^A0N,30,30
 ^FB400,1,0,C,0^FD{store}^FS
 
-^FO441,40^BY3,2,50^BCN,50,N,N,N
+^FO511,42^BY3,2,40^BCN,40,N,N,N
 ^FD{uid}^FS
 
-^FO416,95^A0N,24,24
+{grade_zpl}
+
+^FO416,85^A0N,25,25
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO455,122^A0N,24,24
-^FB340,2,0,L,0^FD{model}^FS
+^FO441,112^A0N,29,29
+^FB350,2,0,L,0^FD{model}^FS
 
-^FO455,152^A0N,24,24
+^FO441,145^A0N,26,26
 ^FB200,1,0,L,0^FD{ram}^FS
 
-^FO566,148^A0N,30,30
+^FO566,142^A0N,32,32
 ^FB240,1,0,R,0^FD{pr}^FS
 """
                 
