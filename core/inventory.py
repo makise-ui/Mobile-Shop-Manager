@@ -193,6 +193,10 @@ class InventoryManager:
                 row['notes'] = meta['notes']
             if 'color' in meta:
                 row['color'] = meta['color']
+            if 'grade' in meta:
+                row['grade'] = meta['grade']
+            if 'condition' in meta:
+                row['condition'] = meta['condition']
             if 'price_original' in meta:
                 row['price_original'] = float(meta['price_original'])
                 
