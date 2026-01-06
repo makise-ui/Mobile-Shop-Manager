@@ -1235,13 +1235,20 @@ class AnalyticsScreen(BaseScreen):
         stats = self.analytics.get_summary()
         s_counts = stats.get('status_counts', {})
         
-        total_in = s_counts.get('IN', 0) + s_counts.get('RTN', 0)
+        # RTN is now "Return to Supplier", so it is NOT in stock.
+        total_in = s_counts.get('IN', 0)
         total_out = s_counts.get('OUT', 0)
+        total_rtn = s_counts.get('RTN', 0)
         
         # Update Cards
+        # Show RTN separately or just ignore? 
+        # User said "treat as sent to supplier".
+        # Let's maybe show it in tooltip or just stick to "Stock" = IN.
         self.card_stock.config(text=str(total_in))
         self.card_val.config(text=f"₹{stats['total_value']:,.0f}")
         self.card_sold.config(text=str(total_out))
+        
+        # We could show RTN count somewhere, but for now strict "Stock" is IN.
         
         p_color = 'green' if stats['realized_profit'] >= 0 else 'red'
         self.card_profit.config(text=f"₹{stats['realized_profit']:,.0f}", foreground=p_color)
