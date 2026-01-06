@@ -17,23 +17,28 @@ class AnalyticsManager:
                 "supplier_dist": {}
             }
             
-        total_items = len(df)
-        total_value = df['price'].sum()
-        
-        # Calculate Cost & Profit
-        # Ensure price_original exists
-        if 'price_original' not in df.columns:
-            total_cost = total_value # Fallback
-            df['price_original'] = df['price'] # Temp fix for calculation
-        else:
-            total_cost = df['price_original'].sum()
-            
-        est_profit = total_value - total_cost
-        
-        # Realized Profit (Sold Items Only)
         # Normalize status for consistent counting
         df['status'] = df['status'].astype(str).str.upper().str.strip()
         
+        # --- Metrics for CURRENT STOCK (Status = IN only) ---
+        # RTN is now treated as "Returned to Supplier" (OUT of stock), so we exclude it.
+        stock_df = df[df['status'] == 'IN']
+        
+        total_items = len(stock_df)
+        total_value = stock_df['price'].sum()
+        
+        # Calculate Cost & Profit for Current Stock
+        if 'price_original' not in stock_df.columns:
+            total_cost = total_value 
+            # Temp fix for calculation if column missing
+            stock_df = stock_df.copy()
+            stock_df['price_original'] = stock_df['price'] 
+        else:
+            total_cost = stock_df['price_original'].sum()
+            
+        est_profit = total_value - total_cost
+        
+        # --- Realized Profit (Sold Items Only) ---
         sold_df = df[df['status'] == 'OUT']
         realized_sales = sold_df['price'].sum()
         realized_cost = sold_df['price_original'].sum()
@@ -43,7 +48,7 @@ class AnalyticsManager:
         s_counts = df['status'].value_counts().to_dict()
         print(f"DEBUG ANALYTICS: {s_counts}")
         
-        # Top 5 Models
+        # Top 5 Models (From Sold + In Stock? Or just everything? Let's keep everything for trends)
         top_models = df['model'].value_counts().head(5).to_dict()
         
         # Supplier Distribution
