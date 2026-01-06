@@ -787,49 +787,40 @@ class BillingScreen(BaseScreen):
         
         inv_num = f"INV-{ts}"
         
-        # --- Signature Registry Logic ---
+        # Call Generator first to get the authoritative Hash
         try:
-            # 1. Calculate Totals matches billing.py logic
-            subtotal = sum(float(item.get('price', 0)) for item in self.cart_items)
-            final_total = subtotal
-            if discount:
-                final_total -= float(discount['amount'])
+            success, verify_hash, pdf_total = self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, str(save_path), discount=discount)
             
-            store_name = self.app.app_config.get('store_name', 'My Store')
-            
-            # 2. Generate Hash
-            import hashlib
-            verify_str = f"{inv_num}|{buyer_name}|{final_total}|{store_name}"
-            verify_hash = hashlib.sha256(verify_str.encode()).hexdigest()[:16].upper()
-            
-            # 3. Save to Registry
-            import json
-            from pathlib import Path
-            reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
-            
-            registry = {}
-            if reg_path.exists():
+            if success:
+                # --- Save to Signature Registry ---
                 try:
-                    with open(reg_path, 'r') as f:
-                        registry = json.load(f)
-                except: pass
-            
-            registry[verify_hash] = {
-                "inv_no": inv_num,
-                "date": str(datetime.date.today()),
-                "amount": f"{final_total:.2f}",
-                "buyer": buyer_name
-            }
-            
-            with open(reg_path, 'w') as f:
-                json.dump(registry, f, indent=4)
-                
-        except Exception as e:
-            print(f"Registry Save Error: {e}")
+                    import json
+                    from pathlib import Path
+                    reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+                    
+                    registry = {}
+                    if reg_path.exists():
+                        try:
+                            with open(reg_path, 'r') as f:
+                                registry = json.load(f)
+                        except: pass
+                    
+                    registry[verify_hash] = {
+                        "inv_no": inv_num,
+                        "date": str(datetime.date.today()),
+                        "amount": f"{pdf_total:.2f}",
+                        "buyer": buyer_name
+                    }
+                    
+                    with open(reg_path, 'w') as f:
+                        json.dump(registry, f, indent=4)
+                except Exception as e:
+                    print(f"Registry Save Error: {e}")
 
-        try:
-            self.app.billing.generate_invoice(self.cart_items, buyer, inv_num, str(save_path), discount=discount)
-            return str(save_path)
+                return str(save_path)
+            else:
+                return None
+                
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate invoice: {e}")
             return None
