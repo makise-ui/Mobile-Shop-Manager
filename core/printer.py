@@ -105,19 +105,19 @@ class PrinterManager:
 ^FO0,5^A0N,20,20
 ^FB400,1,0,C,0^FD{store_name}^FS
 
-^FO50,30^BY2,2,40^BCN,40,N,N,N
+^FO20,30^BY3,2,60^BCN,60,N,N,N
 ^FD{uid}^FS
 
-^FO0,75^A0N,18,18
+^FO0,95^A0N,20,20
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO10,100^A0N,18,18
+^FO10,120^A0N,18,18
 ^FB280,2,0,L,0^FD{model}^FS
 
-^FO10,140^A0N,18,18
+^FO10,150^A0N,18,18
 ^FB200,1,0,L,0^FD{ram_rom}^FS
 
-^FO200,135^A0N,25,25
+^FO200,145^A0N,25,25
 ^FB190,1,0,R,0^FD{price}^FS
 
 ^XZ
@@ -184,44 +184,44 @@ class PrinterManager:
                         # LEFT SIDE
                         return f"""
 ^FX --- LEFT SIDE: {model} (ID {uid}) --- ^FS
-^FO0,20^A0N,30,30
+^FO0,10^A0N,28,28
 ^FB400,1,0,C,0^FD{store}^FS
 
-^FO132,52^BY2,2,32^BCN,32,N,N,N
+^FO25,40^BY3,2,50^BCN,50,N,N,N
 ^FD{uid}^FS
 
-^FO0,88^A0N,25,25
+^FO0,95^A0N,24,24
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO30,115^A0N,26,26
+^FO30,122^A0N,24,24
 ^FB340,2,0,L,0^FD{model}^FS
 
-^FO30,148^A0N,26,26
+^FO30,152^A0N,24,24
 ^FB200,1,0,L,0^FD{ram}^FS
 
-^FO150,145^A0N,32,32
+^FO150,148^A0N,30,30
 ^FB240,1,0,R,0^FD{pr}^FS
 """
                     else:
                         # RIGHT SIDE
                         return f"""
 ^FX --- RIGHT SIDE: {model} (ID {uid}) --- ^FS
-^FO416,20^A0N,30,30
+^FO416,10^A0N,28,28
 ^FB400,1,0,C,0^FD{store}^FS
 
-^FO548,52^BY2,2,32^BCN,32,N,N,N
+^FO441,40^BY3,2,50^BCN,50,N,N,N
 ^FD{uid}^FS
 
-^FO416,88^A0N,25,25
+^FO416,95^A0N,24,24
 ^FB400,1,0,C,0^FD{uid}^FS
 
-^FO455,115^A0N,26,26
+^FO455,122^A0N,24,24
 ^FB340,2,0,L,0^FD{model}^FS
 
-^FO455,148^A0N,26,26
+^FO455,152^A0N,24,24
 ^FB200,1,0,L,0^FD{ram}^FS
 
-^FO566,145^A0N,32,32
+^FO566,148^A0N,30,30
 ^FB240,1,0,R,0^FD{pr}^FS
 """
                 
