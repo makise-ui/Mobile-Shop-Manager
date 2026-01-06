@@ -577,7 +577,7 @@ class InventoryScreen(BaseScreen):
             messagebox.showerror("Invoice Error", f"Failed to auto-generate invoice: {e}")
 
 # --- Files Screen ---
-class FilesScreen(BaseScreen):
+class ManageFilesScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
         
