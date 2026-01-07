@@ -43,6 +43,9 @@ class ConfigManager:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
+    def get_config_dir(self):
+        return CONFIG_DIR
+
     def load_config(self):
         if not self.config_path.exists():
             self.save_config(DEFAULT_CONFIG)

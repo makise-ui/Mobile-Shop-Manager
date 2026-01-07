@@ -22,6 +22,7 @@ from gui.screens import (
 )
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 from gui.quick_entry import QuickEntryScreen
+from gui.zpl_designer import ZPLDesignerScreen
 
 class MainApp(tb.Window):
     def __init__(self):
@@ -199,6 +200,7 @@ class MainApp(tb.Window):
         m_manage = tk.Menu(mb_manage, tearoff=0, font=('Segoe UI', 10))
         m_manage.add_command(label="Manage Files", command=lambda: self.show_screen('files'))
         m_manage.add_command(label="Manage Data (Colors/Grades)", command=lambda: self.show_screen('managedata'))
+        m_manage.add_command(label="Label Designer", command=lambda: self.show_screen('designer'))
         m_manage.add_command(label="Conflicts", command=lambda: self.show_screen('conflicts'))
         m_manage.add_separator()
         m_manage.add_command(label="Settings", command=lambda: self.show_screen('settings'))
@@ -228,6 +230,7 @@ class MainApp(tb.Window):
         self.screens['analytics'] = AnalyticsScreen(self.content_area, self)
         self.screens['settings'] = SettingsScreen(self.content_area, self)
         self.screens['managedata'] = ManageDataScreen(self.content_area, self)
+        self.screens['designer'] = ZPLDesignerScreen(self.content_area, self)
         self.screens['help'] = HelpScreen(self.content_area, self)
         
         self.show_screen('inventory')
