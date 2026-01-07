@@ -1,0 +1,18 @@
+from base64 import b64decode
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
+
+KEY  = "VIPum9R06XT2adCWcW5fMg=="
+IV   = "mNDp/cSXglkyUel0KiwO3w=="
+DATA = """wCKIScp/pRrUbUY28dztFQU94yxvsJYgUzDCiU56HIEC8SndXe3FJmC4KcY6avdL0ZyyNe1v4NQYW1lVIAwUL/f6/9ahBN+P9MGi5Y76GRlffgeLZUqvNMD9BO62MIn/A2sr8+OpIirIekTBLEjZeQ9jYKKz1dwsb4XAWCuToFdoiQXDEbRa1n8/uuUP3d9WvUyqqMSk83Tz5VRxufaDBX53HvJ3SkDKnW4/LaguZwB7KBAk98lu27/PCpfZDTnm4B34vZ9rjcSDBSzz8WWF/18IFuSHCgJrofiqFLfeQtKiJHKENAECUWcE5GI1XIHYNcajZHXq/i3l+aheDjfredpZg9bm3hNT28rRO2N9RWrL/tkIlwPYlE2Cf0D8JMAFv0+ObKTkljJT7vkdN8cs773XyAwgWaujDrxMG1PxpJEJD9Jw20TJdKCxMEs19nUn+DbjKcmezMIILqt0FJnSHTFqjOn2EJ4SNGStck8QLz/jHDTnI76A0G9yTi7Bu4bhMqa7QJoMfxEPi9W7cxNVnwpD7952vBdc7CeBHZcWy0IZcpQ1OB1rlo3CYsISGNYYDBWYhaP3fZZKjI8tksWEVQr2u9PYyWgj/4Woh2cfAORv6RnL2m5UXyQr5KApThP6o+JODAwH46LuSy2cNyo0MTTJmQNo2E6PQZ1wvupbHYKClMEfVt0lUbEb2SF9jg9CH/bgjpg+OV+ClvqHH1WwkSZ7Wx23FbA1SoZgVNHz6kvFAFlAgxar9CLu+Pp4PFt+zQlj+9Pk5AnS+m14VvRojqH6VM6bOoNxal3hSsowjprYzGf4DemRQirgWrwdgJJokqY0EOHro3fII+iU03Mnul8BE1CDjCArxwSwNIysXV1QdnEol/MVH3y8wfzT6W4Wp0GUHsvVSFPRa1FtL3bD0YQWTmPn/mGGhEqO8hV8zJRNPLPLokX/so3zuqItdjkeF1BuxLtYnaZEE7GivSb+MCfXVstWCf1exW4YwPKW/LDxpDcesfzpI+js1m55EClLuNa8jmguoPuKFE7S2fXG9grbgP4F4rKU5QRDfGcJlaGXiVrut9SqbfcZONtQs/BEXV0SIEqE8uH5oiwKeLfclnKuKWKZPdbeGHZBXi5i/A9VIlcC4lcCsXhFQMSVaofuYp6kHUvYD/5Ov3Oka/tITdK82HYE2BSQ0aZfDABqyOhV9l9ES1vqkJajnKrkXKeNbmxzjkV5k82EEqISrOs+eQ=="""
+
+# Decode Base64
+key = b64decode(KEY)
+iv = b64decode(IV)
+ciphertext = b64decode(DATA)
+
+# AES-CBC decrypt
+cipher = AES.new(key, AES.MODE_CBC, iv)
+plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
+
+print(plaintext.decode("utf-8"))
