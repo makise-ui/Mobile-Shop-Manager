@@ -69,6 +69,35 @@ class PrinterManager:
             print(f"PDF Print Error: {e}")
             return False
 
+    def send_raw_zpl(self, zpl_string, printer_name=None):
+        """Sends raw ZPL string directly to the printer."""
+        if not HAS_WIN32:
+            print("Win32 not available for printing.")
+            return False
+
+        try:
+            if not printer_name:
+                try:
+                    printer_name = win32print.GetDefaultPrinter()
+                except:
+                    return False
+
+            encoded_zpl = zpl_string.encode("utf-8")
+            h_printer = win32print.OpenPrinter(printer_name)
+            try:
+                job_info = win32print.StartDocPrinter(h_printer, 1, ("RawZPL", None, "raw"))
+                if job_info:
+                    win32print.StartPagePrinter(h_printer)
+                    win32print.WritePrinter(h_printer, encoded_zpl)
+                    win32print.EndPagePrinter(h_printer)
+                    win32print.EndDocPrinter(h_printer)
+            finally:
+                win32print.ClosePrinter(h_printer)
+            return True
+        except Exception as e:
+            print(f"Raw Print Error: {e}")
+            return False
+
     def print_label_zpl(self, item_data, printer_name=None):
         if not HAS_WIN32:
             return False
@@ -80,9 +109,17 @@ class PrinterManager:
                 except:
                     return False
 
-            # ZPL Template (203 DPI, 400 dots width approx 50mm)
-            # Adjust ^PW based on config if needed, but 400 is standard for 2 inch width
+            # Load Custom Template if exists
+            template_path = self.config.get_config_dir() / "custom_template.zpl"
+            zpl_template = ""
             
+            if os.path.exists(template_path):
+                try:
+                    with open(template_path, 'r') as f:
+                        zpl_template = f.read()
+                except Exception as e:
+                    print(f"Template load error: {e}")
+
             store_name = self.config.get('store_name', '4 Bros Mobile')[:20]
             uid = str(item_data.get('unique_id', ''))
             model = item_data.get('model', '')[:25]
@@ -90,11 +127,34 @@ class PrinterManager:
             price = f"Rs. {item_data.get('price', 0):,.0f}"
             grade = str(item_data.get('grade', '')).upper()
             
+            # Helper for conditional Grade ZPL
             grade_zpl = ""
             if grade:
                 grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
 
-            zpl = f"""
+            if zpl_template and len(zpl_template) > 10:
+                # Use Template with Variable Injection
+                # We use simple string replace or format map. 
+                # Our designer uses ${variable} syntax.
+                
+                # Dictionary of available variables
+                vars_map = {
+                    "${store_name}": store_name,
+                    "${id}": uid,
+                    "${model}": model,
+                    "${ram_rom}": ram_rom,
+                    "${price}": price,
+                    "${grade}": grade,
+                    "${imei}": str(item_data.get('imei', '')),
+                }
+                
+                zpl = zpl_template
+                for k, v in vars_map.items():
+                    zpl = zpl.replace(k, v)
+                    
+            else:
+                # Fallback to Hardcoded logic
+                zpl = f"""
 ^XA
 ^PW400
 ^LL176
@@ -159,6 +219,16 @@ class PrinterManager:
             except:
                 return 0
         
+        # Load Template logic
+        template_path = self.config.get_config_dir() / "custom_template.zpl"
+        zpl_template = None
+        if os.path.exists(template_path):
+            try:
+                with open(template_path, 'r') as f:
+                    zpl_template = f.read()
+            except Exception as e:
+                print(f"Template load error: {e}")
+
         count = 0
         try:
             h_printer = win32print.OpenPrinter(printer_name)
@@ -168,24 +238,62 @@ class PrinterManager:
                 item1 = items[i]
                 item2 = items[i+1] if i+1 < len(items) else None
                 
-                # Header
-                zpl_content = "^XA^PW830^LL176"
-                
-                def get_fields(item, is_right_side):
+                if zpl_template and len(zpl_template) > 10:
+                    # USE TEMPLATE
+                    zpl_content = zpl_template
+                    
+                    # Prepare Variables
                     store = self.config.get('store_name', '4 Bros Mobile')[:20]
-                    uid = str(item.get('unique_id', ''))
-                    model = item.get('model', '')[:25]
-                    ram = item.get('ram_rom', '')
-                    pr = f"Rs. {item.get('price', 0):,.0f}"
-                    grade = str(item.get('grade', '')).upper()
+                    
+                    # Helper to map item to prefix
+                    def get_vars(itm, suffix=""):
+                        if not itm:
+                            return {
+                                f"${{store_name{suffix}}}": "",
+                                f"${{id{suffix}}}": "",
+                                f"${{model{suffix}}}": "",
+                                f"${{ram_rom{suffix}}}": "",
+                                f"${{price{suffix}}}": "",
+                                f"${{grade{suffix}}}": "",
+                                f"${{imei{suffix}}}": ""
+                            }
+                            
+                        return {
+                            f"${{store_name{suffix}}}": store,
+                            f"${{id{suffix}}}": str(itm.get('unique_id', '')),
+                            f"${{model{suffix}}}": itm.get('model', '')[:25],
+                            f"${{ram_rom{suffix}}}": itm.get('ram_rom', ''),
+                            f"${{price{suffix}}}": f"Rs. {itm.get('price', 0):,.0f}",
+                            f"${{grade{suffix}}}": str(itm.get('grade', '')).upper(),
+                            f"${{imei{suffix}}}": str(itm.get('imei', ''))
+                        }
 
-                    if not is_right_side:
-                        # LEFT SIDE
-                        grade_zpl = ""
-                        if grade:
-                            grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
-                        
-                        return f"""
+                    # Map Left (No suffix) and Right (_2 suffix)
+                    vars_map = get_vars(item1, "")
+                    vars_map.update(get_vars(item2, "_2"))
+                    
+                    for k, v in vars_map.items():
+                        zpl_content = zpl_content.replace(k, v)
+
+                else:
+                    # FALLBACK TO HARDCODED
+                    zpl_content = "^XA^PW830^LL176"
+                    
+                    def get_fields(item, is_right_side):
+                        store = self.config.get('store_name', '4 Bros Mobile')[:20]
+                        uid = str(item.get('unique_id', ''))
+                        model = item.get('model', '')[:25]
+                        ram = item.get('ram_rom', '')
+                        pr = f"Rs. {item.get('price', 0):,.0f}"
+                        grade = str(item.get('grade', '')).upper()
+
+                        if not is_right_side:
+                            # LEFT SIDE
+                            grade_zpl = ""
+                            if grade:
+                                grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
+                            
+                            return f"""
 ^FX --- LEFT SIDE: {model} (ID {uid}) --- ^FS
 ^FO0,10^A0N,30,30
 ^FB400,1,0,C,0^FD{store}^FS
@@ -207,13 +315,13 @@ class PrinterManager:
 ^FO150,142^A0N,32,32
 ^FB240,1,0,R,0^FD{pr}^FS
 """
-                    else:
-                        # RIGHT SIDE
-                        grade_zpl = ""
-                        if grade:
-                            grade_zpl = f"^FO740,45^GB50,32,32^FS\n^FO740,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
+                        else:
+                            # RIGHT SIDE
+                            grade_zpl = ""
+                            if grade:
+                                grade_zpl = f"^FO740,45^GB50,32,32^FS\n^FO740,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
 
-                        return f"""
+                            return f"""
 ^FX --- RIGHT SIDE: {model} (ID {uid}) --- ^FS
 ^FO416,10^A0N,30,30
 ^FB400,1,0,C,0^FD{store}^FS
@@ -235,15 +343,15 @@ class PrinterManager:
 ^FO566,142^A0N,32,32
 ^FB240,1,0,R,0^FD{pr}^FS
 """
-                
-                # Add Label 1 (Left)
-                zpl_content += get_fields(item1, False)
-                
-                # Add Label 2 (Right) if exists
-                if item2:
-                    zpl_content += get_fields(item2, True)
-                
-                zpl_content += "^XZ"
+                    
+                    # Add Label 1 (Left)
+                    zpl_content += get_fields(item1, False)
+                    
+                    # Add Label 2 (Right) if exists
+                    if item2:
+                        zpl_content += get_fields(item2, True)
+                    
+                    zpl_content += "^XZ"
                 
                 # Send Job
                 win32print.StartDocPrinter(h_printer, 1, ("BatchLabel", None, "raw"))
