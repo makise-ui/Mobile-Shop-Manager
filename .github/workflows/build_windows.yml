@@ -25,18 +25,31 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
+        pip install pyinstaller pyarmor
+
+    - name: Obfuscate code with PyArmor
+      run: |
+        pyarmor gen -O dist_obf -r core gui utils main.py
 
     - name: Build with PyInstaller
       run: |
-        # Use icon.ico for the executable file icon
-        # Include icon.jpg for the internal Tkinter window icon
-        pyinstaller --noconfirm --onefile --windowed --name "MobileShopManager" --icon "icon.ico" --hidden-import "PIL._tkinter_finder" --collect-all "escpos" --add-data "core;core" --add-data "gui;gui" --add-data "icon.jpg;." main.py
+        # We point to dist_obf/main.py and use --paths to ensure obfuscated modules are used
+        python -m PyInstaller --noconfirm --onefile --windowed `
+          --name "4BrosManager" `
+          --icon "icon.ico" `
+          --key "MAKISE_UI_PRO" `
+          --hidden-import "PIL._tkinter_finder" `
+          --collect-all "escpos" `
+          --add-data "core;core" `
+          --add-data "gui;gui" `
+          --add-data "icon.jpg;." `
+          --paths "dist_obf" `
+          dist_obf/main.py
 
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: dist/MobileShopManager.exe
+        files: dist/4BrosManager.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
