@@ -3,9 +3,21 @@ import os
 from pathlib import Path
 from .utils import SafeJsonWriter
 
-# Determine App Data Directory (Documents/4BrosManager/config)
-# This is safer than the executable folder
-APP_DIR = Path.home() / "Documents" / "4BrosManager"
+# Determine App Data Directory
+# We use a clean version of the default app name: MobileShopManager
+# Migration: If old '4BrosManager' exists, rename it to ensure no data loss.
+DOCS_DIR = Path.home() / "Documents"
+OLD_APP_DIR = DOCS_DIR / "4BrosManager"
+APP_DIR = DOCS_DIR / "MobileShopManager"
+
+if not APP_DIR.exists() and OLD_APP_DIR.exists():
+    try:
+        OLD_APP_DIR.rename(APP_DIR)
+    except Exception as e:
+        print(f"Migration Error: {e}")
+        # Fallback to old dir if rename fails
+        APP_DIR = OLD_APP_DIR
+
 CONFIG_DIR = APP_DIR / "config"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
