@@ -34,7 +34,6 @@ jobs:
         python -m PyInstaller --noconfirm --onefile --windowed `
           --name "4BrosManager" `
           --icon "icon.ico" `
-          --key "MAKISE_UI_PRO" `
           --hidden-import "PIL._tkinter_finder" `
           --collect-all "escpos" `
           --add-data "core;core" `
