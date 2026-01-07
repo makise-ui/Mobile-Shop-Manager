@@ -120,7 +120,7 @@ class PrinterManager:
                 except Exception as e:
                     print(f"Template load error: {e}")
 
-            store_name = self.config.get('store_name', '4 Bros Mobile')[:20]
+            store_name = self.config.get('store_name', 'My Mobile Shop')[:20]
             uid = str(item_data.get('unique_id', ''))
             model = item_data.get('model', '')[:25]
             ram_rom = item_data.get('ram_rom', '')
@@ -243,7 +243,7 @@ class PrinterManager:
                     zpl_content = zpl_template
                     
                     # Prepare Variables
-                    store = self.config.get('store_name', '4 Bros Mobile')[:20]
+                    store = self.config.get('store_name', 'My Mobile Shop')[:20]
                     
                     # Helper to map item to prefix
                     def get_vars(itm, suffix=""):
@@ -280,7 +280,7 @@ class PrinterManager:
                     zpl_content = "^XA^PW830^LL176"
                     
                     def get_fields(item, is_right_side):
-                        store = self.config.get('store_name', '4 Bros Mobile')[:20]
+                        store = self.config.get('store_name', 'My Mobile Shop')[:20]
                         uid = str(item.get('unique_id', ''))
                         model = item.get('model', '')[:25]
                         ram = item.get('ram_rom', '')

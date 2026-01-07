@@ -355,7 +355,7 @@ class ZPLDesignerScreen(ttk.Frame):
             "${imei}": "358912057894561",
             "${ram_rom}": "12/512 GB",
             "${grade}": "A+",
-            "${store_name}": self.config.get('store_name', '4 Bros Mobile'),
+            "${store_name}": self.config.get('store_name', 'My Mobile Shop'),
             
             # Second Label Mock Data
             "${model_2}": "Apple iPhone 15 Pro",
@@ -364,7 +364,7 @@ class ZPLDesignerScreen(ttk.Frame):
             "${imei_2}": "990000112233445",
             "${ram_rom_2}": "256 GB",
             "${grade_2}": "New",
-            "${store_name_2}": self.config.get('store_name', '4 Bros Mobile')
+            "${store_name_2}": self.config.get('store_name', 'My Mobile Shop')
         }
         for k, v in replacements.items():
             final_zpl = final_zpl.replace(k, v)

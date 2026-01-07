@@ -14,6 +14,8 @@ from core.version import APP_VERSION
 from core.activity_log import ActivityLogger
 from core.barcode_utils import BarcodeGenerator
 from core.watcher import InventoryWatcher
+from core.licensing import LicenseManager
+from gui.activation import LicenseDialog
 from gui.screens import (
     InventoryScreen, BillingScreen, AnalyticsScreen, SettingsScreen, 
     ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, 
@@ -31,13 +33,28 @@ class MainApp(tb.Window):
         theme = conf.get('theme_name', 'cosmo')
         
         super().__init__(themename=theme)
-        self.title(f"4 Bros Mobile Manager v{APP_VERSION}")
+        self.app_config = conf # Reuse loaded config
+        
+        app_title = self.app_config.get('app_display_name', 'Mobile Shop Manager')
+        self.title(f"{app_title} v{APP_VERSION}")
         self.geometry("1100x700")
         
+        self.license_mgr = LicenseManager(self.app_config)
+        
+        # --- License Check ---
+        if not self.license_mgr.is_activated():
+            self.withdraw() # Hide main window
+            # Show Activation Dialog. 
+            # Note: We pass 'self._start_application' as the success callback
+            LicenseDialog(self, self.license_mgr, self._start_application)
+        else:
+            self._start_application()
+
+    def _start_application(self):
         # --- Splash Screen ---
-        store_name = ConfigManager().get('store_name', '4 Bros Mobile')
-        splash = SplashScreen(self, store_name)
-        self.withdraw() # Hide main window while splash shows
+        app_name = self.app_config.get('app_display_name', 'Mobile Shop Manager')
+        splash = SplashScreen(self, app_name)
+        self.withdraw() # Ensure hidden while splash runs
         
         # Set Icon (Safe Load)
         try:
@@ -54,7 +71,6 @@ class MainApp(tb.Window):
             print(f"Icon load skipped: {e}")
         
         # --- Core Initialization ---
-        self.app_config = ConfigManager()
         self.activity_logger = ActivityLogger(self.app_config)
         self.updater = UpdateChecker()
         self.inventory = InventoryManager(self.app_config, self.activity_logger)
@@ -154,7 +170,8 @@ class MainApp(tb.Window):
         nav_frame.pack(side=tk.TOP, fill=tk.X)
         nav_frame.pack_propagate(False)
         
-        lbl_title = tk.Label(nav_frame, text="4BROS MANAGER", font=('Segoe UI', 14, 'bold'), bg=NAV_BG, fg="white")
+        app_title = self.app_config.get('app_display_name', 'Mobile Shop Manager').upper()
+        lbl_title = tk.Label(nav_frame, text=app_title, font=('Segoe UI', 14, 'bold'), bg=NAV_BG, fg="white")
         lbl_title.pack(side=tk.LEFT, padx=20)
         
         self.btn_refresh = ttk.Button(nav_frame, text="⟳ REFRESH", style="info.TButton", command=self.manual_refresh)

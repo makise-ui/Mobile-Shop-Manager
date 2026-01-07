@@ -19,13 +19,14 @@ DEFAULT_CONFIG = {
     "gst_default_percent": 18.0,
     "price_markup_percent": 0.0,
     "enable_buyer_tracking": True,
-    "store_name": "4bros Mobile Point",
+    "store_name": "My Mobile Shop",
+    "app_display_name": "Mobile Shop Manager",
     "store_address": "123 Mobile Street, India",
     "store_gstin": "",
     "store_contact": "",
     "invoice_terms": "Goods once sold will not be taken back.",
     "output_folder": str(APP_DIR),
-    "auto_unique_id_prefix": "4BM",
+    "auto_unique_id_prefix": "MSM",
     "theme_name": "cosmo",    # Default Theme
     "theme_color": "#007acc", # Added customization
     "font_size_ui": 10        # Added customization
