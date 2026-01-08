@@ -12,3 +12,5 @@ pywin32
 requests
 packaging
 ttkbootstrap
+pycryptodome
+beautifulsoup4
