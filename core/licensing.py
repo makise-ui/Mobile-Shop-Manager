@@ -72,6 +72,13 @@ class LicenseManager:
 
     def is_activated(self):
         """Checks if a valid license file exists."""
+        # 1. Check for Build-Time Bypass (No License Version)
+        if hasattr(sys, '_MEIPASS'):
+            bypass_flag = os.path.join(sys._MEIPASS, "no_license.flag")
+            if os.path.exists(bypass_flag):
+                return True
+
+        # 2. Standard File Check
         lic_path = self.config.get_config_dir() / "license.key"
         if not os.path.exists(lic_path):
             return False

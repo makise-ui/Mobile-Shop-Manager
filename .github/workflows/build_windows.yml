@@ -27,12 +27,10 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Build with PyInstaller
+    - name: Build Licensed Version
       run: |
-        # Use icon.ico for the executable file icon
-        # Include icon.jpg for the internal Tkinter window icon
         python -m PyInstaller --noconfirm --onefile --windowed `
-          --name "4BrosManager" `
+          --name "4BrosManager_Licensed" `
           --icon "icon.ico" `
           --hidden-import "PIL._tkinter_finder" `
           --collect-all "escpos" `
@@ -41,10 +39,28 @@ jobs:
           --add-data "icon.jpg;." `
           main.py
 
-    - name: Upload Release Asset
+    - name: Build Free (No License) Version
+      run: |
+        # Create the bypass flag
+        echo "BYPASS" > no_license.flag
+        
+        python -m PyInstaller --noconfirm --onefile --windowed `
+          --name "4BrosManager_Free" `
+          --icon "icon.ico" `
+          --hidden-import "PIL._tkinter_finder" `
+          --collect-all "escpos" `
+          --add-data "core;core" `
+          --add-data "gui;gui" `
+          --add-data "icon.jpg;." `
+          --add-data "no_license.flag;." `
+          main.py
+
+    - name: Upload Release Assets
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: dist/4BrosManager.exe
+        files: |
+          dist/4BrosManager_Licensed.exe
+          dist/4BrosManager_Free.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
