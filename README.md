@@ -1,100 +1,87 @@
-# 4Bros Mobile Point Manager
+# Mobile Shop Manager
 
-A professional Windows desktop application designed for mobile shop inventory management. It streamlines operations by merging stock data from multiple Excel files, providing a unified dashboard, handling GST billing, and offering specialized 2-up barcode printing for thermal printers.
+A specialized enterprise solution for mobile retail inventory management, GST billing, and precision thermal printing.
 
-## 🚀 Key Features
-
-- **Unified Inventory Dashboard**: Automatically merges and tracks stock from multiple Excel files. Watches for file changes in real-time.
-- **High-Precision Label Printing**: Optimized for **ZPL (Zebra Programming Language)** compatible thermal printers. Supports 2-up label rolls (2 labels per row) with crisp Code128 barcodes.
-- **Smart ID Registry**: Assigns a unique 3-character ID to every item. Tracks **Sold** and **Return** status persistently, ensuring data isn't lost when you replace your daily stock sheet.
-- **Professional GST Billing**: Generates PDF invoices with automatic CGST/SGST/IGST tax splits.
-- **Conflict Resolution**: Detects duplicate entries across different files and helps you resolve them.
-- **Customizable**: Configure store details, label dimensions, tax rates, and price markups.
+![Version](https://img.shields.io/github/v/release/makise-ui/Mobile-Shop-Manager?style=flat-square&color=007acc) ![Platform](https://img.shields.io/badge/Platform-Windows-007acc?style=flat-square) ![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)
 
 ---
 
-## 🛠️ Requirements
+## Overview
 
-- **Operating System**: Windows 10 or Windows 11 (Recommended).
-- **Python**: Version 3.10 or higher.
-- **Printer**: A thermal label printer (203 DPI recommended) installed as a Windows printer (e.g., Zebra, TSC, Xprinter).
+**Mobile Shop Manager** eliminates the complexity of tracking serialized inventory (IMEI) across multiple storage locations. Unlike generic POS systems, it is engineered specifically for the mobile device retail sector, featuring native integration with Excel-based workflows and industrial thermal printers.
+
+Key differentiator: **Zero-Data-Entry Sync**. The system watches your existing Excel stock sheets and updates the inventory in real-time, requiring no manual import/export cycles.
+
+## Core Capabilities
+
+### Inventory & Stock
+*   **Real-time Excel Synchronization:** Automatically detects and merges changes from multiple `.xlsx` sources.
+*   **Serialized Tracking:** Unique ID assignment for every unit, tracking movement from "In Stock" to "Sold" or "Returned" seamlessly.
+*   **Conflict Resolution:** Intelligent detection of duplicate IMEIs across different supplier files.
+
+### Point of Sale & Billing
+*   **GST Invoicing:** Compliant tax generation (CGST/SGST/IGST) with automated state code detection.
+*   **Buyer Management:** integrated customer database to auto-fill details for recurring clients.
+*   **Sales Analytics:** Daily revenue reports, profit margin analysis, and stock aging alerts.
+
+### Precision Labeling
+*   **Native ZPL Engine:** Direct hardware control for Zebra/TSC thermal printers.
+*   **2-Up Printing:** Specialized support for printing two different product labels side-by-side on a single row, optimizing media usage.
+*   **Visual Designer:** Built-in drag-and-drop template designer for creating custom sticker layouts.
 
 ---
 
-## 📥 Installation & Setup
+## Installation
 
-### 1. Install Python
-If you haven't already, download and install Python 3.10+ from [python.org](https://www.python.org/downloads/windows/).
-*   **Important:** During installation, check the box **"Add Python to PATH"**.
+### For End Users
+1.  Download the latest installer (`.exe`) from the **Releases** section.
+2.  Run the application.
+3.  On first launch, you will be prompted to activate your license.
+4.  Enter your Store Name and details to configure the billing engine.
 
-### 2. Get the Code
-Download this repository as a ZIP file and extract it, or use git:
-```powershell
-git clone https://github.com/yourusername/Mobile-Shop-Manager.git
-cd Mobile-Shop-Manager
-```
+### For Developers
+**Prerequisites:** Python 3.10+, Windows 10/11.
 
-### 3. Install Dependencies
-Open a Command Prompt or PowerShell in the project folder and run:
+```bash
+# Clone the repository
+git clone https://github.com/makise-ui/Mobile-Shop-Manager.git
 
-```powershell
+# Install dependencies
 pip install -r requirements.txt
-```
 
-*Note: If you encounter permission errors, try running the command prompt as Administrator.*
-
-### 4. Run the Application
-Start the application using:
-
-```powershell
+# Run from source
 python main.py
 ```
-*(If `python` doesn't work, try `py main.py` or `python3 main.py` depending on your setup).*
 
 ---
 
-## 📦 Building a Standalone EXE
+## Architecture
 
-To distribute the app to other computers without installing Python, you can package it into a single `.exe` file.
+The application is built on a robust Python stack designed for reliability and ease of deployment.
 
-**Note:** The `pyinstaller` command is best run as a module to avoid path issues on Windows.
-
-Run this command in your terminal:
-
-```powershell
-python -m PyInstaller --noconfirm --onefile --windowed --name "4BrosManager" --icon "icon.jpg" --hidden-import "PIL._tkinter_finder" --collect-all "escpos" --add-data "core;core" --add-data "gui;gui" --add-data "icon.jpg;." main.py
-```
-
-Once finished, you will find `4BrosManager.exe` in the `dist/` folder.
+*   **GUI Framework:** Tkinter with `ttkbootstrap` for a modern, responsive interface.
+*   **Data Engine:** `pandas` for high-performance Excel processing and `TinyDB` for lightweight state persistence.
+*   **Printing Subsystem:** Raw Win32 API integration (`win32print`) for direct ZPL command transmission to thermal printers.
+*   **Security:** Hardware-locked licensing system using local hardware identifiers.
 
 ---
 
-## 📂 Data Storage
+## Configuration
 
-The application does **not** store your data inside the program folder. Instead, it keeps everything safe in your Documents folder:
+User data is strictly separated from the application logic to ensure seamless updates.
 
-`C:\Users\<YourName>\Documents\4BrosManager\`
-
-*   **`config/`**: Contains settings (`config.json`) and file mappings (`file_mappings.json`).
-*   **`invoices/`**: Generated PDF bills are saved here.
-*   **`id_registry.json`**: The master database of Unique IDs and item statuses. **Back up this file regularly.**
+*   **Config Location:** `Documents/MobileShopManager/config/`
+*   **Database:** `Documents/MobileShopManager/id_registry.json`
+*   **Templates:** `Documents/MobileShopManager/config/templates/`
 
 ---
 
-## 📚 Documentation
+## License & Support
 
-For more detailed instructions, please check the [docs](docs/) folder:
+**Proprietary Software.**
+Copyright (c) 2026 Makise UI / 4 Bros Mobile. All rights reserved.
 
-*   [**User Guide**](docs/UserGuide.md): How to use the inventory, billing, and printing features.
-*   [**Configuration**](docs/Configuration.md): Advanced settings and file mapping details.
-*   [**Troubleshooting**](docs/Troubleshooting.md): Common issues and fixes.
+Unauthorized reproduction, distribution, or reverse engineering of this software is strictly prohibited.
 
----
-
-## ⚖️ License
-
-**Proprietary Software.** 
-
-Copyright (c) 2026 4Bros Mobile / makise-ui. All rights reserved.
-
-Unauthorized use, copying, modification, or distribution of this software is strictly prohibited without explicit written permission from the owner. See the [LICENSE](LICENSE) file for more details.
+**Support Contact:**
+For enterprise licensing, AMC contracts, or technical support, please contact the development team directly.
