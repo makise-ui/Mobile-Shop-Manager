@@ -11,3 +11,4 @@ tk
 pywin32
 requests
 packaging
+ttkbootstrap
