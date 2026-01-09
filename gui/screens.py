@@ -19,6 +19,10 @@ class BaseScreen(ttk.Frame):
         """Called when screen becomes visible"""
         pass
 
+    def focus_primary(self):
+        """Focus on the primary input widget of the screen"""
+        pass
+
 # --- Dashboard Screen ---
 class DashboardScreen(BaseScreen):
     def __init__(self, parent, app_context):
@@ -188,7 +192,8 @@ class InventoryScreen(BaseScreen):
         ttk.Label(filter_frame, text="Search (All fields):").grid(row=0, column=0, padx=5, sticky=tk.W)
         self.var_search = tk.StringVar()
         self.var_search.trace("w", self._on_filter_change)
-        ttk.Entry(filter_frame, textvariable=self.var_search, width=30).grid(row=0, column=1, padx=5, sticky=tk.W)
+        self.ent_search = ttk.Entry(filter_frame, textvariable=self.var_search, width=30)
+        self.ent_search.grid(row=0, column=1, padx=5, sticky=tk.W)
         
         ttk.Label(filter_frame, text="Supplier:").grid(row=0, column=2, padx=5, sticky=tk.W)
         self.combo_supplier = ttk.Combobox(filter_frame, state="readonly", width=20)
@@ -295,6 +300,9 @@ class InventoryScreen(BaseScreen):
 
     def on_show(self):
         self.refresh_data()
+
+    def focus_primary(self):
+        self.ent_search.focus_set()
 
     def refresh_data(self):
         df = self.app.inventory.get_inventory()
@@ -858,6 +866,9 @@ class BillingScreen(BaseScreen):
     def on_show(self):
         self.ent_scan.focus_set()
 
+    def focus_primary(self):
+        self.ent_scan.focus_set()
+
     def _save_and_sold(self):
         if not self.cart_items:
             messagebox.showwarning("Empty", "Cart is empty")
@@ -1236,6 +1247,9 @@ class InvoiceHistoryScreen(BaseScreen):
 
     def on_show(self):
         self._refresh_list()
+
+    def focus_primary(self):
+        self.ent_filter_buyer.focus_set()
 
     def _clear_filters(self):
         self.ent_filter_buyer.delete(0, tk.END)
@@ -1998,6 +2012,9 @@ class SearchScreen(BaseScreen):
         # Results List (for multiple matches)
         self.list_results = tk.Listbox(self.left_pane, font=('Segoe UI', 10))
         self.list_results.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def focus_primary(self):
+        self.ent_search.focus_set()
         self.list_results.bind('<<ListboxSelect>>', self._on_result_select)
         
         # --- RIGHT: Details Card ---
@@ -2677,6 +2694,7 @@ class EditDataScreen(BaseScreen):
             # Label, Key, Width
             ('Model Name', 'model', 50),
             ('IMEI No', 'imei', 30),
+            ('Supplier', 'supplier', 30),
             ('Price (Orig)', 'price_original', 15),
             ('Color', 'color', 20),
             ('Grade', 'grade', 10),

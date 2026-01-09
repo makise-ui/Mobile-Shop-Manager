@@ -2,10 +2,8 @@ import json
 import os
 from pathlib import Path
 from .utils import SafeJsonWriter
+from .config import CONFIG_DIR
 
-# Use same config dir
-APP_DIR = Path.home() / "Documents" / "4BrosManager"
-CONFIG_DIR = APP_DIR / "config"
 DATA_FILE = CONFIG_DIR / "app_data.json"
 
 DEFAULT_COLORS = ["Black", "White", "Blue", "Red", "Green", "Gold", "Silver", "Grey", "Purple"]

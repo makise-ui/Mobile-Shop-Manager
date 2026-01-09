@@ -16,6 +16,7 @@ from core.barcode_utils import BarcodeGenerator
 from core.watcher import InventoryWatcher
 from core.licensing import LicenseManager
 from gui.activation import LicenseDialog
+from gui.quick_nav import QuickNavOverlay
 from gui.screens import (
     InventoryScreen, BillingScreen, AnalyticsScreen, SettingsScreen, 
     ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, 
@@ -38,6 +39,10 @@ class MainApp(tb.Window):
         app_title = self.app_config.get('app_display_name', 'Mobile Shop Manager')
         self.title(f"{app_title} v{APP_VERSION}")
         self.geometry("1100x700")
+        
+        # Use bind_all for global shortcuts
+        self.bind_all("<Control-n>", self.open_quick_nav)
+        self.bind_all("<Control-w>", self.open_quick_nav)
         
         self.license_mgr = LicenseManager(self.app_config)
         
@@ -254,12 +259,34 @@ class MainApp(tb.Window):
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W).pack(side=tk.BOTTOM, fill=tk.X)
 
+    def open_quick_nav(self, event=None):
+        screens_map = {
+            'dashboard': 'Dashboard',
+            'inventory': 'Inventory',
+            'billing': 'Billing',
+            'edit': 'High-Speed Edit',
+            'quick_entry': 'Quick Entry',
+            'search': 'Search',
+            'status': 'Status',
+            'analytics': 'Analytics',
+            'invoices': 'Invoices',
+            'designer': 'Label Designer',
+            'files': 'Manage Files',
+            'managedata': 'Manage Data',
+            'settings': 'Settings'
+        }
+        QuickNavOverlay(self, screens_map, self.show_screen)
+
     def show_screen(self, key):
         for screen in self.screens.values(): screen.pack_forget()
         target = self.screens.get(key)
         if target:
             target.pack(fill=tk.BOTH, expand=True)
             target.on_show()
+            target.focus_primary() # Auto-focus on primary input
+            
+            # Record navigation
+            self.activity_logger.log("Navigated", f"Switched to {key} screen")
 
     def switch_to_billing(self, items):
         self.screens['billing'].add_items(items)
