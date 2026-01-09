@@ -13,4 +13,4 @@ requests
 packaging
 ttkbootstrap
 pycryptodome
-beautifulsoup4
+beautifulsoup4python-docx

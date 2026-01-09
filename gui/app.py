@@ -23,6 +23,7 @@ from gui.screens import (
     HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen,
     DashboardScreen, ManageFilesScreen
 )
+from gui.reporting import ReportingScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 from gui.quick_entry import QuickEntryScreen
 from gui.zpl_designer import ZPLDesignerScreen
@@ -214,6 +215,7 @@ class MainApp(tb.Window):
         mb_rep = ttk.Menubutton(btn_bar, text="Reports ▼", style="primary.TButton")
         m_rep = tk.Menu(mb_rep, tearoff=0, font=('Segoe UI', 10))
         m_rep.add_command(label="Analytics Dashboard", command=lambda: self.show_screen('analytics'))
+        m_rep.add_command(label="Advanced Reporting", command=lambda: self.show_screen('reporting'))
         m_rep.add_command(label="Invoice History", command=lambda: self.show_screen('invoices'))
         m_rep.add_command(label="Activity Logs", command=lambda: self.show_screen('activity'))
         mb_rep.config(menu=m_rep)
@@ -257,6 +259,7 @@ class MainApp(tb.Window):
         self.screens['invoices'] = InvoiceHistoryScreen(self.content_area, self)
         self.screens['activity'] = ActivityLogScreen(self.content_area, self)
         self.screens['conflicts'] = ConflictScreen(self.content_area, self)
+        self.screens['reporting'] = ReportingScreen(self.content_area, self)
         self.screens['analytics'] = AnalyticsScreen(self.content_area, self)
         self.screens['settings'] = SettingsScreen(self.content_area, self)
         self.screens['managedata'] = ManageDataScreen(self.content_area, self)
@@ -277,6 +280,7 @@ class MainApp(tb.Window):
             'search': 'Search',
             'status': 'Status',
             'analytics': 'Analytics',
+            'reporting': 'Advanced Reporting',
             'invoices': 'Invoices',
             'designer': 'Label Designer',
             'files': 'Manage Files',
