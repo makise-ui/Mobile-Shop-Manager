@@ -374,6 +374,13 @@ class InventoryManager:
 
     def update_item_status(self, item_id, new_status, write_to_excel=False):
         """Updates and persists the status of an item."""
+        # --- REDIRECT MERGED IDs ---
+        target_id = self.get_merged_target(item_id)
+        if target_id:
+            if self.activity_logger:
+                self.activity_logger.log("REDIRECT", f"Status update for {item_id} redirected to {target_id}")
+            item_id = target_id
+
         # 1. Get Previous Status for logging
         mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
         old_status = "UNKNOWN"
@@ -410,6 +417,11 @@ class InventoryManager:
 
     def update_item_data(self, item_id, updates):
         """Updates generic item data (price, color, etc) and writes to Excel."""
+        # --- REDIRECT MERGED IDs ---
+        target_id = self.get_merged_target(item_id)
+        if target_id:
+            item_id = target_id
+
         mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
         if not mask.any(): return False
         
