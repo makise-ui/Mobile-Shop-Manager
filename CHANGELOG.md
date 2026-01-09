@@ -1,5 +1,48 @@
 # Changelog
 
+## [v1.4.0] - 2026-01-09: The Reporting & Analytics Update
+
+### 🚀 New Features
+
+#### Advanced Reporting Suite
+*   **Custom Query Builder:** Create complex "If/Else" style filters (e.g., "Status is IN AND Price > 10,000") to target specific inventory segments.
+*   **Flexible Exports:** Added support for exporting reports to **Microsoft Word (.docx)**, **Excel (.xlsx)**, and **PDF**.
+*   **Column Customization:** New "Dual Listbox" interface allows you to choose exactly which fields to export and **reorder** them (Drag & Drop / Up & Down).
+*   **Presets:** Save time with built-in presets for common queries like "Low Stock", "Expensive Items", and "Returns".
+*   **Serial Numbering:** Option to inject an "S.No" column into exports for easy row counting.
+
+#### Enhanced Analytics Dashboard
+*   **Detailed PDF Report:** The Analytics export has been completely rewritten. It now generates a professional multi-page PDF containing:
+    *   **Financial Snapshot:** Total value, items sold, and realized profit.
+    *   **Detailed Sales Log:** A full history table of sold items including Date, Buyer Name, Model, and Sale Price.
+*   **Brand Extraction:** The system now automatically extracts the "Brand" from the Model name (e.g., "Apple iPhone 13" -> "APPLE") if a dedicated Brand column is missing, enabling better charts and reporting.
+
+#### Inventory & Pricing Logic
+*   **Smart Price Rounding:** The "Price Markup" feature now automatically rounds the calculated selling price to the nearest **100** (e.g., 4540 -> 4500, 4560 -> 4600) for cleaner retail pricing.
+*   **Brand Column Support:** The inventory engine now natively supports a 'Brand' column if provided in the source Excel file.
+
+### 🛠 Improvements & Fixes
+*   **Search Screen:** Fixed a layout bug where the details pane would duplicate itself on repeated searches.
+*   **Shortcuts:** Improved reliability of global hotkeys (F1-F5) and navigation shortcuts (Ctrl+N).
+*   **Help System:** Updated the in-app User Guide to reflect the new Reporting and Analytics capabilities.
+*   **Logs:** Removed excessive navigation logging to keep the console clean.
+
+---
+
+## [v1.3.0] - 2026-01-09: The Productivity Update
+
+### 🚀 New Features
+*   **Global Hotkeys:** Added F1-F5 shortcuts for rapid navigation (Search, Quick Entry, Status, Billing, Refresh).
+*   **Inline Autocomplete:** Replaced standard dropdowns with Excel-style "Type-Ahead" input fields for faster data entry in Search, Status, and Billing screens.
+*   **Context Menus:** Right-click context menus added to inventory grids for quick actions.
+*   **Dashboard Analytics:** Added "Top Sellers" and improved financial summaries on the main dashboard.
+
+### 🛠 Fixes
+*   **Focus Management:** Resolved crashes related to input focus when switching screens.
+*   **Stability:** General stability improvements and shortcut conflict resolution.
+
+---
+
 ## [v1.2.0] - 2026-01-07
 
 ### 🚀 New Features
