@@ -318,6 +318,12 @@ class InventoryManager:
             
             for row in others:
                 uid = row['unique_id']
+                
+                # CRITICAL FIX: Do not merge if IDs are identical (Self-Merge)
+                # This prevents an item from hiding itself.
+                if str(uid) == str(keeper['unique_id']):
+                    continue
+                    
                 self.id_registry.update_metadata(uid, {
                     'is_hidden': True, 
                     'merged_into': keeper['unique_id'],
