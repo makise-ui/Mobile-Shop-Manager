@@ -336,6 +336,16 @@ class InventoryScreen(BaseScreen):
         # Search
         q = self.var_search.get().lower()
         if q:
+            # --- MERGE HANDLING ---
+            # If q looks like an ID, check if it's a hidden merged one
+            # and automatically search for the target instead.
+            if q.isdigit():
+                redirect = self.app.inventory.get_merged_target(q)
+                if redirect:
+                    # Modify q to be the target ID, so we find the visible item
+                    q = str(redirect).lower()
+                    # Optional: Visual cue?
+            
             # Concat all searchable fields
             mask = df.apply(lambda x: q in str(x['model']).lower() or 
                                       q in str(x['imei']).lower() or 
@@ -948,8 +958,28 @@ class BillingScreen(BaseScreen):
         df = self.app.inventory.get_inventory()
         match = pd.DataFrame()
         
+        # --- NEW: Smart ID Lookup (Handles Merged Items) ---
         if mode == "ID":
-            match = df[df['unique_id'].astype(str) == q]
+            # Direct lookup with redirection
+            item, redirect = self.app.inventory.get_item_by_id(q)
+            if item:
+                if redirect:
+                    messagebox.showinfo("Merged Item", f"ID {redirect} was merged into {item['unique_id']}.\nUsing {item['unique_id']} ({item['model']}).")
+                
+                # Check Sold Status
+                if str(item.get('status', '')).upper() == 'OUT':
+                    self._handle_sold_item(item)
+                    return
+                    
+                self.add_items([item])
+                self.ent_scan.delete(0, tk.END)
+                return
+            else:
+                # Not found (even after check)
+                messagebox.showwarning("Not Found", f"No item found for ID: {q}")
+                self.ent_scan.select_range(0, tk.END)
+                return
+
         elif mode == "IMEI":
             match = df[df['imei'].astype(str).str.contains(q, na=False)]
         elif mode == "Model":

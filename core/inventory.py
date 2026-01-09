@@ -333,6 +333,42 @@ class InventoryManager:
             
         return False
 
+    def get_merged_target(self, unique_id):
+        """
+        Checks if an ID is merged/hidden and returns the Target ID it was merged into.
+        Returns None if not merged.
+        """
+        meta = self.id_registry.get_metadata(unique_id)
+        if meta.get('is_hidden', False):
+            return meta.get('merged_into')
+        return None
+
+    def get_item_by_id(self, unique_id, resolve_merged=True):
+        """
+        Finds an item by ID. 
+        If resolve_merged=True, it follows 'merged_into' links.
+        Returns (ItemDict, RedirectedID) or (None, None).
+        """
+        unique_id = str(unique_id).strip()
+        
+        # 1. Check if merged
+        target_id = unique_id
+        if resolve_merged:
+            merged_into = self.get_merged_target(unique_id)
+            if merged_into:
+                target_id = str(merged_into)
+        
+        # 2. Lookup in Inventory DF
+        df = self.inventory_df
+        mask = df['unique_id'].astype(str) == target_id
+        
+        if mask.any():
+            item = df[mask].iloc[0].to_dict()
+            redirected_from = unique_id if target_id != unique_id else None
+            return item, redirected_from
+            
+        return None, None
+
     def get_inventory(self):
         return self.inventory_df
 
