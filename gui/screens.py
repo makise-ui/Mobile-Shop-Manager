@@ -2216,6 +2216,7 @@ class SearchScreen(BaseScreen):
         self.list_results = tk.Listbox(self.left_pane, font=('Segoe UI', 10))
         self.list_results.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.list_results.bind('<Button-3>', self._show_context_menu) # Right-click
+        self.list_results.bind('<<ListboxSelect>>', self._on_result_select)
 
         # --- Context Menu ---
         self.context_menu = tk.Menu(self, tearoff=0)
@@ -2226,6 +2227,54 @@ class SearchScreen(BaseScreen):
         self.context_menu.add_command(label="Edit Details", command=self._ctx_edit)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Copy IMEI", command=self._ctx_copy_imei)
+        
+        # --- RIGHT: Details Card ---
+        self.right_pane = ttk.Frame(self.paned)
+        self.paned.add(self.right_pane, minsize=400)
+        
+        # Card Header
+        self.f_header = tk.Frame(self.right_pane, bg='white', bd=1, relief=tk.SOLID)
+        self.f_header.pack(fill=tk.X, padx=10, pady=10)
+        
+        self.lbl_model = tk.Label(self.f_header, text="No Item Selected", font=('Segoe UI', 18, 'bold'), bg='white', fg='#333', anchor='w')
+        self.lbl_model.pack(fill=tk.X, padx=10, pady=(10, 0))
+        
+        f_sub = tk.Frame(self.f_header, bg='white')
+        f_sub.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        self.lbl_price = tk.Label(f_sub, text="--", font=('Segoe UI', 14, 'bold'), bg='white', fg='#007acc')
+        self.lbl_price.pack(side=tk.LEFT)
+        
+        self.lbl_status = tk.Label(f_sub, text="STATUS", font=('Segoe UI', 10, 'bold'), bg='#eee', fg='#333', padx=8, pady=2)
+        self.lbl_status.pack(side=tk.RIGHT)
+        
+        # Details Notebook
+        self.nb_details = ttk.Notebook(self.right_pane)
+        self.nb_details.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Tab 1: Info
+        self.tab_info = ttk.Frame(self.nb_details)
+        self.nb_details.add(self.tab_info, text="Details & Specs")
+        
+        self.txt_info = tk.Text(self.tab_info, font=('Consolas', 11), state='disabled', padx=10, pady=10, bg="#f9f9f9")
+        self.txt_info.pack(fill=tk.BOTH, expand=True)
+        
+        # Tab 2: History Timeline
+        self.tab_history = ttk.Frame(self.nb_details)
+        self.nb_details.add(self.tab_history, text="History & Logs")
+        
+        self.txt_timeline = tk.Text(self.tab_history, font=('Segoe UI', 11), state='disabled', padx=20, pady=20, bg="#ffffff", relief=tk.FLAT)
+        scroll_hist = ttk.Scrollbar(self.tab_history, orient=tk.VERTICAL, command=self.txt_timeline.yview)
+        self.txt_timeline.configure(yscrollcommand=scroll_hist.set)
+        
+        scroll_hist.pack(side=tk.RIGHT, fill=tk.Y)
+        self.txt_timeline.pack(fill=tk.BOTH, expand=True)
+        
+        # Tags for styling
+        self.txt_timeline.tag_configure("center", justify='center')
+        self.txt_timeline.tag_configure("status", font=('Segoe UI', 12, 'bold'), foreground="#007acc")
+        self.txt_timeline.tag_configure("date", font=('Segoe UI', 9), foreground="#666")
+        self.txt_timeline.tag_configure("line", font=('Consolas', 14), foreground="#ccc")
 
     def _show_context_menu(self, event):
         # Identify index from Y coordinate
@@ -2283,55 +2332,6 @@ class SearchScreen(BaseScreen):
 
     def focus_primary(self):
         self.ent_search.focus_set()
-        self.list_results.bind('<<ListboxSelect>>', self._on_result_select)
-        
-        # --- RIGHT: Details Card ---
-        self.right_pane = ttk.Frame(self.paned)
-        self.paned.add(self.right_pane, minsize=400)
-        
-        # Card Header
-        self.f_header = tk.Frame(self.right_pane, bg='white', bd=1, relief=tk.SOLID)
-        self.f_header.pack(fill=tk.X, padx=10, pady=10)
-        
-        self.lbl_model = tk.Label(self.f_header, text="No Item Selected", font=('Segoe UI', 18, 'bold'), bg='white', fg='#333', anchor='w')
-        self.lbl_model.pack(fill=tk.X, padx=10, pady=(10, 0))
-        
-        f_sub = tk.Frame(self.f_header, bg='white')
-        f_sub.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
-        self.lbl_price = tk.Label(f_sub, text="--", font=('Segoe UI', 14, 'bold'), bg='white', fg='#007acc')
-        self.lbl_price.pack(side=tk.LEFT)
-        
-        self.lbl_status = tk.Label(f_sub, text="STATUS", font=('Segoe UI', 10, 'bold'), bg='#eee', fg='#333', padx=8, pady=2)
-        self.lbl_status.pack(side=tk.RIGHT)
-        
-        # Details Notebook
-        self.nb_details = ttk.Notebook(self.right_pane)
-        self.nb_details.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Tab 1: Info
-        self.tab_info = ttk.Frame(self.nb_details)
-        self.nb_details.add(self.tab_info, text="Details & Specs")
-        
-        self.txt_info = tk.Text(self.tab_info, font=('Consolas', 11), state='disabled', padx=10, pady=10, bg="#f9f9f9")
-        self.txt_info.pack(fill=tk.BOTH, expand=True)
-        
-        # Tab 2: History Timeline
-        self.tab_history = ttk.Frame(self.nb_details)
-        self.nb_details.add(self.tab_history, text="History & Logs")
-        
-        self.txt_timeline = tk.Text(self.tab_history, font=('Segoe UI', 11), state='disabled', padx=20, pady=20, bg="#ffffff", relief=tk.FLAT)
-        scroll_hist = ttk.Scrollbar(self.tab_history, orient=tk.VERTICAL, command=self.txt_timeline.yview)
-        self.txt_timeline.configure(yscrollcommand=scroll_hist.set)
-        
-        scroll_hist.pack(side=tk.RIGHT, fill=tk.Y)
-        self.txt_timeline.pack(fill=tk.BOTH, expand=True)
-        
-        # Tags for styling
-        self.txt_timeline.tag_configure("center", justify='center')
-        self.txt_timeline.tag_configure("status", font=('Segoe UI', 12, 'bold'), foreground="#007acc")
-        self.txt_timeline.tag_configure("date", font=('Segoe UI', 9), foreground="#666")
-        self.txt_timeline.tag_configure("line", font=('Consolas', 14), foreground="#ccc")
 
     def on_show(self):
         self.ent_search.focus_set()
