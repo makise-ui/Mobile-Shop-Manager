@@ -41,16 +41,16 @@ class MainApp(tb.Window):
         self.geometry("1100x700")
         
         # Use bind_all for global shortcuts
-        self.bind_all("<Control-n>", self.open_quick_nav)
-        self.bind_all("<Control-w>", self.open_quick_nav)
+        self.bind_all("<Control-n>", self.open_quick_nav, add='+')
+        self.bind_all("<Control-w>", self.open_quick_nav, add='+')
         
         # Power User Hotkeys
-        self.bind_all("<F1>", lambda e: self.show_screen('search'))
-        self.bind_all("<F2>", lambda e: self.show_screen('quick_entry'))
-        self.bind_all("<F3>", lambda e: self.show_screen('status'))
-        self.bind_all("<F4>", lambda e: self.show_screen('billing'))
-        self.bind_all("<F5>", lambda e: self.manual_refresh())
-        self.bind_all("<Escape>", lambda e: self.show_screen('dashboard'))
+        self.bind_all("<F1>", lambda e: self.show_screen('search'), add='+')
+        self.bind_all("<F2>", lambda e: self.show_screen('quick_entry'), add='+')
+        self.bind_all("<F3>", lambda e: self.show_screen('status'), add='+')
+        self.bind_all("<F4>", lambda e: self.show_screen('billing'), add='+')
+        self.bind_all("<F5>", lambda e: self.manual_refresh(), add='+')
+        self.bind_all("<Escape>", lambda e: self.show_screen('dashboard'), add='+')
         
         self.license_mgr = LicenseManager(self.app_config)
         
@@ -292,9 +292,6 @@ class MainApp(tb.Window):
             target.pack(fill=tk.BOTH, expand=True)
             target.on_show()
             target.focus_primary() # Auto-focus on primary input
-            
-            # Record navigation
-            self.activity_logger.log("Navigated", f"Switched to {key} screen")
 
     def switch_to_billing(self, items):
         self.screens['billing'].add_items(items)
