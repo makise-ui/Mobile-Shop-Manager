@@ -24,7 +24,7 @@ class UpdateChecker:
                 if response.status_code == 200:
                     data = response.json()
                     tag_name = data.get('tag_name', '0.0.0')
-                    body = data.get('body', 'No details provided.')
+                    body = data.get('body') or 'No details provided.'
                     
                     clean_tag = tag_name.lstrip('v')
                     clean_current = self.current_version.lstrip('v')
@@ -103,6 +103,8 @@ class UpdateChecker:
         # 4. Relaunch
         batch_script = f"""
 @echo off
+set "PYTHONPATH="
+set "PYTHONHOME="
 :loop
 tasklist | findstr /R "\\<{pid}\\>" >nul
 if %errorlevel% == 0 (
@@ -132,10 +134,15 @@ REM Cleanup self
             with open(bat_path, "w") as f:
                 f.write(batch_script)
                 
+            # Sanitize Environment
+            # PyInstaller sets _MEIPASS. If we inherit it, the new process might try 
+            # to use the old (deleted) temp dir.
+            clean_env = os.environ.copy()
+            if '_MEIPASS' in clean_env:
+                del clean_env['_MEIPASS']
+            
             # Launch detached process
-            # close_fds=True is crucial to ensure the bat process doesn't hold handles 
-            # to the parent's _MEI folder or pipes, allowing parent to exit cleanly.
-            subprocess.Popen([bat_path], shell=True, close_fds=True, cwd=exe_dir)
+            subprocess.Popen([bat_path], shell=True, close_fds=True, cwd=exe_dir, env=clean_env)
             
             return True, "Restarting..."
         except Exception as e:
