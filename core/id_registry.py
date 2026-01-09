@@ -88,3 +88,23 @@ class IDRegistry:
 
     def get_metadata(self, item_id):
         return self.registry['metadata'].get(str(item_id), {})
+
+    def get_all_buyers(self):
+        """
+        Scans all item metadata to find unique buyers.
+        Returns a dict: { 'Buyer Name': 'Contact Number', ... }
+        """
+        buyers = {}
+        meta = self.registry.get('metadata', {})
+        
+        for iid, data in meta.items():
+            # Check current status/buyer info
+            b_name = data.get('buyer', '').strip()
+            b_contact = data.get('buyer_contact', '').strip()
+            
+            if b_name:
+                # Store/Update contact (preferring non-empty)
+                if b_name not in buyers or (b_contact and not buyers[b_name]):
+                    buyers[b_name] = b_contact
+                    
+        return buyers

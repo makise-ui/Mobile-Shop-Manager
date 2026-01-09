@@ -347,7 +347,7 @@ class ZPLDesignerScreen(ttk.Frame):
         # Apply 2-Up Logic for Preview ONLY
         final_zpl = zpl
         
-        # Variable Substitution
+        # Variable Substitution (Mock Data)
         replacements = {
             "${model}": "Samsung Galaxy S24 Ultra",
             "${price}": "Rs. 1,24,000",
@@ -384,17 +384,19 @@ class ZPLDesignerScreen(ttk.Frame):
             response = requests.post(url, data=final_zpl, headers={'Accept': 'image/png'})
             
             if response.status_code == 200:
-                if self.winfo_exists():
-                    self.app.after(0, lambda: self._update_preview_image(response.content))
+                 self.app.after(0, lambda: self._update_preview_image(response.content))
             else:
-                if self.winfo_exists():
-                    self.app.after(0, lambda: self.lbl_preview_loading.config(text="Preview Error"))
+                 self.app.after(0, lambda: self._update_loading_text("Preview Error"))
                 
         except Exception as e:
-            if self.winfo_exists():
-                self.app.after(0, lambda: self.lbl_preview_loading.config(text="Offline"))
+            self.app.after(0, lambda: self._update_loading_text("Offline"))
+
+    def _update_loading_text(self, text):
+        if self.winfo_exists():
+            self.lbl_preview_loading.config(text=text)
 
     def _update_preview_image(self, image_data):
+        if not self.winfo_exists(): return
         try:
             pil_img = Image.open(io.BytesIO(image_data))
             

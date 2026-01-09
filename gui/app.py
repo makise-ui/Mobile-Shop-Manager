@@ -44,6 +44,14 @@ class MainApp(tb.Window):
         self.bind_all("<Control-n>", self.open_quick_nav)
         self.bind_all("<Control-w>", self.open_quick_nav)
         
+        # Power User Hotkeys
+        self.bind_all("<F1>", lambda e: self.show_screen('search'))
+        self.bind_all("<F2>", lambda e: self.show_screen('quick_entry'))
+        self.bind_all("<F3>", lambda e: self.show_screen('status'))
+        self.bind_all("<F4>", lambda e: self.show_screen('billing'))
+        self.bind_all("<F5>", lambda e: self.manual_refresh())
+        self.bind_all("<Escape>", lambda e: self.show_screen('dashboard'))
+        
         self.license_mgr = LicenseManager(self.app_config)
         
         # --- License Check ---
