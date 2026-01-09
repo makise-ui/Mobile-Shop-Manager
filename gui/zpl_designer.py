@@ -384,12 +384,15 @@ class ZPLDesignerScreen(ttk.Frame):
             response = requests.post(url, data=final_zpl, headers={'Accept': 'image/png'})
             
             if response.status_code == 200:
-                self.app.after(0, lambda: self._update_preview_image(response.content))
+                if self.winfo_exists():
+                    self.app.after(0, lambda: self._update_preview_image(response.content))
             else:
-                self.app.after(0, lambda: self.lbl_preview_loading.config(text="Preview Error"))
+                if self.winfo_exists():
+                    self.app.after(0, lambda: self.lbl_preview_loading.config(text="Preview Error"))
                 
         except Exception as e:
-            self.app.after(0, lambda: self.lbl_preview_loading.config(text="Offline"))
+            if self.winfo_exists():
+                self.app.after(0, lambda: self.lbl_preview_loading.config(text="Offline"))
 
     def _update_preview_image(self, image_data):
         try:

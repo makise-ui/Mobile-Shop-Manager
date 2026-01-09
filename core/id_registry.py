@@ -3,11 +3,7 @@ import os
 import hashlib
 from pathlib import Path
 from .utils import SafeJsonWriter
-
-# Use the same config dir as config.py
-APP_DIR = Path.home() / "Documents" / "4BrosManager"
-CONFIG_DIR = APP_DIR / "config"
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+from .config import CONFIG_DIR
 
 ID_REGISTRY_FILE = CONFIG_DIR / "id_registry.json"
 
