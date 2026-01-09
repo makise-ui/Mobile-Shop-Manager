@@ -36,6 +36,9 @@ class QuickEntryScreen(ttk.Frame):
         
         self._init_ui()
         
+    def focus_primary(self):
+        self.ent_imei.focus_set()
+
     def _init_ui(self):
         # --- Top Bar: File & Settings ---
         top_bar = ttk.Frame(self, padding=10)

@@ -9,6 +9,46 @@ import glob
 import ttkbootstrap as tb
 from ttkbootstrap.toast import ToastNotification
 
+# --- Custom Widgets ---
+class AutocompleteEntry(ttk.Entry):
+    def __init__(self, parent, completion_list=None, **kwargs):
+        super().__init__(parent, **kwargs)
+        self._completion_list = sorted(completion_list) if completion_list else []
+        self.bind('<KeyRelease>', self.handle_keyrelease)
+
+    def set_completion_list(self, completion_list):
+        """Update the list of possible completions"""
+        # Filter out non-strings and empty strings, ensure sorted unique
+        clean_list = sorted(list(set([str(x) for x in completion_list if x])))
+        self._completion_list = clean_list
+
+    def handle_keyrelease(self, event):
+        """Inline Type-Ahead Autocomplete"""
+        if event.keysym in ('BackSpace', 'Left', 'Right', 'Up', 'Down', 'Return', 'Tab', 'Delete', 'Escape'):
+            return
+
+        # Only autocomplete if cursor is at the end
+        if self.index(tk.INSERT) != len(self.get()):
+            return
+
+        # Get typed text
+        full_text = self.get()
+        if not full_text: return
+        
+        # Find closest match that STARTS with full_text
+        # Use Case-Insensitive match, but insert the Match's case
+        match = next((item for item in self._completion_list if item.lower().startswith(full_text.lower())), None)
+        
+        if match:
+            # Check if we already have the full match (to avoid loops)
+            if full_text == match:
+                return
+                
+            remainder = match[len(full_text):]
+            self.insert(tk.END, remainder)
+            self.select_range(len(full_text), tk.END)
+            self.icursor(len(full_text))
+
 # --- Base Screen Class ---
 class BaseScreen(ttk.Frame):
     def __init__(self, parent, app_context):
@@ -22,6 +62,15 @@ class BaseScreen(ttk.Frame):
     def focus_primary(self):
         """Focus on the primary input widget of the screen"""
         pass
+
+    def _get_all_models(self):
+        """Helper to get unique models for autocomplete"""
+        try:
+            df = self.app.inventory.get_inventory()
+            if not df.empty:
+                return df['model'].dropna().unique().tolist()
+        except: pass
+        return []
 
 # --- Dashboard Screen ---
 class DashboardScreen(BaseScreen):
@@ -87,6 +136,19 @@ class DashboardScreen(BaseScreen):
         self.tree_low.heading('sold_last_30', text='Sold (30d)')
         self.tree_low.column('count', width=80, anchor='center')
         self.tree_low.pack(fill=tk.BOTH, expand=True)
+        
+        # Top Sellers Table
+        f_top_sellers = ttk.LabelFrame(self.scroll_frame, text=" Top Selling Models (Last 30 Days) ", bootstyle="success")
+        f_top_sellers.pack(fill=tk.X, padx=20, pady=(0, 20))
+        
+        cols_top = ('rank', 'model', 'sold_count')
+        self.tree_top = ttk.Treeview(f_top_sellers, columns=cols_top, show='headings', height=5)
+        self.tree_top.heading('rank', text='#')
+        self.tree_top.heading('model', text='Model')
+        self.tree_top.heading('sold_count', text='Units Sold')
+        self.tree_top.column('rank', width=40, anchor='center')
+        self.tree_top.column('sold_count', width=100, anchor='center')
+        self.tree_top.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # 3. Recent Activity
         ttk.Label(self.scroll_frame, text="Recent Activity", font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W, padx=20, pady=(20, 10))
@@ -117,7 +179,7 @@ class DashboardScreen(BaseScreen):
         if df.empty:
             count = 0
             val = 0
-            self._update_alerts(pd.DataFrame(), pd.DataFrame())
+            self._update_alerts(pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
         else:
             # Filter Available
             available = df[df['status'] == 'IN']
@@ -144,12 +206,12 @@ class DashboardScreen(BaseScreen):
                 aging_stock = pd.DataFrame()
                 
             self.card_aging.lbl_val.config(text=str(len(aging_stock)), foreground="red" if not aging_stock.empty else "green")
-            self._update_alerts(available, aging_stock)
+            self._update_alerts(available, aging_stock, df)
             
         self.card_stock.lbl_val.config(text=str(count))
         self.card_value.lbl_val.config(text=f"₹{val:,.0f}")
 
-    def _update_alerts(self, available_df, aging_df):
+    def _update_alerts(self, available_df, aging_df, full_df):
         # 1. Aging Tree
         for i in self.tree_aging.get_children(): self.tree_aging.delete(i)
         if not aging_df.empty:
@@ -159,15 +221,37 @@ class DashboardScreen(BaseScreen):
         # 2. Low Stock Logic (Model Families)
         for i in self.tree_low.get_children(): self.tree_low.delete(i)
         if not available_df.empty:
-            # Normalize model names (First 2 words) to group "iPhone 11 64GB" and "iPhone 11 128GB"
-            # This is a heuristic.
+            # Normalize model names (First 2 words)
             available_df['model_fam'] = available_df['model'].apply(lambda x: " ".join(str(x).split()[:2]))
             
             counts = available_df['model_fam'].value_counts()
-            low_stock = counts[counts < 2] # Threshold: Less than 2
+            low_stock = counts[counts < 2]
             
             for model, count in low_stock.head(20).items():
                 self.tree_low.insert('', tk.END, values=(model, count, "-"))
+
+        # 3. Top Sellers Logic
+        for i in self.tree_top.get_children(): self.tree_top.delete(i)
+        if not full_df.empty:
+            # Filter SOLD items in last 30 days
+            sold = full_df[full_df['status'].isin(['OUT', 'SOLD'])]
+            if not sold.empty:
+                now = datetime.datetime.now()
+                def is_recent(row):
+                    try:
+                        d = row.get('last_updated')
+                        if isinstance(d, str): d = datetime.datetime.fromisoformat(d)
+                        if not isinstance(d, datetime.datetime): return False
+                        return (now - d).days <= 30
+                    except: return False
+                
+                recent_sold = sold[sold.apply(is_recent, axis=1)].copy()
+                if not recent_sold.empty:
+                    recent_sold['model_fam'] = recent_sold['model'].apply(lambda x: " ".join(str(x).split()[:2]))
+                    top_counts = recent_sold['model_fam'].value_counts()
+                    
+                    for idx, (model, count) in enumerate(top_counts.head(10).items()):
+                        self.tree_top.insert('', tk.END, values=(idx+1, model, count))
 
     def _refresh_log(self):
         for i in self.tree_log.get_children():
@@ -192,7 +276,8 @@ class InventoryScreen(BaseScreen):
         ttk.Label(filter_frame, text="Search (All fields):").grid(row=0, column=0, padx=5, sticky=tk.W)
         self.var_search = tk.StringVar()
         self.var_search.trace("w", self._on_filter_change)
-        self.ent_search = ttk.Entry(filter_frame, textvariable=self.var_search, width=30)
+        
+        self.ent_search = AutocompleteEntry(filter_frame, textvariable=self.var_search, width=30)
         self.ent_search.grid(row=0, column=1, padx=5, sticky=tk.W)
         
         ttk.Label(filter_frame, text="Supplier:").grid(row=0, column=2, padx=5, sticky=tk.W)
@@ -278,6 +363,8 @@ class InventoryScreen(BaseScreen):
         
         self.tree.bind('<<TreeviewSelect>>', self._on_row_click) 
         self.tree.bind('<ButtonRelease-1>', self._on_click_check) # Specific click handler
+        self.tree.bind('<Double-1>', self._on_double_click) # Double-click to Edit
+        self.tree.bind('<Button-3>', self._show_context_menu) # Right-click context menu
         
         self.paned.add(self.tree, minsize=400, width=700)
 
@@ -292,6 +379,74 @@ class InventoryScreen(BaseScreen):
         
         self.checked_ids = set() # Store unique_ids of checked items
 
+        # --- Context Menu ---
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="Add to Invoice", command=self._ctx_add_to_invoice)
+        self.context_menu.add_command(label="Mark as SOLD", command=self._ctx_mark_sold)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Print Label", command=self._ctx_print)
+        self.context_menu.add_command(label="Edit Details", command=self._ctx_edit)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Copy IMEI", command=self._ctx_copy_imei)
+
+    def _show_context_menu(self, event):
+        item_id = self.tree.identify_row(event.y)
+        if item_id:
+            # Select the item if not already selected
+            if item_id not in self.tree.selection():
+                self.tree.selection_set(item_id)
+            self.context_menu.post(event.x_root, event.y_root)
+
+    def _get_selected_row_data(self):
+        # Helper to get dict of currently selected single row
+        sel = self.tree.selection()
+        if not sel: return None
+        
+        # iid is unique_id (or uid_idx)
+        uid = str(sel[0]).split('_')[0]
+        df = self.app.inventory.get_inventory()
+        match = df[df['unique_id'].astype(str) == uid]
+        if not match.empty:
+            return match.iloc[0].to_dict()
+        return None
+
+    def _ctx_add_to_invoice(self):
+        row = self._get_selected_row_data()
+        if row:
+            self.app.switch_to_billing([row])
+
+    def _ctx_mark_sold(self):
+        # Use existing logic but for specific selection
+        self._bulk_update_status("OUT")
+
+    def _ctx_print(self):
+        row = self._get_selected_row_data()
+        if row:
+            # Print single
+            self.app.printer.print_label_windows(row)
+            # Or use preview dialog? Direct is faster for context menu.
+            # But let's verify if user wants preview. 
+            # For productivity, direct print is better if trusted, but let's be safe.
+            # We'll re-use _print_selected logic but just for this item
+            self.checked_ids.add(self.tree.selection()[0])
+            self._print_selected()
+
+    def _ctx_edit(self):
+        row = self._get_selected_row_data()
+        if row:
+            # Switch to Edit Screen and load
+            self.app.show_screen('edit')
+            self.app.screens['edit'].ent_search.delete(0, tk.END)
+            self.app.screens['edit'].ent_search.insert(0, str(row['unique_id']))
+            self.app.screens['edit']._lookup()
+
+    def _ctx_copy_imei(self):
+        row = self._get_selected_row_data()
+        if row:
+            self.clipboard_clear()
+            self.clipboard_append(str(row.get('imei', '')))
+
+
     def _toggle_preview(self):
         if self.var_show_preview.get():
             self.paned.add(self.preview_frame, minsize=250)
@@ -300,6 +455,8 @@ class InventoryScreen(BaseScreen):
 
     def on_show(self):
         self.refresh_data()
+        # LOAD MODELS for Autocomplete
+        self.ent_search.set_completion_list(self._get_all_models())
 
     def focus_primary(self):
         self.ent_search.focus_set()
@@ -387,6 +544,9 @@ class InventoryScreen(BaseScreen):
             # Checkbox state
             check_mark = "☑" if original_uid in self.checked_ids else "☐"
             
+            status = str(row.get('status', 'IN')).upper()
+            status_display = f"🟢 {status}" if status == "IN" else f"🔴 {status}"
+            
             vals = (
                 check_mark,
                 original_uid, # Display original ID text
@@ -396,7 +556,7 @@ class InventoryScreen(BaseScreen):
                 f"{row.get('price_original', 0):.2f}",
                 f"{row.get('price', 0):.2f}",
                 str(row.get('supplier', '')),
-                str(row.get('status', ''))
+                status_display
             )
             
             # Aging Logic
@@ -459,6 +619,17 @@ class InventoryScreen(BaseScreen):
                 self.tree.item(item_id, values=vals)
         self.checked_ids.clear()
         self.lbl_info.configure(text=f"0 Item(s) Checked")
+
+    def _on_double_click(self, event):
+        item_id = self.tree.identify_row(event.y)
+        if item_id:
+            # Get real UID
+            uid = str(item_id).split('_')[0]
+            # Jump to Edit Screen
+            self.app.show_screen('edit')
+            self.app.screens['edit'].ent_search.delete(0, tk.END)
+            self.app.screens['edit'].ent_search.insert(0, uid)
+            self.app.screens['edit']._lookup()
 
     def _on_row_click(self, event):
         # Preview the selection (standard highlight)
@@ -794,7 +965,7 @@ class BillingScreen(BaseScreen):
         self.combo_mode.pack(side=tk.LEFT, padx=5)
         
         ttk.Label(scan_frame, text="Scan/Search:", font=('Segoe UI', 12, 'bold')).pack(side=tk.LEFT, padx=5)
-        self.ent_scan = ttk.Entry(scan_frame, font=('Segoe UI', 14))
+        self.ent_scan = AutocompleteEntry(scan_frame, font=('Segoe UI', 14))
         self.ent_scan.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.ent_scan.bind('<Return>', self._on_scan)
         
@@ -875,6 +1046,8 @@ class BillingScreen(BaseScreen):
 
     def on_show(self):
         self.ent_scan.focus_set()
+        # LOAD MODELS for Autocomplete
+        self.ent_scan.set_completion_list(self._get_all_models())
 
     def focus_primary(self):
         self.ent_scan.focus_set()
@@ -2034,7 +2207,7 @@ class SearchScreen(BaseScreen):
         ttk.Radiobutton(f_radios, text="Unique ID", variable=self.var_search_type, value="ID").pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(f_radios, text="Model/IMEI", variable=self.var_search_type, value="MODEL").pack(side=tk.LEFT, padx=5)
         
-        self.ent_search = ttk.Entry(f_search, font=('Segoe UI', 12))
+        self.ent_search = AutocompleteEntry(f_search, font=('Segoe UI', 12))
         self.ent_search.pack(fill=tk.X, pady=5)
         self.ent_search.bind('<Return>', lambda e: self._do_lookup())
         ttk.Button(f_search, text="SEARCH", command=self._do_lookup).pack(fill=tk.X, pady=5)
@@ -2042,6 +2215,71 @@ class SearchScreen(BaseScreen):
         # Results List (for multiple matches)
         self.list_results = tk.Listbox(self.left_pane, font=('Segoe UI', 10))
         self.list_results.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.list_results.bind('<Button-3>', self._show_context_menu) # Right-click
+
+        # --- Context Menu ---
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="Mark as SOLD", command=self._ctx_mark_sold)
+        self.context_menu.add_command(label="Add to Invoice", command=self._ctx_add_to_invoice)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Print Label", command=self._ctx_print)
+        self.context_menu.add_command(label="Edit Details", command=self._ctx_edit)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Copy IMEI", command=self._ctx_copy_imei)
+
+    def _show_context_menu(self, event):
+        # Identify index from Y coordinate
+        try:
+            index = self.list_results.nearest(event.y)
+            self.list_results.selection_clear(0, tk.END)
+            self.list_results.selection_set(index)
+            self.list_results.activate(index)
+            self._on_result_select(None) # Trigger details view
+            self.context_menu.post(event.x_root, event.y_root)
+        except: pass
+
+    def _get_current_match(self):
+        sel = self.list_results.curselection()
+        if not sel: return None
+        return self.matches[sel[0]]
+
+    def _ctx_mark_sold(self):
+        row = self._get_current_match()
+        if row is None: return
+        # Open Mark Sold Dialog (Reuse logic from InventoryScreen?)
+        # InventoryScreen logic is tied to checkbox selections.
+        # We can re-use the underlying method if we instantiate it or duplicate simple logic.
+        # For simplicity/speed, we'll open a dedicated simple dialog here.
+        
+        if messagebox.askyesno("Confirm", f"Mark {row['model']} as SOLD?"):
+            if self.app.inventory.update_item_status(row['unique_id'], "OUT", write_to_excel=True):
+                 messagebox.showinfo("Success", "Item Marked SOLD")
+                 self._do_lookup() # Refresh
+
+    def _ctx_add_to_invoice(self):
+        row = self._get_current_match()
+        if row is not None:
+            self.app.switch_to_billing([row.to_dict()])
+
+    def _ctx_print(self):
+        row = self._get_current_match()
+        if row is not None:
+            self.app.printer.print_label_windows(row.to_dict())
+
+    def _ctx_edit(self):
+        row = self._get_current_match()
+        if row is not None:
+             self.app.show_screen('edit')
+             self.app.screens['edit'].ent_search.delete(0, tk.END)
+             self.app.screens['edit'].ent_search.insert(0, str(row['unique_id']))
+             self.app.screens['edit']._lookup()
+
+    def _ctx_copy_imei(self):
+        row = self._get_current_match()
+        if row is not None:
+            self.clipboard_clear()
+            self.clipboard_append(str(row.get('imei', '')))
+
 
     def focus_primary(self):
         self.ent_search.focus_set()
@@ -2097,6 +2335,8 @@ class SearchScreen(BaseScreen):
 
     def on_show(self):
         self.ent_search.focus_set()
+        # LOAD MODELS for Autocomplete
+        self.ent_search.set_completion_list(self._get_all_models())
 
     def _do_lookup(self):
         query = self.ent_search.get().strip()
@@ -2172,6 +2412,7 @@ SUPPLIER    : {row.get('supplier')}
 
 BUY PRICE   : ₹{row.get('price_original', 0):,.2f}
 SELL PRICE  : ₹{row.get('price', 0):,.2f}
+PROFIT      : ₹{(row.get('price', 0) - row.get('price_original', 0)):,.2f}
 
 BUYER INFO
 ----------
@@ -2326,15 +2567,21 @@ class StatusScreen(BaseScreen):
         self.frame_buyer.pack(fill=tk.X, pady=10)
         
         ttk.Label(self.frame_buyer, text="Buyer Name:").pack(anchor=tk.W)
-        self.ent_buyer = ttk.Combobox(self.frame_buyer)
+        
+        # SMART AUTOCOMPLETE ENTRY
+        self.ent_buyer = AutocompleteEntry(self.frame_buyer, width=30)
         self.ent_buyer.pack(fill=tk.X, pady=(0,5))
-        self.ent_buyer.bind('<Return>', lambda e: self.ent_contact.focus_set())
+        self.ent_buyer.bind('<Return>', self._check_buyer_contact)
+        self.ent_buyer.bind('<FocusOut>', self._check_buyer_contact)
         
         ttk.Label(self.frame_buyer, text="Contact No:").pack(anchor=tk.W)
         self.ent_contact = ttk.Entry(self.frame_buyer)
         self.ent_contact.pack(fill=tk.X, pady=(0,5))
         self.ent_contact.bind('<Return>', self._confirm_update)
         
+        # Store Buyer Data Cache {name: contact}
+        self.buyer_cache = {} 
+
         # Update Button
         self.btn_update = ttk.Button(right_pane, text="CONFIRM UPDATE", command=self._confirm_update, style="Accent.TButton")
         self.btn_update.pack(fill=tk.X, pady=(20, 10))
@@ -2365,7 +2612,35 @@ class StatusScreen(BaseScreen):
         self._toggle_buyer_fields()
 
     def _refresh_buyers(self):
-        self.ent_buyer['values'] = self.registry.get_buyers()
+        # 1. Get predefined
+        predefined = self.registry.get_buyers()
+        
+        # 2. Get history from ID Registry
+        history_buyers = self.app.inventory.id_registry.get_all_buyers() # Returns {name: contact}
+        self.buyer_cache = history_buyers
+        
+        # Merge lists (unique)
+        all_buyers = sorted(list(set(predefined + list(history_buyers.keys()))))
+        self.ent_buyer.set_completion_list(all_buyers)
+
+    def _check_buyer_contact(self, event=None):
+        name = self.ent_buyer.get().strip()
+        if not name: return
+        
+        # Auto-fill contact
+        if name in self.buyer_cache:
+            contact = self.buyer_cache[name]
+            if contact:
+                # Check if contact field is empty
+                current = self.ent_contact.get().strip()
+                if not current:
+                    self.ent_contact.delete(0, tk.END)
+                    self.ent_contact.insert(0, contact)
+        
+        # Only focus next if it was a Return key event or explicit call
+        if event and event.keysym == 'Return':
+            self.ent_contact.focus_set()
+
 
     def _toggle_batch_ui(self):
         if self.var_batch_mode.get():
