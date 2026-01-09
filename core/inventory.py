@@ -99,6 +99,14 @@ class InventoryManager:
         col_model = get_col('model')
         canonical['model'] = col_model.fillna('Unknown Model').astype(str) if col_model is not None else 'Unknown Model'
         
+        # Brand (Extract from model if not mapped)
+        col_brand = get_col('brand')
+        if col_brand is not None:
+            canonical['brand'] = col_brand.fillna('').astype(str).str.upper()
+        else:
+            # Fallback: First word of model
+            canonical['brand'] = canonical['model'].apply(lambda x: str(x).split()[0].upper() if x and str(x).split() else 'UNKNOWN')
+
         # Price Logic
         col_price = get_col('price')
         if col_price is not None:
@@ -116,7 +124,9 @@ class InventoryManager:
             
         if markup > 0:
             # Vectorized calc
-            canonical['price'] = raw_price * (1 + markup/100.0)
+            price_with_markup = raw_price * (1 + markup/100.0)
+            # Round to nearest 100: round(x/100)*100
+            canonical['price'] = price_with_markup.apply(lambda x: round(x / 100) * 100 if x > 0 else x)
         else:
             canonical['price'] = raw_price
         
@@ -206,7 +216,8 @@ class InventoryManager:
                     markup = 0.0
                     
                 if markup > 0:
-                    row['price'] = row['price_original'] * (1 + markup/100.0)
+                    raw_p = row['price_original'] * (1 + markup/100.0)
+                    row['price'] = round(raw_p / 100) * 100 if raw_p > 0 else raw_p
                 else:
                     row['price'] = row['price_original']
             return row
@@ -296,7 +307,7 @@ class InventoryManager:
             
             self.inventory_df = full_df
         else:
-            self.inventory_df = pd.DataFrame(columns=['unique_id', 'imei', 'model', 'ram_rom', 'price', 'price_original', 'supplier', 'source_file', 'last_updated', 'status', 'color'])
+            self.inventory_df = pd.DataFrame(columns=['unique_id', 'imei', 'brand', 'model', 'ram_rom', 'price', 'price_original', 'supplier', 'source_file', 'last_updated', 'status', 'color'])
             
         if self.activity_logger:
             self.activity_logger.log("RELOAD", f"Loaded {len(self.inventory_df)} items from {len(mappings)} sources.")

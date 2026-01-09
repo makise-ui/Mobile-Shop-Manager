@@ -1940,58 +1940,88 @@ class AnalyticsScreen(BaseScreen):
 
 
     def _export_pdf(self):
-        # Implementation remains similar but with richer data
-        f = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"Analytics_{datetime.date.today()}.pdf")
+        f = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"Analytics_Detailed_{datetime.date.today()}.pdf")
         if not f: return
         
-        from reportlab.pdfgen import canvas
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib import colors
         
-        c = canvas.Canvas(f, pagesize=A4)
-        w, h = A4
-        
-        # Header
-        c.setFont("Helvetica-Bold", 20)
-        c.setStrokeColorRGB(0, 0.48, 0.8) # Primary Blue
-        c.drawString(20*mm, h - 25*mm, "Business Performance Report")
-        c.line(20*mm, h-28*mm, 190*mm, h-28*mm)
-        
-        c.setFont("Helvetica", 10)
-        c.drawString(20*mm, h - 35*mm, f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        try:
+            doc = SimpleDocTemplate(f, pagesize=A4)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Title
+            elements.append(Paragraph("Detailed Business Analytics Report", styles['Title']))
+            elements.append(Paragraph(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+            elements.append(Spacer(1, 20))
+            
+            stats = self.analytics.get_summary()
+            df = self.app.inventory.get_inventory()
+            
+            # 1. Financial Summary Table
+            elements.append(Paragraph("Financial Snapshot", styles['Heading2']))
+            data = [
+                ["Metric", "Value"],
+                ["Total Inventory Value", f"Rs. {stats['total_value']:,.2f}"],
+                ["Items In Stock", str(stats.get('status_counts', {}).get('IN', 0))],
+                ["Items Sold", str(stats.get('status_counts', {}).get('OUT', 0))],
+                ["Realized Profit (Est)", f"Rs. {stats['realized_profit']:,.2f}"]
+            ]
+            t = Table(data, colWidths=[200, 200])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.grey),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('GRID', (0,0), (-1,-1), 1, colors.black),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0,0), (-1,0), 10),
+            ]))
+            elements.append(t)
+            elements.append(Spacer(1, 20))
+            
+            # 2. Detailed Sales Log
+            elements.append(Paragraph("Detailed Sales Log (Sold Items)", styles['Heading2']))
+            
+            sold_df = df[df['status'] == 'OUT'].copy()
+            if not sold_df.empty:
+                # Sort by date (if available) or last_updated
+                if 'last_updated' in sold_df.columns:
+                    sold_df['last_updated'] = pd.to_datetime(sold_df['last_updated'], errors='coerce')
+                    sold_df = sold_df.sort_values('last_updated', ascending=False)
+                
+                # Columns: Date, Buyer, Model, Price
+                table_data = [["Date", "Buyer Name", "Model", "Sale Price"]]
+                
+                for _, row in sold_df.iterrows():
+                    d = str(row.get('last_updated', '-'))[:10]
+                    b = str(row.get('buyer', 'Unknown'))
+                    m = str(row.get('model', 'Unknown'))
+                    p = f"{row.get('price', 0):,.0f}"
+                    table_data.append([d, b, m, p])
+                
+                # Long Table
+                # Adjust widths: A4 width ~ 595pts. Margins ~72pts each side. Usable ~450.
+                t2 = Table(table_data, colWidths=[70, 110, 200, 70], repeatRows=1)
+                t2.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.darkblue),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                    ('ALIGN', (-1,1), (-1,-1), 'RIGHT'), # Price right align
+                    ('FONTSIZE', (0,0), (-1,-1), 9),
+                    ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.whitesmoke])
+                ]))
+                elements.append(t2)
+            else:
+                elements.append(Paragraph("No sales recorded yet.", styles['Normal']))
 
-        stats = self.analytics.get_summary()
-        df = self.app.inventory.get_inventory()
-        
-        # Stats Grid
-        y = h - 50*mm
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(25*mm, y, "FINANCIAL SUMMARY")
-        
-        c.setFont("Helvetica", 11)
-        y -= 10*mm
-        c.drawString(25*mm, y, f"Total Inventory Value : Rs. {stats['total_value']:,.2f}")
-        y -= 7*mm
-        c.drawString(25*mm, y, f"Total Items in Stock : {stats.get('status_counts', {}).get('IN', 0)}")
-        y -= 7*mm
-        c.drawString(25*mm, y, f"Total Items Sold     : {stats.get('status_counts', {}).get('OUT', 0)}")
-        y -= 7*mm
-        c.drawString(25*mm, y, f"Net Realized Profit  : Rs. {stats['realized_profit']:,.2f}")
-
-        # Top Models
-        y -= 20*mm
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(25*mm, y, "TOP STOCKING MODELS")
-        c.setFont("Helvetica", 10)
-        y -= 8*mm
-        for m, count in list(stats['top_models'].items())[:10]:
-            c.drawString(30*mm, y, f"• {m:<30} : {count} units")
-            y -= 6*mm
-            if y < 30*mm: break
-
-        c.showPage()
-        c.save()
-        messagebox.showinfo("Export Success", f"Analytics report saved to:\n{f}")
+            doc.build(elements)
+            messagebox.showinfo("Export Success", f"Detailed report saved to:\n{f}")
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not generate PDF:\n{e}")
 
 
 # --- Settings Screen ---
@@ -3223,7 +3253,15 @@ Step 4: Selling
     def _get_feature_text(self):
         return """KEY FEATURES GUIDE
 
-1. BATCH SCANNING (New!)
+1. ADVANCED REPORTING (New!)
+------------------------
+- Go to "Reports" -> "Advanced Reporting".
+- Create custom filters (e.g., "Find all IN stock where Price > 10,000").
+- Reorder columns by moving them between the "Available" and "Selected" lists.
+- Export your filtered data to Excel, PDF, or Word.
+- Use "Presets" to quickly load common filters (like "Low Stock" or "Expensive Items").
+
+2. BATCH SCANNING
 ------------------------
 - In "Quick Status", check "BATCH MODE".
 - Scan multiple phones one after another.
@@ -3231,25 +3269,28 @@ Step 4: Selling
 - When done, click "FINISH & REVIEW".
 - You can review the list, verify prices, and update them all to SOLD in one click.
 
-2. BUYER & DATA MANAGEMENT
+3. ANALYTICS DASHBOARD
+----------------------
+- View real-time Business Intelligence:
+  - Total Inventory Value & Est. Profit.
+  - Brand Distribution charts.
+  - Top Buyers ranking.
+- Export "Detailed Analytics Report" (PDF) which includes a full Sales Log with buyer details.
+
+4. BUYER & DATA MANAGEMENT
 --------------------------
 - Go to "Manage" -> "Manage Data".
 - Pre-load your Frequent Buyers list to save typing time.
 - Manage standard Colors for consistent data entry.
 
-3. INVOICING / BILLING
+5. INVOICING / BILLING
 ----------------------
 - Go to "Billing".
 - Scan IDs to add to cart.
 - Enter Customer Details.
 - Click "Generate Invoice" to get a professional PDF receipt with GST breakdowns.
 
-4. ANALYTICS
-------------
-- See your total stock value, potential profit, and sales performance.
-- Export detailed PDF reports for your records.
-
-5. SAFETY & BACKUPS
+6. SAFETY & BACKUPS
 -------------------
 - The app creates a backup (.bak) of your Excel file before every write.
 - If Excel is open, the app will warn you instead of crashing.
