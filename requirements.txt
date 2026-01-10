@@ -7,10 +7,10 @@ reportlab
 python-escpos
 tinydb
 pyinstaller
-tk
 pywin32
 requests
 packaging
 ttkbootstrap
 pycryptodome
-beautifulsoup4python-docx
+beautifulsoup4
+python-docx

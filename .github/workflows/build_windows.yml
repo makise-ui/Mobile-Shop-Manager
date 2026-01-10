@@ -34,9 +34,9 @@ jobs:
           --icon "icon.ico" `
           --hidden-import "PIL._tkinter_finder" `
           --collect-all "escpos" `
+          --collect-all "pandas" `
           --add-data "core;core" `
           --add-data "gui;gui" `
-          --add-data "icon.jpg;." `
           main.py
 
     - name: Build Free (No License) Version
@@ -49,9 +49,9 @@ jobs:
           --icon "icon.ico" `
           --hidden-import "PIL._tkinter_finder" `
           --collect-all "escpos" `
+          --collect-all "pandas" `
           --add-data "core;core" `
           --add-data "gui;gui" `
-          --add-data "icon.jpg;." `
           --add-data "no_license.flag;." `
           main.py
 
