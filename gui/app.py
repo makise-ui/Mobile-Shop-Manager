@@ -43,7 +43,9 @@ class MainApp(tb.Window):
         
         # Use bind_all for global shortcuts
         self.bind_all("<Control-n>", self.open_quick_nav, add='+')
+        self.bind_all("<Control-N>", self.open_quick_nav, add='+')
         self.bind_all("<Control-w>", self.open_quick_nav, add='+')
+        self.bind_all("<Control-W>", self.open_quick_nav, add='+')
         
         # Power User Hotkeys
         self.bind_all("<F1>", lambda e: self.show_screen('search'), add='+')
@@ -72,9 +74,9 @@ class MainApp(tb.Window):
         
         # Set Icon (Safe Load)
         try:
-            icon_path = "icon.jpg" 
+            icon_path = "icon.ico" 
             if hasattr(sys, '_MEIPASS'):
-                icon_path = os.path.join(sys._MEIPASS, "icon.jpg")
+                icon_path = os.path.join(sys._MEIPASS, "icon.ico")
             
             if os.path.exists(icon_path):
                 if os.name == 'nt':
