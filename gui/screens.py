@@ -2535,28 +2535,49 @@ class SearchScreen(BaseScreen):
             display_source = os.path.basename(raw_source)
 
         # 2. Details Text
+        # Determine Dates
+        date_out = "-"
+        if str(row.get('status')).upper() in ['OUT', 'SOLD']:
+            date_out = str(row.get('last_updated'))
+            
+        date_in = "Unknown"
+        reg_meta = self.app.inventory.id_registry.get_metadata(row['unique_id'])
+        history = reg_meta.get('history', [])
+        
+        if history:
+            # Sort oldest first
+            sorted_h = sorted(history, key=lambda x: x.get('ts', ''))
+            date_in = sorted_h[0].get('ts')
+        elif row.get('last_updated'):
+             date_in = str(row.get('last_updated'))
+
+        buyer_str = f"{row.get('buyer', '-')} {row.get('buyer_contact', '')}".strip() or "-"
+
         info = f"""
 UNIQUE ID   : {row.get('unique_id')}
 IMEI        : {row.get('imei')}
+MODEL       : {row.get('model')}
 RAM/ROM     : {row.get('ram_rom')}
 COLOR       : {row.get('color')}
 GRADE       : {row.get('grade', '-')}
 CONDITION   : {row.get('condition', '-')}
 SUPPLIER    : {row.get('supplier')}
 
+HISTORY LOG
+-----------
+DATE IN     : {date_in}
+DATE OUT    : {date_out}
+SOLD TO     : {buyer_str}
+
+FINANCIALS
+----------
 BUY PRICE   : ₹{row.get('price_original', 0):,.2f}
 SELL PRICE  : ₹{row.get('price', 0):,.2f}
 PROFIT      : ₹{(row.get('price', 0) - row.get('price_original', 0)):,.2f}
 
-BUYER INFO
-----------
-Name        : {row.get('buyer', '-')}
-Contact     : {row.get('buyer_contact', '-')}
-
 METADATA
 --------
 Source File : {display_source}
-Last Updated: {row.get('last_updated')}
 Notes       : {row.get('notes', '')}
 """
         self.txt_info.configure(state='normal')
@@ -2585,12 +2606,24 @@ Notes       : {row.get('notes', '')}
                 disp_action = h.get('action')
                 details = h.get('details', '')
                 
+                status_text = disp_action
+                
+                # INTELLIGENT PARSING
                 if "Moved from" in details:
                     # Clean up: just show the NEW status clearly
                     parts = details.split(" to ")
                     status_text = parts[1] if len(parts) > 1 else details
-                else:
-                    status_text = disp_action
+                elif disp_action == "DATA_UPDATE":
+                    if "buyer=" in details or "buyer_contact=" in details:
+                        status_text = "BUYER INFO UPDATE"
+                    elif "notes=" in details:
+                        status_text = "NOTES ADDED"
+                    elif "price=" in details:
+                        status_text = "PRICE CHANGE"
+                    elif "status=" in details:
+                        import re
+                        m = re.search(r"status=(\w+)", details)
+                        if m: status_text = m.group(1).upper()
                 
                 # Insert Entry
                 self.txt_timeline.insert(tk.END, f"{status_text}\n", ("status", "center"))
