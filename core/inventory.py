@@ -31,8 +31,9 @@ class InventoryManager:
             else:
                 # Support specific sheet name
                 sheet_name = mapping_data.get('sheet_name', 0)
-                # If sheet_name is None/Empty, default to 0
-                if not sheet_name: sheet_name = 0
+                # Handle None or empty string properly
+                if sheet_name is None or sheet_name == "":
+                    sheet_name = 0
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
             
             # Safety: Ensure DataFrame

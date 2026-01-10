@@ -22,16 +22,19 @@ class LicenseManager:
                 # Output format:
                 # UUID
                 # E56006E8-....
-                cmd = 'wmic csproduct get uuid'
-                # Use shell=True to hide console window if pyinstaller --noconsole is used
+                cmd = ['wmic', 'csproduct', 'get', 'uuid']
+                # Use shell=False for security (no command injection possible)
                 si = subprocess.STARTUPINFO()
                 si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 
-                output = subprocess.check_output(cmd, startupinfo=si).decode()
-                uuid = output.split('\n')[1].strip()
-                if not uuid:
+                try:
+                    output = subprocess.check_output(cmd, startupinfo=si, shell=False).decode()
+                    uuid = output.split('\n')[1].strip()
+                    if not uuid:
+                        return "UNKNOWN-WIN-ID"
+                    return uuid
+                except subprocess.CalledProcessError:
                     return "UNKNOWN-WIN-ID"
-                return uuid
             else:
                 # Fallback for Termux/Linux dev
                 if os.path.exists("/etc/machine-id"):

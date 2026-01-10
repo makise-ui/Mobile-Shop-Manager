@@ -3,55 +3,10 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle, SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-import datetime
-
-class BillingManager:
-    def __init__(self, config_manager, activity_logger=None):
-        self.config = config_manager
-        self.activity_logger = activity_logger
-
-    def calculate_tax(self, price, tax_rate_percent, is_interstate=False, is_inclusive=False):
-        """
-        Returns dict with tax breakdown.
-        """
-        if is_inclusive:
-            # Price = Taxable + Tax
-            # Taxable = Price / (1 + rate/100)
-            total_amount = price
-            taxable_value = price / (1 + (tax_rate_percent / 100.0))
-            tax_amt = total_amount - taxable_value
-        else:
-            # Exclusive: Price = Taxable
-            taxable_value = price
-            tax_amt = taxable_value * (tax_rate_percent / 100.0)
-            total_amount = taxable_value + tax_amt
-        
-        breakdown = {
-            "taxable_value": taxable_value,
-            "total_tax": tax_amt,
-            "total_amount": total_amount,
-            "cgst": 0.0,
-            "sgst": 0.0,
-            "igst": 0.0
-        }
-        
-        if is_interstate:
-            breakdown['igst'] = tax_amt
-        else:
-            breakdown['cgst'] = tax_amt / 2.0
-            breakdown['sgst'] = tax_amt / 2.0
-            
-        return breakdown
-
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.lib import colors
-from reportlab.platypus import Table, TableStyle, SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 import datetime
+import hashlib
 
 class BillingManager:
     def __init__(self, config_manager, activity_logger=None):
@@ -250,7 +205,6 @@ class BillingManager:
         # --- 5. Footer & Signature ---
         terms = self.config.get('invoice_terms', 'Goods once sold will not be taken back.')
         
-        import hashlib
         # Use formatted total for consistency
         verify_str = f"{invoice_number}|{buyer_name}|{final_total:.2f}|{store_name}"
         verify_hash = hashlib.sha256(verify_str.encode()).hexdigest()[:16].upper()

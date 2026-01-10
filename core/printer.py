@@ -75,86 +75,95 @@ class PrinterManager:
             print("Win32 not available for printing.")
             return False
 
-        try:
-            if not printer_name:
-                try:
-                    printer_name = win32print.GetDefaultPrinter()
-                except:
-                    return False
-
-            encoded_zpl = zpl_string.encode("utf-8")
-            h_printer = win32print.OpenPrinter(printer_name)
+        if not printer_name:
             try:
-                job_info = win32print.StartDocPrinter(h_printer, 1, ("RawZPL", None, "raw"))
-                if job_info:
-                    win32print.StartPagePrinter(h_printer)
-                    win32print.WritePrinter(h_printer, encoded_zpl)
-                    win32print.EndPagePrinter(h_printer)
-                    win32print.EndDocPrinter(h_printer)
-            finally:
-                win32print.ClosePrinter(h_printer)
-            return True
+                printer_name = win32print.GetDefaultPrinter()
+            except:
+                return False
+
+        encoded_zpl = zpl_string.encode("utf-8")
+        h_printer = None
+        try:
+            h_printer = win32print.OpenPrinter(printer_name)
+            if not h_printer:
+                raise Exception(f"Could not open printer: {printer_name}")
+            
+            job_info = win32print.StartDocPrinter(h_printer, 1, ("RawZPL", None, "raw"))
+            if not job_info:
+                raise Exception("Failed to start print job")
+            
+            win32print.StartPagePrinter(h_printer)
+            win32print.WritePrinter(h_printer, encoded_zpl)
+            win32print.EndPagePrinter(h_printer)
+            win32print.EndDocPrinter(h_printer)
+            success = True
         except Exception as e:
             print(f"Raw Print Error: {e}")
-            return False
+            success = False
+        finally:
+            if h_printer:
+                try:
+                    win32print.ClosePrinter(h_printer)
+                except:
+                    pass
+        return success
 
     def print_label_zpl(self, item_data, printer_name=None):
         if not HAS_WIN32:
             return False
 
-        try:
-            if not printer_name:
-                try:
-                    printer_name = win32print.GetDefaultPrinter()
-                except:
-                    return False
+        if not printer_name:
+            try:
+                printer_name = win32print.GetDefaultPrinter()
+            except:
+                return False
 
-            # Load Custom Template if exists
-            template_path = self.config.get_config_dir() / "custom_template.zpl"
-            zpl_template = ""
+        # Load Custom Template if exists
+        template_path = self.config.get_config_dir() / "custom_template.zpl"
+        zpl_template = ""
+        
+        if os.path.exists(template_path):
+            try:
+                with open(template_path, 'r') as f:
+                    zpl_template = f.read()
+            except Exception as e:
+                print(f"Template load error: {e}")
+
+        store_name = self.config.get('store_name', 'My Mobile Shop')[:20]
+        uid = str(item_data.get('unique_id', ''))
+        model = item_data.get('model', '')[:25]
+        ram_rom = item_data.get('ram_rom', '')
+        price = f"Rs. {item_data.get('price', 0):,.0f}"
+        grade = str(item_data.get('grade', '')).upper()
+        
+        # Helper for conditional Grade ZPL
+        grade_zpl = ""
+        if grade:
+            grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
+
+        if zpl_template and len(zpl_template) > 10:
+            # Use Template with Variable Injection
+            # We use simple string replace or format map. 
+            # Our designer uses ${variable} syntax.
             
-            if os.path.exists(template_path):
-                try:
-                    with open(template_path, 'r') as f:
-                        zpl_template = f.read()
-                except Exception as e:
-                    print(f"Template load error: {e}")
-
-            store_name = self.config.get('store_name', 'My Mobile Shop')[:20]
-            uid = str(item_data.get('unique_id', ''))
-            model = item_data.get('model', '')[:25]
-            ram_rom = item_data.get('ram_rom', '')
-            price = f"Rs. {item_data.get('price', 0):,.0f}"
-            grade = str(item_data.get('grade', '')).upper()
+            # Dictionary of available variables
+            vars_map = {
+                "${store_name}": store_name,
+                "${id}": uid,
+                "${model}": model,
+                "${ram_rom}": ram_rom,
+                "${price}": price,
+                "${grade}": grade,
+                "${imei}": str(item_data.get('imei', '')),
+            }
             
-            # Helper for conditional Grade ZPL
-            grade_zpl = ""
-            if grade:
-                grade_zpl = f"^FO330,45^GB50,32,32^FS\n^FO330,49^A0N,24,24^FR^FB50,1,0,C,0^FD{grade}^FS"
-
-            if zpl_template and len(zpl_template) > 10:
-                # Use Template with Variable Injection
-                # We use simple string replace or format map. 
-                # Our designer uses ${variable} syntax.
+            zpl = zpl_template
+            for k, v in vars_map.items():
+                zpl = zpl.replace(k, v)
                 
-                # Dictionary of available variables
-                vars_map = {
-                    "${store_name}": store_name,
-                    "${id}": uid,
-                    "${model}": model,
-                    "${ram_rom}": ram_rom,
-                    "${price}": price,
-                    "${grade}": grade,
-                    "${imei}": str(item_data.get('imei', '')),
-                }
-                
-                zpl = zpl_template
-                for k, v in vars_map.items():
-                    zpl = zpl.replace(k, v)
-                    
-            else:
-                # Fallback to Hardcoded logic
-                zpl = f"""
+        else:
+            # Fallback to Hardcoded logic
+            zpl = f"""
 ^XA
 ^PW400
 ^LL176
@@ -180,23 +189,33 @@ class PrinterManager:
 
 ^XZ
 """
-            # Send Raw ZPL
-            encoded_zpl = zpl.encode("utf-8")
+        # Send Raw ZPL
+        encoded_zpl = zpl.encode("utf-8")
+        h_printer = None
+        try:
             h_printer = win32print.OpenPrinter(printer_name)
-            try:
-                job_info = win32print.StartDocPrinter(h_printer, 1, ("LabelZPL", None, "raw"))
-                if job_info:
-                    win32print.StartPagePrinter(h_printer)
-                    win32print.WritePrinter(h_printer, encoded_zpl)
-                    win32print.EndPagePrinter(h_printer)
-                    win32print.EndDocPrinter(h_printer)
-            finally:
-                win32print.ClosePrinter(h_printer)
-                
-            return True
+            if not h_printer:
+                raise Exception(f"Could not open printer: {printer_name}")
+            
+            job_info = win32print.StartDocPrinter(h_printer, 1, ("LabelZPL", None, "raw"))
+            if not job_info:
+                raise Exception("Failed to start print job")
+            
+            win32print.StartPagePrinter(h_printer)
+            win32print.WritePrinter(h_printer, encoded_zpl)
+            win32print.EndPagePrinter(h_printer)
+            win32print.EndDocPrinter(h_printer)
+            success = True
         except Exception as e:
             print(f"ZPL Print Error: {e}")
-            return False
+            success = False
+        finally:
+            if h_printer:
+                try:
+                    win32print.ClosePrinter(h_printer)
+                except:
+                    pass
+        return success
 
     def _calculate_barcode_x(self, data, column_center_x, module_width=2):
         """
@@ -230,8 +249,11 @@ class PrinterManager:
                 print(f"Template load error: {e}")
 
         count = 0
+        h_printer = None
         try:
             h_printer = win32print.OpenPrinter(printer_name)
+            if not h_printer:
+                raise Exception(f"Could not open printer: {printer_name}")
             
             # Process in pairs
             for i in range(0, len(items), 2):
@@ -354,20 +376,31 @@ class PrinterManager:
                     zpl_content += "^XZ"
                 
                 # Send Job
-                win32print.StartDocPrinter(h_printer, 1, ("BatchLabel", None, "raw"))
-                win32print.StartPagePrinter(h_printer)
-                win32print.WritePrinter(h_printer, zpl_content.encode("utf-8"))
-                win32print.EndPagePrinter(h_printer)
-                win32print.EndDocPrinter(h_printer)
-                
-                count += (2 if item2 else 1)
-                
-            win32print.ClosePrinter(h_printer)
+                try:
+                    job_info = win32print.StartDocPrinter(h_printer, 1, ("BatchLabel", None, "raw"))
+                    if not job_info:
+                        raise Exception("Failed to start print job")
+                    
+                    win32print.StartPagePrinter(h_printer)
+                    win32print.WritePrinter(h_printer, zpl_content.encode("utf-8"))
+                    win32print.EndPagePrinter(h_printer)
+                    win32print.EndDocPrinter(h_printer)
+                    count += (2 if item2 else 1)
+                except Exception as print_err:
+                    print(f"Error printing label: {print_err}")
+                    continue
+            
             return count
             
         except Exception as e:
             print(f"Batch Print Error: {e}")
             return 0
+        finally:
+            if h_printer:
+                try:
+                    win32print.ClosePrinter(h_printer)
+                except:
+                    pass
 
     def print_label_windows(self, item_data, printer_name=None):
         # Prefer ZPL if configured or default to it for thermal
