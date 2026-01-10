@@ -13,8 +13,11 @@ APP_DIR = DOCS_DIR / "MobileShopManager"
 if not APP_DIR.exists() and OLD_APP_DIR.exists():
     try:
         OLD_APP_DIR.rename(APP_DIR)
+        print(f"✓ Configuration migrated from {OLD_APP_DIR} to {APP_DIR}")
     except Exception as e:
-        print(f"Migration Error: {e}")
+        # Log migration failure but continue
+        print(f"⚠️  WARNING: Configuration migration failed: {e}")
+        print(f"   Falling back to old directory: {OLD_APP_DIR}")
         # Fallback to old dir if rename fails
         APP_DIR = OLD_APP_DIR
 

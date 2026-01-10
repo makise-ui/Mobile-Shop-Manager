@@ -2,6 +2,46 @@ import barcode
 from barcode.writer import ImageWriter
 from PIL import Image, ImageDraw, ImageFont
 import io
+import os
+import platform
+
+def load_font(font_name="arial", size=12):
+    """
+    Cross-platform font loader that tries multiple paths.
+    Falls back to default if not found.
+    """
+    font_paths = []
+    system = platform.system()
+    
+    if system == 'Windows':
+        font_paths = [
+            f"C:\\Windows\\Fonts\\{font_name}.ttf",
+            f"C:\\Windows\\Fonts\\ariblk.ttf",
+            "arial.ttf"
+        ]
+    elif system == 'Darwin':  # macOS
+        font_paths = [
+            "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Helvetica.ttc"
+        ]
+    else:  # Linux
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
+        ]
+    
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except:
+                continue
+    
+    return ImageFont.load_default()
 
 class BarcodeGenerator:
     def __init__(self, config_manager):
@@ -37,15 +77,10 @@ class BarcodeGenerator:
         img = Image.new('RGB', (width_px, height_px), 'white')
         draw = ImageDraw.Draw(img)
         
-        # Load fonts - fallback to default if specific ttf not available
-        try:
-            font_header = ImageFont.truetype("arial.ttf", int(height_px * 0.15))
-            font_model = ImageFont.truetype("arial.ttf", int(height_px * 0.12))
-            font_price = ImageFont.truetype("arialbd.ttf", int(height_px * 0.15)) # Bold
-        except:
-            font_header = ImageFont.load_default()
-            font_model = ImageFont.load_default()
-            font_price = ImageFont.load_default()
+        # Load fonts - cross-platform with fallback
+        font_header = load_font("Arial", int(height_px * 0.15))
+        font_model = load_font("Arial", int(height_px * 0.12))
+        font_price = load_font("Arial", int(height_px * 0.15))
 
         # 1. Header: "4 Bros Mobile"
         header_text = self.config_manager.get('store_name', "4 Bros Mobile")
@@ -76,8 +111,8 @@ class BarcodeGenerator:
         
         # ID Text below barcode
         id_text = str(barcode_val)
-        # Use small font
-        font_id = ImageFont.truetype("arial.ttf", int(height_px * 0.10)) if 'arial.ttf' in self.config_manager.get('font', '') else ImageFont.load_default()
+        # Use small font (cross-platform)
+        font_id = load_font("Arial", int(height_px * 0.10))
         
         # Center ID
         id_w = draw.textlength(id_text, font=font_id)
