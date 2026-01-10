@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.6.0] - 2026-01-10: Architecture & Multi-Select Update
+
+### ⚡ Performance & Core
+*   **Background Writes:** Inventory updates (Excel saving) now happen in a background thread, preventing the UI from freezing during large save operations.
+*   **Auto-Backup Rotation:** The system now automatically rotates backups of your Excel files, keeping only the last 5 safe copies to save disk space while ensuring data safety.
+*   **Cross-Platform Core:** Enhanced core libraries (Barcode, Printer) to be robust on Linux/macOS for safer development, with better fallback fonts.
+*   **Constants Refactor:** Internal logic moved to a centralized `constants.py` to improve stability and reduce bugs.
+
+### 🎮 Inventory UI Overhaul
+*   **Multi-Select:** Added powerful keyboard shortcuts for selecting multiple items in the Inventory grid:
+    *   `Ctrl + Shift + Arrow Up/Down`: Check items sequentially.
+    *   `Ctrl + Shift + Home/End`: Check all items from current to start/end.
+    *   `Ctrl + A`: Select All.
+*   **Selection Stats:** Added a live "Total Stocks | Selected" counter to the Inventory screen for better visibility.
+*   **Range Tracking:** Smart tracking of the "Anchor" item allows for intuitive range selection.
+
+### 🛡️ Security
+*   **Input Sanitization:** Fixed potential command injection vulnerabilities in the licensing module.
+*   **Resource Safety:** Improved printer handle management to prevent resource leaks and crashes on Windows.
+
+---
+
 ## [v1.5.0] - 2026-01-10: AI & Simulation Update
 
 ### 🧠 Intelligence & Analytics
