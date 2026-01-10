@@ -34,6 +34,37 @@ class SafeJsonWriter:
                     pass
             return False
 
+def rotate_backups(original_filename, backup_dir, max_backups=5):
+    """
+    Keeps only the last N backups for a specific file.
+    """
+    try:
+        backup_dir = Path(backup_dir)
+        # Filter files that start with the original filename stem
+        # Format is: {stem}_{ts}{suffix}.bak
+        stem = Path(original_filename).stem
+        suffix = Path(original_filename).suffix
+        
+        candidates = []
+        for p in backup_dir.glob(f"*{suffix}.bak"):
+            if p.name.startswith(stem + "_"):
+                candidates.append(p)
+        
+        # Sort by modification time (Newest first)
+        candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
+        # Remove old ones
+        if len(candidates) > max_backups:
+            for old_file in candidates[max_backups:]:
+                try:
+                    old_file.unlink()
+                    print(f"Cleanup: Removed old backup {old_file.name}")
+                except Exception as del_err:
+                    print(f"Cleanup Error: {del_err}")
+                    
+    except Exception as e:
+        print(f"Rotation Error: {e}")
+
 def backup_excel_file(file_path):
     """
     Creates a timestamped backup of an Excel file.
@@ -58,6 +89,10 @@ def backup_excel_file(file_path):
     
     try:
         shutil.copy2(path, backup_path)
+        
+        # Trigger Rotation
+        rotate_backups(path.name, backup_dir, max_backups=5)
+        
         return str(backup_path)
     except Exception as e:
         print(f"Backup Error: {e}")

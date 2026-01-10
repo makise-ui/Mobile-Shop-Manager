@@ -363,6 +363,10 @@ class InventoryScreen(BaseScreen):
         ttk.Entry(filter_frame, textvariable=self.var_min_price, width=10).grid(row=0, column=5, padx=5)
 
         ttk.Button(filter_frame, text="Clear Filters", command=self._clear_filters).grid(row=0, column=6, padx=10)
+        
+        # Counter info on right side of filter bar
+        self.lbl_counter = ttk.Label(filter_frame, text="Total: 0 | Selected: 0", font=("Arial", 9, "bold"))
+        self.lbl_counter.grid(row=0, column=7, padx=20, sticky=tk.E)
 
         # -- Actions Bar --
         action_frame = ttk.Frame(self)
@@ -383,6 +387,13 @@ class InventoryScreen(BaseScreen):
         ttk.Checkbutton(action_frame, text="Show Preview", variable=self.var_show_preview, command=self._toggle_preview).pack(side=tk.RIGHT, padx=10)
         
         ttk.Button(action_frame, text="Refresh Data", command=self.refresh_data).pack(side=tk.RIGHT, padx=5)
+
+        # -- Keyboard Shortcuts Info --
+        shortcuts_frame = ttk.Frame(self)
+        shortcuts_frame.pack(fill=tk.X, pady=(0, 8), padx=10)
+        
+        info_text = "🎹 Keyboard: Ctrl+A=Select All | Ctrl+Shift+A=Deselect | Ctrl+Shift+↑↓=Multi-select | Ctrl+Shift+Home/End=Range Select"
+        ttk.Label(shortcuts_frame, text=info_text, font=("Arial", 8), foreground="gray").pack(side=tk.LEFT)
 
         # -- Main Content --
         self.paned = tk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -438,6 +449,14 @@ class InventoryScreen(BaseScreen):
         self.tree.bind('<Double-1>', self._on_double_click) # Double-click to Edit
         self.tree.bind('<Button-3>', self._show_context_menu) # Right-click context menu
         
+        # Keyboard shortcuts for multi-select
+        self.tree.bind('<Control-Shift-Down>', self._multi_select_down) # Ctrl+Shift+Down: Select down
+        self.tree.bind('<Control-Shift-Up>', self._multi_select_up)     # Ctrl+Shift+Up: Select up
+        self.tree.bind('<Control-Shift-Home>', self._multi_select_home) # Ctrl+Shift+Home: Select to beginning
+        self.tree.bind('<Control-Shift-End>', self._multi_select_end)   # Ctrl+Shift+End: Select to end
+        self.tree.bind('<Control-a>', self._select_all_keyboard)        # Ctrl+A: Select all
+        self.tree.bind('<Control-Shift-a>', self._deselect_all_keyboard) # Ctrl+Shift+A: Deselect all
+        
         self.paned.add(self.tree, minsize=400, width=700)
 
         # 2. Preview Panel (Right) - Hidden by default
@@ -450,6 +469,7 @@ class InventoryScreen(BaseScreen):
         self.lbl_info.pack(fill=tk.X, pady=5)
         
         self.checked_ids = set() # Store unique_ids of checked items
+        self.last_selected_idx = None # Track last selected for range selection
 
         # --- Context Menu ---
         self.context_menu = tk.Menu(self, tearoff=0)
@@ -648,6 +668,9 @@ class InventoryScreen(BaseScreen):
                 pass
 
             self.tree.insert('', tk.END, values=vals, iid=uid, tags=(tag,))
+        
+        # Update counter after rendering
+        self._update_counter()
 
     def _on_click_check(self, event):
         region = self.tree.identify("region", event.x, event.y)
@@ -665,6 +688,7 @@ class InventoryScreen(BaseScreen):
         else:
             self.checked_ids.add(item_id)
             icon = "☑"
+            self.last_selected_idx = item_id  # Track for range selection
             
         # Update value in tree
         # Get current values
@@ -672,7 +696,7 @@ class InventoryScreen(BaseScreen):
         vals[0] = icon
         self.tree.item(item_id, values=vals)
         
-        self.lbl_info.configure(text=f"{len(self.checked_ids)} Item(s) Checked")
+        self._update_counter()
 
     def _select_all(self):
         for item_id in self.tree.get_children():
@@ -681,7 +705,8 @@ class InventoryScreen(BaseScreen):
                 vals = list(self.tree.item(item_id, 'values'))
                 vals[0] = "☑"
                 self.tree.item(item_id, values=vals)
-        self.lbl_info.configure(text=f"{len(self.checked_ids)} Item(s) Checked")
+                self.last_selected_idx = item_id
+        self._update_counter()
 
     def _deselect_all(self):
         for item_id in self.tree.get_children():
@@ -690,7 +715,99 @@ class InventoryScreen(BaseScreen):
                 vals[0] = "☐"
                 self.tree.item(item_id, values=vals)
         self.checked_ids.clear()
-        self.lbl_info.configure(text=f"0 Item(s) Checked")
+        self._update_counter()
+
+    def _update_counter(self):
+        """Update the counter label with total and selected items"""
+        total_items = len(self.tree.get_children())
+        selected_items = len(self.checked_ids)
+        self.lbl_counter.configure(
+            text=f"Total: {total_items} | Selected: {selected_items}",
+            foreground="darkgreen" if selected_items > 0 else "gray"
+        )
+        self.lbl_info.configure(text=f"{selected_items} Item(s) Checked")
+
+    def _multi_select_down(self, event):
+        """Ctrl+Shift+Down: Select next item"""
+        if not self.tree.get_children():
+            return 'break'
+        
+        children = self.tree.get_children()
+        if not self.last_selected_idx or self.last_selected_idx not in children:
+            # Select first item
+            if children:
+                self._toggle_check(children[0])
+        else:
+            # Find next item and select
+            current_idx = children.index(self.last_selected_idx)
+            if current_idx < len(children) - 1:
+                next_item = children[current_idx + 1]
+                self._toggle_check(next_item)
+        return 'break'
+
+    def _multi_select_up(self, event):
+        """Ctrl+Shift+Up: Select previous item"""
+        if not self.tree.get_children():
+            return 'break'
+        
+        children = self.tree.get_children()
+        if not self.last_selected_idx or self.last_selected_idx not in children:
+            # Select last item
+            if children:
+                self._toggle_check(children[-1])
+        else:
+            # Find previous item and select
+            current_idx = children.index(self.last_selected_idx)
+            if current_idx > 0:
+                prev_item = children[current_idx - 1]
+                self._toggle_check(prev_item)
+        return 'break'
+
+    def _multi_select_home(self, event):
+        """Ctrl+Shift+Home: Select all items from current to beginning"""
+        if not self.tree.get_children():
+            return 'break'
+        
+        children = self.tree.get_children()
+        if self.last_selected_idx and self.last_selected_idx in children:
+            current_idx = children.index(self.last_selected_idx)
+            # Select from first to current
+            for i in range(current_idx + 1):
+                if children[i] not in self.checked_ids:
+                    self.checked_ids.add(children[i])
+                    vals = list(self.tree.item(children[i], 'values'))
+                    vals[0] = "☑"
+                    self.tree.item(children[i], values=vals)
+        self._update_counter()
+        return 'break'
+
+    def _multi_select_end(self, event):
+        """Ctrl+Shift+End: Select all items from current to end"""
+        if not self.tree.get_children():
+            return 'break'
+        
+        children = self.tree.get_children()
+        if self.last_selected_idx and self.last_selected_idx in children:
+            current_idx = children.index(self.last_selected_idx)
+            # Select from current to end
+            for i in range(current_idx, len(children)):
+                if children[i] not in self.checked_ids:
+                    self.checked_ids.add(children[i])
+                    vals = list(self.tree.item(children[i], 'values'))
+                    vals[0] = "☑"
+                    self.tree.item(children[i], values=vals)
+        self._update_counter()
+        return 'break'
+
+    def _select_all_keyboard(self, event):
+        """Ctrl+A: Select all items"""
+        self._select_all()
+        return 'break'
+
+    def _deselect_all_keyboard(self, event):
+        """Ctrl+Shift+A: Deselect all items"""
+        self._deselect_all()
+        return 'break'
 
     def _on_double_click(self, event):
         item_id = self.tree.identify_row(event.y)

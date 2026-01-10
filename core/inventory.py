@@ -3,9 +3,19 @@ import os
 import datetime
 import hashlib
 import re
+import queue
+import threading
 from .config import ConfigManager
 from .id_registry import IDRegistry
 from .utils import backup_excel_file
+from .constants import (
+    STATUS_IN, STATUS_OUT, STATUS_RETURN, STATUS_SOLD,
+    ACTION_STATUS_CHANGE, ACTION_DATA_UPDATE, ACTION_MERGE, ACTION_REDIRECT,
+    ACTION_ITEM_UPDATE,
+    FIELD_IMEI, FIELD_MODEL, FIELD_PRICE, FIELD_STATUS, FIELD_BUYER, FIELD_BUYER_CONTACT,
+    FIELD_UNIQUE_ID, FIELD_SOURCE_FILE, FIELD_NOTES, FIELD_COLOR, FIELD_RAM_ROM,
+    FIELD_PRICE_ORIGINAL, ACTION_RELOAD
+)
 
 class InventoryManager:
     def __init__(self, config_manager: ConfigManager, activity_logger=None):
@@ -15,6 +25,27 @@ class InventoryManager:
         self.inventory_df = pd.DataFrame()
         self.file_status = {}  # Keep track of file read status
         self.conflicts = []
+        
+        # Background Write Queue
+        self.write_queue = queue.Queue()
+        self._start_worker()
+
+    def _start_worker(self):
+        """Starts a background thread to handle Excel writes sequentially."""
+        def worker():
+            while True:
+                task = self.write_queue.get()
+                if task is None: break
+                try:
+                    func, args = task
+                    func(*args)
+                except Exception as e:
+                    print(f"Background Worker Error: {e}")
+                finally:
+                    self.write_queue.task_done()
+        
+        t = threading.Thread(target=worker, daemon=True, name="ExcelWriterThread")
+        t.start()
 
     def load_file(self, file_path):
         """Legacy wrapper or simple load."""
@@ -56,10 +87,10 @@ class InventoryManager:
         # Helper: Normalize Status
         def norm_status(val):
             s = str(val).upper().strip()
-            if s in ['OUT', 'SOLD', 'SALE']: return 'OUT'
-            if s in ['RTN', 'RETURN', 'RET']: return 'RTN'
-            if s in ['AVAILABLE', 'AVBL', 'STOCK', 'IN', 'NAN', 'NONE', '', 'NAN']: return 'IN'
-            return 'IN'
+            if s in [STATUS_OUT, 'SOLD', 'SALE']: return STATUS_OUT
+            if s in [STATUS_RETURN, 'RETURN', 'RET']: return STATUS_RETURN
+            if s in ['AVAILABLE', 'AVBL', 'STOCK', STATUS_IN, 'NAN', 'NONE', '', 'NAN']: return STATUS_IN
+            return STATUS_IN
 
         # Create a new DF with canonical columns
         canonical = pd.DataFrame()
@@ -80,7 +111,7 @@ class InventoryManager:
         # Map fields
         
         # IMEI Cleaning & Dual Support
-        col_imei = get_col('imei')
+        col_imei = get_col(FIELD_IMEI)
         if col_imei is not None:
             def clean_imei(val):
                 if pd.isna(val): return ""
@@ -92,13 +123,13 @@ class InventoryManager:
                 elif len(nums) == 1:
                     return nums[0]
                 return s
-            canonical['imei'] = col_imei.apply(clean_imei)
+            canonical[FIELD_IMEI] = col_imei.apply(clean_imei)
         else:
-            canonical['imei'] = ''
+            canonical[FIELD_IMEI] = ''
         
         # Model
-        col_model = get_col('model')
-        canonical['model'] = col_model.fillna('Unknown Model').astype(str) if col_model is not None else 'Unknown Model'
+        col_model = get_col(FIELD_MODEL)
+        canonical[FIELD_MODEL] = col_model.fillna('Unknown Model').astype(str) if col_model is not None else 'Unknown Model'
         
         # Brand (Extract from model if not mapped)
         col_brand = get_col('brand')
@@ -106,16 +137,16 @@ class InventoryManager:
             canonical['brand'] = col_brand.fillna('').astype(str).str.upper()
         else:
             # Fallback: First word of model
-            canonical['brand'] = canonical['model'].apply(lambda x: str(x).split()[0].upper() if x and str(x).split() else 'UNKNOWN')
+            canonical['brand'] = canonical[FIELD_MODEL].apply(lambda x: str(x).split()[0].upper() if x and str(x).split() else 'UNKNOWN')
 
         # Price Logic
-        col_price = get_col('price')
+        col_price = get_col(FIELD_PRICE)
         if col_price is not None:
             raw_price = pd.to_numeric(col_price, errors='coerce').fillna(0.0)
         else:
             raw_price = 0.0
         
-        canonical['price_original'] = raw_price
+        canonical[FIELD_PRICE_ORIGINAL] = raw_price
         
         # Apply Markup
         try:
@@ -127,23 +158,23 @@ class InventoryManager:
             # Vectorized calc
             price_with_markup = raw_price * (1 + markup/100.0)
             # Round to nearest 100: round(x/100)*100
-            canonical['price'] = price_with_markup.apply(lambda x: round(x / 100) * 100 if x > 0 else x)
+            canonical[FIELD_PRICE] = price_with_markup.apply(lambda x: round(x / 100) * 100 if x > 0 else x)
         else:
-            canonical['price'] = raw_price
+            canonical[FIELD_PRICE] = raw_price
         
         # RAM/ROM handling
-        ram_rom = get_col('ram_rom')
+        ram_rom = get_col(FIELD_RAM_ROM)
         if ram_rom is not None:
-             canonical['ram_rom'] = ram_rom.fillna('').astype(str)
+             canonical[FIELD_RAM_ROM] = ram_rom.fillna('').astype(str)
         else:
             ram = get_col('ram')
             rom = get_col('rom')
             if ram is not None and rom is not None:
-                canonical['ram_rom'] = ram.fillna('').astype(str) + " / " + rom.fillna('').astype(str)
+                canonical[FIELD_RAM_ROM] = ram.fillna('').astype(str) + " / " + rom.fillna('').astype(str)
             elif ram is not None:
-                canonical['ram_rom'] = ram.fillna('').astype(str)
+                canonical[FIELD_RAM_ROM] = ram.fillna('').astype(str)
             else:
-                canonical['ram_rom'] = ""
+                canonical[FIELD_RAM_ROM] = ""
 
         # Supplier handling
         supplier_col = get_col('supplier')
@@ -153,25 +184,25 @@ class InventoryManager:
             canonical['supplier'] = file_supplier
 
         # Status handling (Excel)
-        status_col = get_col('status')
+        status_col = get_col(FIELD_STATUS)
         if status_col is not None:
-            canonical['status'] = status_col.apply(norm_status)
+            canonical[FIELD_STATUS] = status_col.apply(norm_status)
         else:
-            canonical['status'] = 'IN' # Default status (Available)
+            canonical[FIELD_STATUS] = STATUS_IN # Default status (Available)
 
         # Color handling
-        color_col = get_col('color')
+        color_col = get_col(FIELD_COLOR)
         if color_col is not None:
-            canonical['color'] = color_col.fillna('').astype(str)
+            canonical[FIELD_COLOR] = color_col.fillna('').astype(str)
         else:
-            canonical['color'] = ''
+            canonical[FIELD_COLOR] = ''
 
         # Buyer handling
-        col_buyer = get_col('buyer')
-        canonical['buyer'] = col_buyer.fillna('').astype(str) if col_buyer is not None else ''
+        col_buyer = get_col(FIELD_BUYER)
+        canonical[FIELD_BUYER] = col_buyer.fillna('').astype(str) if col_buyer is not None else ''
         
-        col_contact = get_col('buyer_contact')
-        canonical['buyer_contact'] = col_contact.fillna('').astype(str) if col_contact is not None else ''
+        col_contact = get_col(FIELD_BUYER_CONTACT)
+        canonical[FIELD_BUYER_CONTACT] = col_contact.fillna('').astype(str) if col_contact is not None else ''
 
         # Grade/Condition
         col_grade = get_col('grade')
@@ -181,35 +212,35 @@ class InventoryManager:
         canonical['condition'] = col_condition.fillna('').astype(str) if col_condition is not None else ''
 
         # Metadata
-        canonical['source_file'] = str(file_path)
+        canonical[FIELD_SOURCE_FILE] = str(file_path)
         canonical['last_updated'] = datetime.datetime.now()
         
         # Generate Unique ID using persistent registry
-        canonical['unique_id'] = canonical.apply(lambda row: self.id_registry.get_or_create_id(row), axis=1)
+        canonical[FIELD_UNIQUE_ID] = canonical.apply(lambda row: self.id_registry.get_or_create_id(row), axis=1)
         
         # Merge persistent metadata (status, notes, color, price overrides)
         def apply_overrides(row):
-            meta = self.id_registry.get_metadata(row['unique_id'])
+            meta = self.id_registry.get_metadata(row[FIELD_UNIQUE_ID])
             
             # Conflict Detection Logic
-            excel_status = row['status']
+            excel_status = row[FIELD_STATUS]
             app_status = None
             
-            if 'status' in meta:
+            if FIELD_STATUS in meta:
                 # Normalize the app-stored status too!
-                app_status = norm_status(meta['status'])
-                row['status'] = app_status
+                app_status = norm_status(meta[FIELD_STATUS])
+                row[FIELD_STATUS] = app_status
                 
-            if 'notes' in meta:
-                row['notes'] = meta['notes']
-            if 'color' in meta:
-                row['color'] = meta['color']
+            if FIELD_NOTES in meta:
+                row[FIELD_NOTES] = meta[FIELD_NOTES]
+            if FIELD_COLOR in meta:
+                row[FIELD_COLOR] = meta[FIELD_COLOR]
             if 'grade' in meta:
                 row['grade'] = meta['grade']
             if 'condition' in meta:
                 row['condition'] = meta['condition']
-            if 'price_original' in meta:
-                row['price_original'] = float(meta['price_original'])
+            if FIELD_PRICE_ORIGINAL in meta:
+                row[FIELD_PRICE_ORIGINAL] = float(meta[FIELD_PRICE_ORIGINAL])
                 
                 try:
                     markup = float(self.config_manager.get('price_markup_percent', 0.0))
@@ -217,10 +248,10 @@ class InventoryManager:
                     markup = 0.0
                     
                 if markup > 0:
-                    raw_p = row['price_original'] * (1 + markup/100.0)
-                    row['price'] = round(raw_p / 100) * 100 if raw_p > 0 else raw_p
+                    raw_p = row[FIELD_PRICE_ORIGINAL] * (1 + markup/100.0)
+                    row[FIELD_PRICE] = round(raw_p / 100) * 100 if raw_p > 0 else raw_p
                 else:
-                    row['price'] = row['price_original']
+                    row[FIELD_PRICE] = row[FIELD_PRICE_ORIGINAL]
             return row
             
         canonical = canonical.apply(apply_overrides, axis=1)
@@ -249,7 +280,7 @@ class InventoryManager:
 
                 if status == "SUCCESS" and df is not None:
                     # Enrich with source info (key acts as unique source ID)
-                    df['source_file'] = key 
+                    df[FIELD_SOURCE_FILE] = key 
                     all_frames.append(df)
                     self.file_status[key] = "OK"
                 else:
@@ -266,7 +297,7 @@ class InventoryManager:
                 return not meta.get('is_hidden', False)
             
             # Apply visibility filter
-            full_df = full_df[full_df['unique_id'].apply(is_visible)]
+            full_df = full_df[full_df[FIELD_UNIQUE_ID].apply(is_visible)]
             
             # Detect Duplicates (Dual IMEI Aware)
             # Map: Single_IMEI -> list of Row Indices (in full_df)
@@ -276,7 +307,7 @@ class InventoryManager:
             # Iterate using index
             for idx in full_df.index:
                 row = full_df.loc[idx]
-                raw_imei = str(row['imei'])
+                raw_imei = str(row[FIELD_IMEI])
                 if not raw_imei: continue
                 
                 parts = [p.strip() for p in raw_imei.split('/') if len(p.strip()) > 10]
@@ -300,18 +331,22 @@ class InventoryManager:
                     
                     self.conflicts.append({
                         "imei": p,
-                        "unique_ids": rows['unique_id'].tolist(),
-                        "model": rows.iloc[0]['model'],
-                        "sources": list(rows['source_file'].unique()),
+                        "unique_ids": rows[FIELD_UNIQUE_ID].tolist(),
+                        "model": rows.iloc[0][FIELD_MODEL],
+                        "sources": list(rows[FIELD_SOURCE_FILE].unique()),
                         "rows": rows.to_dict('records')
                     })
             
             self.inventory_df = full_df
         else:
-            self.inventory_df = pd.DataFrame(columns=['unique_id', 'imei', 'brand', 'model', 'ram_rom', 'price', 'price_original', 'supplier', 'source_file', 'last_updated', 'status', 'color'])
+            self.inventory_df = pd.DataFrame(columns=[
+                FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
+                FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE, 
+                'last_updated', FIELD_STATUS, FIELD_COLOR
+            ])
             
         if self.activity_logger:
-            self.activity_logger.log("RELOAD", f"Loaded {len(self.inventory_df)} items from {len(mappings)} sources.")
+            self.activity_logger.log(ACTION_RELOAD, f"Loaded {len(self.inventory_df)} items from {len(mappings)} sources.")
             
         return self.inventory_df
     
@@ -329,22 +364,22 @@ class InventoryManager:
             others = rows[1:]
             
             for row in others:
-                uid = row['unique_id']
+                uid = row[FIELD_UNIQUE_ID]
                 
                 # CRITICAL FIX: Do not merge if IDs are identical (Self-Merge)
                 # This prevents an item from hiding itself.
-                if str(uid) == str(keeper['unique_id']):
+                if str(uid) == str(keeper[FIELD_UNIQUE_ID]):
                     continue
                     
                 self.id_registry.update_metadata(uid, {
                     'is_hidden': True, 
-                    'merged_into': keeper['unique_id'],
+                    'merged_into': keeper[FIELD_UNIQUE_ID],
                     'merge_reason': 'Conflict Resolution'
                 })
                 # Log
-                self.id_registry.add_history_log(uid, "MERGED", f"Merged into {keeper['unique_id']}")
+                self.id_registry.add_history_log(uid, ACTION_MERGE, f"Merged into {keeper[FIELD_UNIQUE_ID]}")
                 if self.activity_logger:
-                    self.activity_logger.log("MERGE", f"Merged {uid} into {keeper['unique_id']}")
+                    self.activity_logger.log(ACTION_MERGE, f"Merged {uid} into {keeper[FIELD_UNIQUE_ID]}")
             
             self.reload_all()
             return True
@@ -378,7 +413,7 @@ class InventoryManager:
         
         # 2. Lookup in Inventory DF
         df = self.inventory_df
-        mask = df['unique_id'].astype(str) == target_id
+        mask = df[FIELD_UNIQUE_ID].astype(str) == target_id
         
         if mask.any():
             item = df[mask].iloc[0].to_dict()
@@ -396,40 +431,41 @@ class InventoryManager:
         target_id = self.get_merged_target(item_id)
         if target_id:
             if self.activity_logger:
-                self.activity_logger.log("REDIRECT", f"Status update for {item_id} redirected to {target_id}")
+                self.activity_logger.log(ACTION_REDIRECT, f"Status update for {item_id} redirected to {target_id}")
             item_id = target_id
 
         # 1. Get Previous Status for logging
-        mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
+        mask = self.inventory_df[FIELD_UNIQUE_ID].astype(str) == str(item_id)
         old_status = "UNKNOWN"
         item_model = ""
         if mask.any():
             row = self.inventory_df[mask].iloc[0]
-            old_status = row['status']
-            item_model = row['model']
+            old_status = row[FIELD_STATUS]
+            item_model = row[FIELD_MODEL]
 
         # 2. Update Internal Registry
-        self.id_registry.update_metadata(item_id, {"status": new_status})
-        self.id_registry.add_history_log(item_id, "STATUS_CHANGE", f"Moved from {old_status} to {new_status}")
+        self.id_registry.update_metadata(item_id, {FIELD_STATUS: new_status})
+        self.id_registry.add_history_log(item_id, ACTION_STATUS_CHANGE, f"Moved from {old_status} to {new_status}")
         
         if self.activity_logger:
-            self.activity_logger.log("STATUS_UPDATE", f"Item {item_id} ({item_model}) marked as {new_status}")
+            self.activity_logger.log(ACTION_STATUS_CHANGE, f"Item {item_id} ({item_model}) marked as {new_status}")
         
         # 3. Update Memory
         if mask.any():
-            self.inventory_df.loc[mask, 'status'] = new_status
+            self.inventory_df.loc[mask, FIELD_STATUS] = new_status
             
-            # 3. Write to Excel (Optional)
+            # 3. Write to Excel (ASYNC via Queue)
             if write_to_excel:
                 try:
-                    row = self.inventory_df[mask].iloc[0]
-                    # Use the generic writer for status too
-                    success, msg = self._write_excel_generic(row, {"status": new_status})
-                    if not success:
-                        print(f"Excel Update Failed: {msg}")
-                        return False
+                    # Create a snapshot of the row data
+                    row_snapshot = self.inventory_df[mask].iloc[0].to_dict()
+                    updates = {FIELD_STATUS: new_status}
+                    
+                    # Offload to worker thread
+                    self.write_queue.put((self._write_excel_generic, (row_snapshot, updates)))
+                    return True
                 except Exception as e:
-                    print(f"Excel write error: {e}")
+                    print(f"Queue Error: {e}")
                     return False
         return True
 
@@ -440,55 +476,55 @@ class InventoryManager:
         if target_id:
             item_id = target_id
 
-        mask = self.inventory_df['unique_id'].astype(str) == str(item_id)
+        mask = self.inventory_df[FIELD_UNIQUE_ID].astype(str) == str(item_id)
         if not mask.any(): return False
         
-        item_model = self.inventory_df.loc[mask, 'model'].values[0]
+        item_model = self.inventory_df.loc[mask, FIELD_MODEL].values[0]
         
         # 1. Update Persistent Registry (App DB)
         self.id_registry.update_metadata(item_id, updates)
         
         # Log generic updates
         log_details = ", ".join([f"{k}={v}" for k, v in updates.items()])
-        self.id_registry.add_history_log(item_id, "DATA_UPDATE", log_details)
+        self.id_registry.add_history_log(item_id, ACTION_DATA_UPDATE, log_details)
         
         if self.activity_logger:
-            self.activity_logger.log("ITEM_UPDATE", f"Updated {item_id} ({item_model}): {log_details}")
+            self.activity_logger.log(ACTION_ITEM_UPDATE, f"Updated {item_id} ({item_model}): {log_details}")
         
         # 2. Update Memory
         for k, v in updates.items():
             if k in self.inventory_df.columns:
                 self.inventory_df.loc[mask, k] = v
         
-        # 3. Update Excel (Best Effort)
+        # 3. Write to Excel (ASYNC via Queue)
         try:
-            row = self.inventory_df[mask].iloc[0]
-            success, msg = self._write_excel_generic(row, updates)
-            if not success:
-                 print(f"Update failed: {msg}")
-                 return False
+            row_snapshot = self.inventory_df[mask].iloc[0].to_dict()
+            self.write_queue.put((self._write_excel_generic, (row_snapshot, updates)))
             return True
         except Exception as e:
-            print(f"Update error: {e}")
+            print(f"Queue error: {e}")
             return False
 
     def _write_excel_generic(self, row_data, updates):
+        # NOTE: This runs in a background thread!
         from openpyxl import load_workbook
         from openpyxl.styles import Font, Alignment, Border, Side
         from copy import copy
         
         # Handle composite keys (path::sheet)
-        key = row_data['source_file']
+        key = row_data[FIELD_SOURCE_FILE]
         file_path = key
         if '::' in key and not os.path.exists(key):
             file_path = key.split('::')[0]
 
         if not os.path.exists(file_path): 
+            print(f"Write Error: File not found {file_path}")
             return False, f"Source file not found: {file_path}"
 
         # SAFETY 1: Backup
         backup_path = backup_excel_file(file_path)
         if not backup_path:
+            print("Write Error: Backup failed")
             return False, "Failed to create backup, aborting write for safety."
             
         # Use the original KEY to get mapping data (it might be keyed by "path::sheet")
@@ -505,7 +541,7 @@ class InventoryManager:
         # Map updates to Excel headers
         excel_updates = {}
         for k, v in updates.items():
-            if k == 'price_original': k = 'price'
+            if k == FIELD_PRICE_ORIGINAL: k = FIELD_PRICE
             if k in field_to_col:
                 excel_updates[field_to_col[k]] = v
         
@@ -546,7 +582,7 @@ class InventoryManager:
             if ws is None:
                 ws = wb.active
                 
-            print(f"DEBUG: Writing to Sheet '{ws.title}' in '{file_path}'")
+            print(f"BG-WRITE: Writing to Sheet '{ws.title}' in '{file_path}'")
 
             # Find Header Columns
             col_indices = {}
@@ -558,12 +594,12 @@ class InventoryManager:
                     if cell.column > max_col_idx: max_col_idx = cell.column
             
             default_headers = {
-                'buyer': 'Buyer Name',
-                'buyer_contact': 'Buyer Contact',
-                'notes': 'Notes',
-                'status': 'Status',
-                'color': 'Color',
-                'price': 'Selling Price',
+                FIELD_BUYER: 'Buyer Name',
+                FIELD_BUYER_CONTACT: 'Buyer Contact',
+                FIELD_NOTES: 'Notes',
+                FIELD_STATUS: 'Status',
+                FIELD_COLOR: 'Color',
+                FIELD_PRICE: 'Selling Price',
                 'grade': 'Grade',
                 'condition': 'Condition'
             }
@@ -584,12 +620,12 @@ class InventoryManager:
                     excel_updates[header_name] = value
 
             # Find Row (Match IMEI or Model)
-            target_imei = str(row_data['imei'])
-            target_model = str(row_data['model'])
+            target_imei = str(row_data[FIELD_IMEI])
+            target_model = str(row_data[FIELD_MODEL])
             
             # Find IMEI/Model col for matching
-            imei_header = field_to_col.get('imei')
-            model_header = field_to_col.get('model')
+            imei_header = field_to_col.get(FIELD_IMEI)
+            model_header = field_to_col.get(FIELD_MODEL)
             
             imei_col_idx = col_indices.get(imei_header)
             model_col_idx = col_indices.get(model_header)
@@ -643,6 +679,8 @@ class InventoryManager:
             return True, "Success"
             
         except PermissionError:
+            print("Write Error: File open in Excel")
             return False, "File is open in Excel. Please close it."
         except Exception as e:
+            print(f"Write Error: {e}")
             return False, f"Excel Write Error: {e}"
