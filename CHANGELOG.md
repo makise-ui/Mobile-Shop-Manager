@@ -1,5 +1,18 @@
 # Changelog
 
+## [v1.5.0] - 2026-01-10: AI & Simulation Update
+
+### 🧠 Intelligence & Analytics
+*   **Price Simulation Mode:** Added a powerful "What-If" engine to Analytics and Dashboard. You can now visualize costs and profits based on hypothetical scenarios (e.g., "Assume Original Cost is Selling Price - 8%") without altering your real database.
+*   **AI Demand Forecasting:** New "AI Insights" widget on the Dashboard predicts stockouts based on your sales velocity. It alerts you to "Low Stock" or "Dead Stock" items automatically.
+*   **Smart Settings:** Added a dedicated "Intelligence" tab in Settings to toggle AI features on/off.
+
+### 🚀 Enhancements
+*   **Dashboard Upgrade:** Added a settings shortcut directly to the Dashboard header for quick access to simulation tools.
+*   **Visual Indicators:** Clear warnings ("⚠️ SIMULATION ACTIVE") appear when viewing hypothetical data to prevent confusion with real financial records.
+
+---
+
 ## [v1.4.0] - 2026-01-09: The Reporting & Analytics Update
 
 ### 🚀 New Features
