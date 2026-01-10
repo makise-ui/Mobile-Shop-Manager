@@ -2,12 +2,14 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from PIL import ImageTk
 from .dialogs import MapColumnsDialog, ZPLPreviewDialog, PrinterSelectionDialog, FileSelectionDialog, ItemSelectionDialog
+from .markdown_renderer import MarkdownText
 import pandas as pd
 import datetime
 import os
 import glob
 import ttkbootstrap as tb
 from ttkbootstrap.toast import ToastNotification
+from pathlib import Path
 
 # --- Custom Widgets ---
 class AutocompleteEntry(ttk.Entry):
@@ -76,6 +78,7 @@ class BaseScreen(ttk.Frame):
 class DashboardScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
+        self.sim_params = {}
         self._init_ui()
 
     def _init_ui(self):
@@ -89,7 +92,14 @@ class DashboardScreen(BaseScreen):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        ttk.Label(self.scroll_frame, text="Dashboard", font=('Segoe UI', 20, 'bold')).pack(pady=20, padx=20, anchor=tk.W)
+        # Header Frame
+        f_head = ttk.Frame(self.scroll_frame)
+        f_head.pack(fill=tk.X, padx=20, pady=20)
+        
+        ttk.Label(f_head, text="Dashboard", font=('Segoe UI', 20, 'bold')).pack(side=tk.LEFT)
+        ttk.Button(f_head, text="⚙ Price Simulation", bootstyle="info-outline", command=self.open_sim_settings).pack(side=tk.RIGHT)
+        
+        self.lbl_sim = ttk.Label(self.scroll_frame, text="⚠️ SIMULATION MODE ACTIVE: Profits based on assumed costs.", bootstyle="warning-inverse", anchor="center")
         
         # 1. Main KPI Cards
         f_cards = ttk.Frame(self.scroll_frame)
@@ -103,6 +113,26 @@ class DashboardScreen(BaseScreen):
         
         self.card_aging = self._create_card(f_cards, "Items Aging (>60 Days)", "0")
         self.card_aging.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+
+        # --- AI Insights Section (Hidden by default) ---
+        self.f_ai = ttk.LabelFrame(self.scroll_frame, text=" ✨ AI Demand Insights ", bootstyle="primary")
+        # Pack logic handles visibility
+        
+        cols_ai = ('model', 'velocity', 'stock', 'days', 'status')
+        self.tree_ai = ttk.Treeview(self.f_ai, columns=cols_ai, show='headings', height=5)
+        self.tree_ai.heading('model', text='Model')
+        self.tree_ai.heading('velocity', text='Sales/Week')
+        self.tree_ai.heading('stock', text='Current Stock')
+        self.tree_ai.heading('days', text='Days Left')
+        self.tree_ai.heading('status', text='Status')
+        
+        self.tree_ai.column('velocity', width=80, anchor='center')
+        self.tree_ai.column('stock', width=80, anchor='center')
+        self.tree_ai.column('days', width=80, anchor='center')
+        self.tree_ai.column('status', width=120, anchor='center')
+        
+        self.tree_ai.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.f_ai.pack(fill=tk.X, padx=20, pady=10)
 
         # 2. Alerts Section
         f_alerts = ttk.LabelFrame(self.scroll_frame, text=" Inventory Health Alerts ", bootstyle="danger")
@@ -170,12 +200,25 @@ class DashboardScreen(BaseScreen):
         f.lbl_val = lbl # Store ref
         return f
 
+    def open_sim_settings(self):
+        from gui.simulation import PriceSimulationDialog
+        dlg = PriceSimulationDialog(self, self.sim_params)
+        if dlg.result:
+            self.sim_params = dlg.result
+            self._refresh_stats()
+
     def on_show(self):
         self._refresh_stats()
         self._refresh_log()
 
     def _refresh_stats(self):
         df = self.app.inventory.get_inventory()
+        
+        if self.sim_params.get('enabled'):
+            self.lbl_sim.pack(fill=tk.X, pady=(0, 10), after=self.scroll_frame.winfo_children()[0])
+        else:
+            self.lbl_sim.pack_forget()
+
         if df.empty:
             count = 0
             val = 0
@@ -210,6 +253,35 @@ class DashboardScreen(BaseScreen):
             
         self.card_stock.lbl_val.config(text=str(count))
         self.card_value.lbl_val.config(text=f"₹{val:,.0f}")
+        
+        # AI Forecast Logic
+        if str(self.app.app_config.get("enable_ai_features", "True")) == "True":
+            self.f_ai.pack(fill=tk.X, padx=20, pady=10, before=self.tree_aging.master.master.master) # Try to keep pos?
+            # Actually, simply ensuring it's shown is enough.
+            
+            # Populate
+            # Access analytics from the other screen
+            if 'analytics' in self.app.screens:
+                forecast = self.app.screens['analytics'].analytics.get_demand_forecast()
+                for i in self.tree_ai.get_children(): self.tree_ai.delete(i)
+                
+                for item in forecast:
+                     tag = 'normal'
+                     if item['status'] == 'OUT_OF_STOCK': tag = 'danger'
+                     elif item['status'] == 'LOW_STOCK': tag = 'warning'
+                     
+                     self.tree_ai.insert('', tk.END, values=(
+                         item['model'], 
+                         f"{item['velocity']}/wk",
+                         item['stock'],
+                         f"{item['days_left']} days",
+                         item['status']
+                     ), tags=(tag,))
+                
+                self.tree_ai.tag_configure('danger', foreground='red')
+                self.tree_ai.tag_configure('warning', foreground='#ffcc00') # Gold/Orange
+        else:
+            self.f_ai.pack_forget()
 
     def _update_alerts(self, available_df, aging_df, full_df):
         # 1. Aging Tree
@@ -1724,6 +1796,7 @@ class AnalyticsScreen(BaseScreen):
         super().__init__(parent, app_context)
         from core.analytics import AnalyticsManager
         self.analytics = AnalyticsManager(app_context.inventory)
+        self.sim_params = {}
         self._init_ui()
 
     def _init_ui(self):
@@ -1739,8 +1812,13 @@ class AnalyticsScreen(BaseScreen):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Title
-        ttk.Label(self.scroll_frame, text="Business Intelligence Dashboard", font=('Segoe UI', 20, 'bold'), bootstyle="primary").pack(pady=20, padx=20, anchor=tk.W)
+        # Header
+        f_head = ttk.Frame(self.scroll_frame)
+        f_head.pack(fill=tk.X, padx=20, pady=20)
+        ttk.Label(f_head, text="Business Intelligence Dashboard", font=('Segoe UI', 20, 'bold'), bootstyle="primary").pack(side=tk.LEFT)
+        ttk.Button(f_head, text="⚙ Price Simulation", bootstyle="info-outline", command=self.open_sim_settings).pack(side=tk.RIGHT)
+        
+        self.lbl_sim = ttk.Label(self.scroll_frame, text="⚠️ SIMULATION MODE ACTIVE: Profits based on assumed costs.", bootstyle="warning-inverse", anchor="center")
 
         # --- Row 1: KPI Cards ---
         kpi_container = ttk.Frame(self.scroll_frame)
@@ -1834,6 +1912,13 @@ class AnalyticsScreen(BaseScreen):
     def on_show(self):
         self.refresh()
 
+    def open_sim_settings(self):
+        from gui.simulation import PriceSimulationDialog
+        dlg = PriceSimulationDialog(self, self.sim_params)
+        if dlg.result:
+            self.sim_params = dlg.result
+            self.refresh()
+
     def _show_buyer_history(self, buyer_name):
         """Populates the detail tree when a buyer is clicked."""
         clean_name = str(buyer_name).strip()
@@ -1852,8 +1937,13 @@ class AnalyticsScreen(BaseScreen):
                 ))
 
     def refresh(self):
-        stats = self.analytics.get_summary()
+        stats = self.analytics.get_summary(self.sim_params)
         df = self.app.inventory.get_inventory()
+        
+        if self.sim_params.get('enabled'):
+            self.lbl_sim.pack(fill=tk.X, pady=(0, 10), after=self.scroll_frame.winfo_children()[0])
+        else:
+            self.lbl_sim.pack_forget()
 
         # 1. Update KPIs
         self.kpi_stock.config(text=f"₹{stats['total_value']:,.0f}")
@@ -2110,6 +2200,19 @@ class SettingsScreen(BaseScreen):
         cb.pack(anchor=tk.W, pady=5)
         cb.bind("<<ComboboxSelected>>", self._on_theme_change)
         
+        # --- Tab 2: Intelligence (AI) ---
+        tab_ai = ttk.Frame(tabs, padding=20)
+        tabs.add(tab_ai, text="Intelligence")
+        
+        ttk.Label(tab_ai, text="Artificial Intelligence Features", font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W, pady=(0, 10))
+        
+        self.var_ai = tk.BooleanVar(value=self.app.app_config.get('enable_ai_features', True))
+        chk_ai = ttk.Checkbutton(tab_ai, text="Enable AI Actions & Insights", variable=self.var_ai, bootstyle="round-toggle")
+        chk_ai.pack(anchor=tk.W, pady=10)
+        
+        ttk.Label(tab_ai, text="Features Enabled:", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 5))
+        ttk.Label(tab_ai, text="• Demand Forecasting (Stockout Alerts)\n• Smart Price Rounding\n• Brand Extraction", foreground="gray").pack(anchor=tk.W, padx=20)
+
         # Save Button
         ttk.Button(self, text="Save All Settings", command=self._save, style="success.TButton").pack(pady=20)
 
@@ -2134,6 +2237,7 @@ class SettingsScreen(BaseScreen):
                 
             # Save Specifics
             self.app.app_config.set("enable_buyer_tracking", self.var_buyer.get())
+            self.app.app_config.set("enable_ai_features", self.var_ai.get())
             self.app.app_config.set('theme_name', self.var_theme.get())
             
             ToastNotification(
@@ -3186,133 +3290,745 @@ class HelpScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="User Guide & Help", font=('Segoe UI', 16, 'bold')).pack(pady=10)
+        # Header Frame
+        header_frame = ttk.Frame(self)
+        header_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        ttk.Label(header_frame, text="📖 Complete User Guide & Help", font=('Segoe UI', 16, 'bold')).pack(side=tk.LEFT)
+        ttk.Button(header_frame, text="🔄 Reload", command=self._reload_content).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(header_frame, text="🔍 Search Help", command=self._search_help).pack(side=tk.RIGHT, padx=5)
         
         # Notebook for sections
         nb = ttk.Notebook(self)
-        nb.pack(fill=tk.BOTH, expand=True)
+        nb.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # 1. Getting Started
+        # Load content from markdown file
+        self.markdown_content = self._load_markdown_content()
+        
+        # 1. Complete Guide (Full Content)
+        f_guide = ttk.Frame(nb)
+        nb.add(f_guide, text="📚 Complete Guide")
+        self._add_markdown_text(f_guide, self.markdown_content)
+        
+        # 2. Quick Start
         f_start = ttk.Frame(nb)
-        nb.add(f_start, text="Getting Started")
-        self._add_scroll_text(f_start, self._get_start_text())
+        nb.add(f_start, text="🚀 Quick Start")
+        self._add_markdown_text(f_start, self._get_quick_start())
         
-        # 2. Features & How-To
+        # 3. Features & How-To
         f_feat = ttk.Frame(nb)
-        nb.add(f_feat, text="Features Guide")
-        self._add_scroll_text(f_feat, self._get_feature_text())
+        nb.add(f_feat, text="✨ Core Features")
+        self._add_markdown_text(f_feat, self._get_features_guide())
         
-        # 3. FAQ
+        # 4. Keyboard Shortcuts
+        f_shortcuts = ttk.Frame(nb)
+        nb.add(f_shortcuts, text="⌨️ Shortcuts")
+        self._add_markdown_text(f_shortcuts, self._get_shortcuts())
+        
+        # 5. Troubleshooting
+        f_trouble = ttk.Frame(nb)
+        nb.add(f_trouble, text="🔧 Troubleshooting")
+        self._add_markdown_text(f_trouble, self._get_troubleshooting())
+        
+        # 6. FAQ
         f_faq = ttk.Frame(nb)
-        nb.add(f_faq, text="FAQ")
-        self._add_scroll_text(f_faq, self._get_faq_text())
+        nb.add(f_faq, text="❓ FAQ")
+        self._add_markdown_text(f_faq, self._get_faq_text())
 
-    def _add_scroll_text(self, parent, content):
-        txt = tk.Text(parent, font=('Segoe UI', 10), wrap=tk.WORD, padx=10, pady=10)
+    def _load_markdown_content(self):
+        """Load help content from markdown file if it exists."""
+        try:
+            help_file = Path(__file__).parent.parent / "help_content.md"
+            if help_file.exists():
+                with open(help_file, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except:
+            pass
+        # Fallback to basic content
+        return self._get_complete_guide()
+
+    def _add_markdown_text(self, parent, content):
+        """Add a markdown-rendered text widget."""
+        txt = MarkdownText(parent, font=('Segoe UI', 10), wrap=tk.WORD, padx=10, pady=10)
         scroll = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=txt.yview)
         txt.configure(yscrollcommand=scroll.set)
         
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         txt.pack(fill=tk.BOTH, expand=True)
         
-        txt.insert(tk.END, content)
-        txt.configure(state='disabled')
+        txt.insert_markdown("1.0", content)
 
-    def _get_start_text(self):
-        return """WELCOME TO 4BROS MOBILE MANAGER
+    def _reload_content(self):
+        """Reload content from markdown file."""
+        try:
+            self.markdown_content = self._load_markdown_content()
+            messagebox.showinfo("Reloaded", "Help content reloaded successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to reload: {str(e)}")
 
-Step 1: Add Your Inventory
---------------------------
-1. Go to "Manage" -> "Manage Files".
-2. Click "+ Add Excel File".
-3. Select your stock Excel file (.xlsx) or CSV.
-4. Map your columns! The app needs to know which column is IMEI, Model, Price, etc.
-   - If you don't have a column, select "(Ignore)".
-   - You can set a default Supplier for the whole file.
+    def _search_help(self):
+        """Search help content."""
+        query = simpledialog.askstring("Search Help", "Enter search term:")
+        if query:
+            query_lower = query.lower()
+            matches = []
+            for i, line in enumerate(self.markdown_content.split('\n'), 1):
+                if query_lower in line.lower():
+                    matches.append(f"Line {i}: {line.strip()}")
+            
+            if matches:
+                result = "\n".join(matches[:20])  # Show first 20 matches
+                messagebox.showinfo("Search Results", result)
+            else:
+                messagebox.showinfo("No Results", "No matches found for: " + query)
 
-Step 2: Check Your Dashboard
-----------------------------
-- Go to "Inventory" to see all your items combined.
-- The app automatically assigns a 'Unique ID' to every phone. Use this ID for fast scanning!
+    def _get_complete_guide(self):
+        """Load complete guide - attempts to read from file, falls back to combined content."""
+        try:
+            help_file = Path(__file__).parent.parent / "help_content.md"
+            if help_file.exists():
+                with open(help_file, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except:
+            pass
+        return self._get_quick_start() + "\n\n" + self._get_features_guide()
 
-Step 3: Printing Labels
------------------------
-- In "Inventory", check the boxes [x] next to items.
-- Click "Print Checked".
-- Select "Batch Mode" if you have a ZPL Thermal Printer for best results (2-up labels).
+    def _get_quick_start(self):
+        return """# 🚀 Quick Start Guide
 
-Step 4: Selling
----------------
-- Go to "Quick Status".
-- Scan the Unique ID (or search by IMEI).
-- Select "SOLD".
-- Enter Buyer Name (select from list or type new).
-- Click Confirm. The app updates your Excel file automatically!
+## Step 1: Initial Setup
+
+### Configure Your Business
+1. **First Launch** - Welcome dialog appears
+   - Enter your **Store Name** (e.g., "4Bros Mobile Shop")
+   - Enter your **Store Address**
+   - Enter your **GST Registration Number** (if applicable)
+
+### Add Your Inventory Files
+1. Click **Manage** → **Manage Files**
+2. Click **+ Add Excel File**
+3. Select your stock Excel file (.xlsx, .xls) or CSV
+4. Map your columns to the app's fields:
+   - Select column for **Model** (e.g., "Mobile Model")
+   - Select column for **IMEI** (e.g., "Serial Number")
+   - Select column for **Price** (e.g., "Cost Price")
+   - Leave unused columns as **(Ignore)**
+5. Click **Save Mapping**
+
+> **Example:** Map "Mobile Model" → Model, "Serial Number" → IMEI, "Colour" → Color
+
+## Step 2: Understand the Dashboard
+
+Go to **Inventory** → **Dashboard** to see:
+- **Total Items** in stock
+- **Total Value** of inventory
+- **Est. Profit** (if you set costs)
+- **Status Breakdown** (In-Stock / Sold / Returned)
+- **Top Models** and **Supplier Distribution**
+
+## Step 3: View Your Inventory
+
+1. Click **Inventory** → **Inventory List**
+2. All items from your Excel files displayed in **one unified view**
+3. Each item has a **Unique ID** assigned automatically
+4. **Search** by Model, IMEI, or Unique ID
+5. **Filter** by Status, Price Range, Supplier
+
+## Step 4: Print Labels (Optional)
+
+1. Check **[x]** boxes next to items to print
+2. Click **Print Checked**
+3. Select printer and mode:
+   - **Single Label**: One label per item
+   - **2-Up Labels**: Two labels side-by-side (saves paper)
+4. Click **Print**
+
+> **Pro Tip:** Labels show **Unique ID** as barcode for fast scanning!
+
+## Step 5: Record Sales
+
+1. Press **F3** or go to **Inventory** → **Quick Status**
+2. **Scan** the item's Unique ID (or type it)
+3. Select status: **SOLD**, **RETURN**, or **STOCK**
+4. If SOLD:
+   - Enter **Buyer Name** (from auto-suggest list)
+   - Enter **Contact** (optional)
+5. Click **Confirm** → Excel updates automatically!
+
+> **Example:**
+> - Scan: 1001
+> - Status: SOLD
+> - Buyer: Rajesh Kumar
+> - Contact: 9876543210
+> - Result: Item marked SOLD, buyer tracked, Excel file updated
+
+## That's it! You're ready to use the app.
+
+Press **F1** for Search, **F2** for Quick Entry, **F4** for Billing.
 """
 
-    def _get_feature_text(self):
-        return """KEY FEATURES GUIDE
+    def _get_features_guide(self):
+        return """# ✨ Core Features
 
-1. ADVANCED REPORTING (New!)
-------------------------
-- Go to "Reports" -> "Advanced Reporting".
-- Create custom filters (e.g., "Find all IN stock where Price > 10,000").
-- Reorder columns by moving them between the "Available" and "Selected" lists.
-- Export your filtered data to Excel, PDF, or Word.
-- Use "Presets" to quickly load common filters (like "Low Stock" or "Expensive Items").
+## 1. Quick Status Update (Fast Scanning)
 
-2. BATCH SCANNING
-------------------------
-- In "Quick Status", check "BATCH MODE".
-- Scan multiple phones one after another.
-- They are added to a waiting list.
-- When done, click "FINISH & REVIEW".
-- You can review the list, verify prices, and update them all to SOLD in one click.
+Perfect for recording sales using a barcode scanner.
 
-3. ANALYTICS DASHBOARD
-----------------------
-- View real-time Business Intelligence:
-  - Total Inventory Value & Est. Profit.
-  - Brand Distribution charts.
-  - Top Buyers ranking.
-- Export "Detailed Analytics Report" (PDF) which includes a full Sales Log with buyer details.
+**Steps:**
+1. Go to **Inventory** → **Quick Status**
+2. Scan or type the **Unique ID** or IMEI
+3. Select new status: **SOLD**, **RETURN**, or **STOCK**
+4. If SOLD:
+   - Enter **Buyer Name**
+   - Enter **Contact Number** (optional)
+5. Click **Confirm**
 
-4. BUYER & DATA MANAGEMENT
---------------------------
-- Go to "Manage" -> "Manage Data".
-- Pre-load your Frequent Buyers list to save typing time.
-- Manage standard Colors for consistent data entry.
+**Batch Mode:**
+- Enable "BATCH MODE" checkbox
+- Scan multiple items one after another
+- They accumulate in a list
+- Review before confirming all at once
 
-5. INVOICING / BILLING
-----------------------
-- Go to "Billing".
-- Scan IDs to add to cart.
-- Enter Customer Details.
-- Click "Generate Invoice" to get a professional PDF receipt with GST breakdowns.
+> **Example:** Scan 5 phones, all marked SOLD with customer "Rajesh", confirm once.
 
-6. SAFETY & BACKUPS
--------------------
-- The app creates a backup (.bak) of your Excel file before every write.
-- If Excel is open, the app will warn you instead of crashing.
-- Data like 'Sold' status is saved internally too, so you never lose track even if you replace the Excel file.
+## 2. Label Printing (Thermal Printers)
+
+Create professional stickers for your items.
+
+**Steps:**
+1. Go to **Inventory** → **Inventory List**
+2. Check **[x]** boxes for items to print
+3. Click **Print Checked**
+4. Choose **Printer** and **Mode**:
+   - **Single Label**: Standard 50mm × 22mm
+   - **2-Up Labels**: Two side-by-side (saves thermal paper)
+5. Click **Print**
+
+**Label Contents:**
+- Store name
+- Scannable barcode (Unique ID)
+- Model, Price, RAM/ROM
+- Custom notes
+
+> **Pro Tip:** Use **2-Up Mode** to save 50% on thermal paper!
+
+## 3. Advanced Reporting
+
+Create filtered reports and export data.
+
+**Steps:**
+1. Go to **Reports** → **Advanced Reporting**
+2. **Create Filters:**
+   - Status = "IN" AND Price > 15,000
+   - Combine multiple conditions
+3. **Select Columns:**
+   - Choose which fields to display
+   - Drag to reorder columns
+4. **Export:**
+   - **Excel** (.xlsx)
+   - **PDF** (formatted report)
+   - **Word** (.docx)
+5. **Save as Preset:**
+   - Reuse filters for "In-Stock Premium", "Budget Phones", etc.
+
+> **Example Filter:** Status = "IN" AND Price ≥ 20,000 AND Model = "Vivo"
+> Result: All in-stock premium Vivo phones
+
+## 4. Invoicing and Billing
+
+Generate professional invoices with GST.
+
+**Steps:**
+1. Go to **Billing** → **Billing Screen**
+2. **Add Items:**
+   - Scan/type Unique ID
+   - Item details auto-populate
+   - Adjust quantity if needed
+3. **Customer Details:**
+   - Enter name, address
+   - Select or create buyer
+4. **Tax Calculation:**
+   - Select delivery state
+   - GST auto-calculated (CGST+SGST or IGST)
+5. **Generate Invoice:**
+   - Creates professional PDF
+   - Auto-prints (if configured)
+   - Saved in Documents/MobileShopManager/Invoices/
+
+**GST Rules:**
+- **Intrastate:** CGST (9%) + SGST (9%) = 18%
+- **Interstate:** IGST (18%)
+- Configurable in Settings
+
+> **Example Invoice:**
+> - iPhone 14 (ID: 1001) - ₹65,000
+> - Vivo V27 (ID: 1002) - ₹28,000
+> - Subtotal: ₹93,000
+> - GST (18%): ₹16,740
+> - **Total: ₹109,740**
+
+## 5. Analytics and Business Intelligence
+
+Track sales trends and profitability.
+
+**Go to:** **Inventory** → **Analytics**
+
+**View Metrics:**
+- Total inventory value
+- Estimated profit margin
+- Sales velocity (items/day)
+- Top suppliers
+- Brand distribution
+
+**Price Simulation:**
+- Enable in dashboard
+- Adjust assumed costs
+- See profit impact
+- Useful for pricing decisions
+
+**Export Reports:**
+- Click **Download Detailed Analytics**
+- PDF with charts, tables, sales log
+- Includes buyer details and history
+
+## 6. Data Management
+
+Organize your reference data.
+
+**Go to:** **Manage** → **Manage Data**
+
+**Manage Buyers:**
+- Add frequent customer names
+- Auto-suggest when selling
+- Saves typing time
+
+**Manage Colors:**
+- Pre-define phone colors
+- Ensures data consistency
+
+**Manage Grades:**
+- Define condition grades (A1, A2, B1, etc.)
+- Track phone quality
+
+---
+
+## Common Workflows
+
+### Daily Stock Entry
+1. Update Excel with new phones
+2. Press **F5** to refresh
+3. Select new items, print labels
+4. Affix Unique ID stickers
+
+### Quick Sale
+1. Press **F3**
+2. Scan barcode
+3. Select **SOLD**
+4. Enter buyer name
+5. Done!
+
+### Monthly Reconciliation
+1. **Reports** → **Advanced Reporting**
+2. Filter **Status = "IN"**
+3. Export to Excel
+4. Physical audit against shop stock
+"""
+
+    def _get_shortcuts(self):
+        return """# ⌨️ Keyboard Shortcuts
+
+## Navigation & Windows
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl+N** or **Ctrl+W** | Open Quick Navigation (Command Palette) |
+| **Escape** | Return to Dashboard |
+| **Right-Click** | Context menu (copy, edit, delete) |
+
+## Quick Access
+
+| Shortcut | Action |
+|----------|--------|
+| **F1** | Go to Search Screen |
+| **F2** | Go to Quick Entry |
+| **F3** | Go to Status Update |
+| **F4** | Go to Billing |
+| **F5** | Refresh (reload Excel files) |
+
+## In Tables & Lists
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl+C** | Copy selected cell |
+| **Ctrl+X** | Cut selected cell |
+| **Ctrl+V** | Paste |
+| **Delete** | Clear cell |
+| **Ctrl+A** | Select all |
+
+---
+
+## Quick Reference Card
+
+```
+GLOBAL SHORTCUTS:
+  Ctrl+N / Ctrl+W ......... Command Palette
+  Escape .................. Dashboard
+  Right-Click ............ Context Menu
+
+QUICK ACCESS (Power User):
+  F1 ..................... Search
+  F2 ..................... Quick Entry
+  F3 ..................... Status/Scanning
+  F4 ..................... Billing/Invoice
+  F5 ..................... Refresh
+
+COMMON WORKFLOWS:
+  F3 + Scan + "SOLD" ..... Record sale in 3 seconds
+  Ctrl+N + "Print" ...... Open print screen
+  F4 + Scan Items ....... Build invoice
+```
+
+## Tips for Power Users
+
+- **Batch Scanning:** Enable BATCH MODE in Quick Status, scan multiple items, confirm once
+- **Fast Search:** Use **F1** then type model name, results filter in real-time
+- **Keyboard Navigation:** Tab through fields instead of mouse clicking
+- **Hotkeys Remember:** The app remembers last printer, buyer, etc.
+"""
+
+    def _get_troubleshooting(self):
+        return """# 🔧 Troubleshooting Guide
+
+## Issue: Excel File Not Updating
+
+**Problem:** Changes in the app don't appear in Excel.
+
+**Solutions:**
+1. Ensure Excel file is **CLOSED** (not open in Microsoft Excel)
+2. Check file is not **read-only**
+3. Verify file path is correct
+4. Press **F5** (Manual Refresh) to force reload
+5. Check Documents/MobileShopManager/logs/ for errors
+
+> **Pro Tip:** Always close Excel before updating items in the app!
+
+## Issue: Duplicate IMEI Warning
+
+**Problem:** Same IMEI found in multiple files.
+
+**Solution:**
+1. **Manage Files** → Review source Excel files
+2. Remove actual duplicates from Excel
+3. Use app's **Conflict Resolution** to merge
+4. Keep the newer/more accurate entry
+
+## Issue: Labels Not Printing
+
+**Problem:** Thermal printer not responding.
+
+**Solutions:**
+1. Verify printer is installed and default
+2. Test print from Windows (Print Test Page)
+3. Check ZPL driver is installed
+4. Go to Settings, select correct printer
+5. Ensure USB/Network connection active
+
+## Issue: Data Loss After Excel Update
+
+**Problem:** Updated Excel file, lost previous status.
+
+**Solution:**
+- Don't worry! Status history stored internally
+- Even without Excel, app remembers:
+  - Item IDs
+  - Who purchased (SOLD status)
+  - Buyer information
+  - Notes and modifications
+- Old data in Activity Log
+
+> **Security Feature:** You never lose sales history!
+
+## Issue: License Activation Failed
+
+**Problem:** Cannot activate license.
+
+**Solutions:**
+1. Check internet connection
+2. Enter license key exactly (copy-paste recommended)
+3. Verify computer online (not offline mode)
+4. Check Documents/MobileShopManager/logs/ for details
+5. Contact support with log file
+
+## Issue: "Conflict Detected" Warning
+
+**Problem:** Multiple items marked as same ID.
+
+**Explanation:** Same IMEI/item found in different Excel files or rows.
+
+**How to Fix:**
+1. **Manage Files** → **Resolve Conflicts**
+2. Review both entries
+3. Choose which one to keep
+4. Duplicate marked as hidden
+5. Check source files for actual duplicates
+
+## Issue: Slow Performance
+
+**Problem:** App is slow with large inventory.
+
+**Solutions:**
+1. Filter before operating (don't load all 10,000 items)
+2. Use presets instead of complex filters
+3. Archive old items (mark INACTIVE)
+4. Regular cleanup of temporary files
+5. Close unnecessary programs for more RAM
+
+## Issue: Lost Configuration
+
+**Problem:** Settings/mappings disappeared.
+
+**Troubleshooting:**
+1. Check Documents/MobileShopManager/config/ exists
+2. Look in Documents/MobileShopManager/backups/ for old config
+3. Re-add Excel files and mapping
+4. All status data preserved (no loss)
+
+> **Prevention:** Backup Documents/MobileShopManager/ monthly!
+
+---
+
+## Getting Help
+
+- **Activity Log:** See what the app did recently
+- **Error Messages:** Copy exact message
+- **Logs:** Check Documents/MobileShopManager/logs/
+- **Support:** Provide:
+  - Exact error message
+  - Steps to reproduce
+  - Log file
+  - Your configuration (sanitized)
 """
 
     def _get_faq_text(self):
-        return """FREQUENTLY ASKED QUESTIONS
+        return """# ❓ Frequently Asked Questions
 
-Q: My Excel file isn't updating!
-A: Ensure the file is NOT open in Microsoft Excel. The app cannot write if the file is locked by another program. Close Excel and try again.
+## General Questions
 
-Q: I see "Conflict Detected" warning.
-A: This means the same IMEI was found in two different files or rows. The app asks you to merge them. Usually, you should check your source files for duplicates.
+### Q: Can I use this on Mac or Linux?
 
-Q: How do I change the Store Name on labels?
-A: Go to "Manage" -> "Settings". You can change Store Name, Label Size, and GST % there.
+**A:** Currently Windows-only due to ZPL printer integration. Future versions may support other platforms, but thermal printer support would be limited.
 
-Q: Can I use this without Excel?
-A: You need at least one Excel/CSV file to load inventory. You can create a simple dummy file with headers (Model, IMEI, Price) to start.
+### Q: What's the maximum number of items?
 
-Q: Where is my data saved?
-A: All config and history is saved in your 'Documents/4BrosManager' folder. Do not delete the 'config' folder there unless you want to reset everything.
+**A:** No hard limit. Optimized for 5,000-10,000 items. Larger catalogs (50,000+) need more RAM.
+
+### Q: Can I export my data?
+
+**A:** Yes!
+- **Reports** → Export to Excel/PDF
+- **Inventory** → Download Full Export
+- No vendor lock-in - your data is yours
+
+### Q: What if I lose my Excel files?
+
+**A:** Your data is safe!
+- Status history stored internally
+- Backup copies in Documents/MobileShopManager/backups/
+- Even without Excel, you keep all metadata
+- Recreate Excel, app restores references
+
+## Excel and File Management
+
+### Q: My Excel file isn't updating!
+
+**A:** Most common issues:
+- Excel file is **OPEN** in Microsoft Excel → Close it
+- File is **READ-ONLY** → Remove read-only flag
+- File is **LOCKED** by another program → Close that program
+- Try pressing **F5** (Manual Refresh)
+
+> **Best Practice:** Never have Excel open while using the app!
+
+### Q: Can I use multiple Excel files?
+
+**A:** Absolutely! This is a core feature.
+1. Add multiple files via **Manage Files**
+2. Map columns for each file
+3. App automatically merges all data
+4. Conflict resolution handles duplicates
+
+### Q: What's the best Excel structure?
+
+**Good Structure:**
+```
+IMEI | Model | RAM | Price | Supplier | Colour | Status |
+123456789012345 | Vivo V27 | 8GB | 28000 | Distributor A | Blue | |
+987654321098765 | iPhone 14 | 6GB | 65000 | Distributor B | Black | |
+```
+
+**Avoid:**
+- Merged cells
+- Multiple tables per sheet
+- Headers in different rows
+- Mixed data types
+
+## Features and Functionality
+
+### Q: How do I change the Store Name on labels?
+
+**A:** Go to **Manage** → **Settings**
+- Change **Store Name**
+- Change **Label Size**
+- Change **GST Rate**
+
+### Q: Can I customize invoice format?
+
+**A:** Partially:
+- Change store name, address, GSTIN in Settings
+- Add invoice terms
+- Future version will support custom templates
+
+### Q: Do you support credit sales?
+
+**A:** Not directly in current version. Workaround:
+- Create invoice with payment note
+- Mark as SOLD
+- Track manually in notes field
+
+### Q: Can I use without Excel?
+
+**A:** You need at least one Excel/CSV file. You can create a simple file with just:
+- Model
+- IMEI
+- Price
+
+Start with one item and build from there.
+
+## Data and Backup
+
+### Q: Where is my data saved?
+
+**A:** All config and history:
+- Documents/MobileShopManager/config/ (settings, mappings)
+- Documents/MobileShopManager/logs/ (activity log)
+- Documents/MobileShopManager/Invoices/ (generated invoices)
+- Documents/MobileShopManager/backups/ (Excel backups)
+
+> **Important:** Don't delete the 'config' folder!
+
+### Q: How do I migrate to a new computer?
+
+**A:** 
+1. Copy Documents/MobileShopManager/ folder
+2. Copy your Excel files
+3. Reinstall the app on new computer
+4. Point to copied files in **Manage Files**
+5. All data, settings, history restored!
+
+### Q: Do you support cloud backup?
+
+**A:** Not built-in, but you can:
+- Add Documents/MobileShopManager/ to OneDrive/Google Drive
+- Manual weekly backup to USB drive
+- Export reports as PDF/Excel
+
+### Q: What's a backup and where are they?
+
+**A:** 
+- App creates `.bak` file before every Excel write
+- Location: Documents/MobileShopManager/backups/
+- Timestamped: YYYYMMDD_HHMMSS format
+- If something goes wrong, restore from backup
+
+## Printing and Labels
+
+### Q: Which printers are supported?
+
+**A:** 
+- **Zebra/TSC Thermal Printers** (ZPL) - Best support
+- **ESC/POS Printers** - Alternative format
+- **Standard Windows Printers** - Can print to PDF
+
+### Q: Do I need a thermal printer?
+
+**A:** Not required, but:
+- **With thermal printer:** Fast labels, saves paper
+- **Without:** Can print to standard printer or PDF
+- **2-Up Labels:** Only available with thermal printer
+
+### Q: How do I set default printer?
+
+**A:** 
+1. Go to **Manage** → **Settings**
+2. Select **Printer Type**
+3. Choose default printer
+4. Save
+
+## Tips and Best Practices
+
+### Q: How to handle inventory correctly?
+
+**Best Practice:**
+1. **Add Excel** with stock data
+2. **Print labels** with Unique ID stickers
+3. **Affix stickers** on phones
+4. **Scan stickers** when selling (fast!)
+5. **Never manually** delete from Excel (marks as SOLD instead)
+
+### Q: How to increase speed for large catalogs?
+
+**Tips:**
+- Use **Unique ID** (faster than IMEI)
+- **Filter** before operations
+- Use **Presets** instead of complex filters
+- **Archive** old items
+- **Close** other programs
+
+### Q: What's the fastest way to record sales?
+
+**Best Workflow:**
+1. Press **F3** (Quick Status)
+2. **Scan** barcode on label
+3. Select **SOLD**
+4. Pick buyer from list
+5. **Confirm** (entire Excel updated!)
+
+> **Time:** 5-10 seconds per item!
+
+---
+
+## Support and Feedback
+
+### Q: Where do I get support?
+
+**A:** 
+- **Check this help** (you're reading it!)
+- **Activity Log** (see recent actions)
+- **Logs folder** (Documents/MobileShopManager/logs/)
+- **Email support** at: **hasanfq818@gmail.com**
+- Include:
+  - Exact error message
+  - Steps to reproduce
+  - Your environment details
+
+### Q: How do I report a bug?
+
+**A:** Email to **hasanfq818@gmail.com** with:
+1. **Exact error message** (screenshot)
+2. **Steps to reproduce** (step-by-step)
+3. **Your configuration** (sanitized)
+4. **Log file** (from logs/ folder)
+
+### Q: How do I request a feature?
+
+**A:** Email **hasanfq818@gmail.com** with:
+- Describe desired functionality
+- Explain business benefit
+- Provide examples/use cases
+- Vote on existing requests
+
+---
+
+**Last Updated:** 2026-01-10 | **Version:** 1.4.0 | **Support:** hasanfq818@gmail.com
 """
 
