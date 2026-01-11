@@ -364,9 +364,81 @@ class InventoryScreen(BaseScreen):
 
         ttk.Button(filter_frame, text="Clear Filters", command=self._clear_filters).grid(row=0, column=6, padx=10)
         
+        # Advanced Filter Toggle
+        self.var_adv_show = tk.BooleanVar(value=False)
+        self.btn_adv = ttk.Checkbutton(filter_frame, text="Advanced ▼", variable=self.var_adv_show, style="Toolbutton", command=self._toggle_adv_filters)
+        self.btn_adv.grid(row=0, column=7, padx=5)
+
         # Counter info on right side of filter bar
         self.lbl_counter = ttk.Label(filter_frame, text="Total: 0 | Selected: 0", font=("Arial", 9, "bold"))
-        self.lbl_counter.grid(row=0, column=7, padx=20, sticky=tk.E)
+        self.lbl_counter.grid(row=0, column=8, padx=20, sticky=tk.E)
+
+        # -- Advanced Filter Frame (Hidden) --
+        self.adv_frame = ttk.LabelFrame(self, text=" Advanced Filter Engine ", padding=10)
+        
+        # Row 1: Price, Grade, Status, Brand
+        f1 = ttk.Frame(self.adv_frame)
+        f1.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(f1, text="Max Price:").pack(side=tk.LEFT, padx=2)
+        self.var_max_price = tk.StringVar()
+        self.var_max_price.trace("w", self._on_filter_change)
+        ttk.Entry(f1, textvariable=self.var_max_price, width=8).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(f1, text="Grade:").pack(side=tk.LEFT, padx=(10, 2))
+        self.combo_grade = ttk.Combobox(f1, values=["All"] + self.app.data_registry.get_grades(), state="readonly", width=8)
+        self.combo_grade.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_grade.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(f1, text="Status:").pack(side=tk.LEFT, padx=(10, 2))
+        self.combo_status = ttk.Combobox(f1, values=["All", "IN", "OUT", "RTN"], state="readonly", width=6)
+        self.combo_status.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_status.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(f1, text="Brand:").pack(side=tk.LEFT, padx=(10, 2))
+        self.combo_brand = ttk.Combobox(f1, state="readonly", width=12)
+        self.combo_brand.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_brand.pack(side=tk.LEFT, padx=5)
+
+        # Row 2: Color, RAM/ROM, Source
+        f2 = ttk.Frame(self.adv_frame)
+        f2.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(f2, text="Color:").pack(side=tk.LEFT, padx=2)
+        self.combo_color = ttk.Combobox(f2, state="readonly", width=10)
+        self.combo_color.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_color.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(f2, text="RAM/ROM:").pack(side=tk.LEFT, padx=(10, 2))
+        self.combo_ram_rom = ttk.Combobox(f2, state="readonly", width=12)
+        self.combo_ram_rom.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_ram_rom.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(f2, text="Source File:").pack(side=tk.LEFT, padx=(10, 2))
+        self.combo_source = ttk.Combobox(f2, state="readonly", width=25)
+        self.combo_source.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_source.pack(side=tk.LEFT, padx=5)
+
+        # Row 3: Date Range
+        f3 = ttk.Frame(self.adv_frame)
+        f3.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(f3, text="Added After:").pack(side=tk.LEFT, padx=2)
+        self.var_date_from = tk.StringVar()
+        self.var_date_from.trace("w", self._on_filter_change)
+        self.ent_date_from = ttk.Entry(f3, textvariable=self.var_date_from, width=12)
+        self.ent_date_from.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(f3, text="Before:").pack(side=tk.LEFT, padx=(10, 2))
+        self.var_date_to = tk.StringVar()
+        self.var_date_to.trace("w", self._on_filter_change)
+        self.ent_date_to = ttk.Entry(f3, textvariable=self.var_date_to, width=12)
+        self.ent_date_to.pack(side=tk.LEFT, padx=5)
+        
+        self.var_recent = tk.BooleanVar()
+        ttk.Checkbutton(f3, text="Recently Added (7d)", variable=self.var_recent, command=self._on_filter_change).pack(side=tk.LEFT, padx=15)
+        
+        ttk.Label(f3, text="(YYYY-MM-DD)", font=("Arial", 7), foreground="gray").pack(side=tk.LEFT)
 
         # -- Actions Bar --
         action_frame = ttk.Frame(self)
@@ -565,6 +637,19 @@ class InventoryScreen(BaseScreen):
             suppliers = sorted(df['supplier'].astype(str).unique().tolist())
             self.combo_supplier['values'] = ["All"] + suppliers
             
+            # Advanced Filter Options
+            brands = sorted(df['brand'].astype(str).unique().tolist())
+            self.combo_brand['values'] = ["All"] + brands
+            
+            colors = sorted(df['color'].astype(str).unique().tolist())
+            self.combo_color['values'] = ["All"] + colors
+            
+            specs = sorted(df['ram_rom'].astype(str).unique().tolist())
+            self.combo_ram_rom['values'] = ["All"] + specs
+            
+            sources = sorted(df['source_file'].astype(str).unique().tolist())
+            self.combo_source['values'] = ["All"] + sources
+            
         self._apply_filters()
 
     def _on_filter_change(self, *args):
@@ -574,7 +659,26 @@ class InventoryScreen(BaseScreen):
         self.var_search.set("")
         self.combo_supplier.set("")
         self.var_min_price.set("")
+        # Clear Advanced
+        self.var_max_price.set("")
+        self.combo_grade.set("")
+        self.combo_status.set("")
+        self.combo_brand.set("")
+        self.combo_color.set("")
+        self.combo_ram_rom.set("")
+        self.combo_source.set("")
+        self.var_date_from.set("")
+        self.var_date_to.set("")
+        self.var_recent.set(False)
         self._apply_filters()
+    
+    def _toggle_adv_filters(self):
+        if self.var_adv_show.get():
+            self.adv_frame.pack(fill=tk.X, pady=(0, 10), before=self.paned)
+            self.btn_adv.configure(text="Advanced ▲")
+        else:
+            self.adv_frame.pack_forget()
+            self.btn_adv.configure(text="Advanced ▼")
 
     def _apply_filters(self):
         df = self.df_display
@@ -613,6 +717,74 @@ class InventoryScreen(BaseScreen):
             df = df[df['price'] >= min_p]
         except ValueError:
             pass
+
+        # Max Price
+        try:
+            max_p = float(self.var_max_price.get())
+            df = df[df['price'] <= max_p]
+        except ValueError:
+            pass
+
+        # Grade
+        grade = self.combo_grade.get()
+        if grade and grade != "All":
+            df = df[df['grade'] == grade]
+
+        # Status (Filter)
+        stat = self.combo_status.get()
+        if stat and stat != "All":
+            df = df[df['status'] == stat]
+
+        # Brand
+        brand = self.combo_brand.get()
+        if brand and brand != "All":
+            df = df[df['brand'] == brand]
+
+        # Color
+        color = self.combo_color.get()
+        if color and color != "All":
+            df = df[df['color'] == color]
+
+        # RAM/ROM
+        specs = self.combo_ram_rom.get()
+        if specs and specs != "All":
+            df = df[df['ram_rom'] == specs]
+
+        # Source File
+        src = self.combo_source.get()
+        if src and src != "All":
+            df = df[df['source_file'] == src]
+
+        # Recently Added
+        if self.var_recent.get():
+            now = datetime.datetime.now()
+            def is_recent(row):
+                c_at = row.get('created_at')
+                if c_at:
+                    try:
+                        d = datetime.datetime.fromisoformat(str(c_at))
+                        return (now - d).days < 7
+                    except: pass
+                return False
+            df = df[df.apply(is_recent, axis=1)]
+
+        # Date Range (Added After / Before)
+        d_from = self.var_date_from.get().strip()
+        d_to = self.var_date_to.get().strip()
+        
+        if d_from or d_to:
+            def check_date(row):
+                c_at = row.get('created_at')
+                if not c_at: return False
+                try:
+                    row_date = datetime.datetime.fromisoformat(str(c_at)).date()
+                    if d_from:
+                        if row_date < datetime.date.fromisoformat(d_from): return False
+                    if d_to:
+                        if row_date > datetime.date.fromisoformat(d_to): return False
+                    return True
+                except: return False
+            df = df[df.apply(check_date, axis=1)]
 
         self._render_tree(df)
 

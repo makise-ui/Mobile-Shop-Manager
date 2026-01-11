@@ -15,6 +15,7 @@ from core.activity_log import ActivityLogger
 from core.barcode_utils import BarcodeGenerator
 from core.watcher import InventoryWatcher
 from core.licensing import LicenseManager
+from core.data_registry import DataRegistry
 from gui.activation import LicenseDialog
 from gui.quick_nav import QuickNavOverlay
 from gui.screens import (
@@ -90,6 +91,7 @@ class MainApp(tb.Window):
         self.activity_logger = ActivityLogger(self.app_config)
         self.updater = UpdateChecker()
         self.inventory = InventoryManager(self.app_config, self.activity_logger)
+        self.data_registry = DataRegistry()
         self.barcode_gen = BarcodeGenerator(self.app_config)
         self.printer = PrinterManager(self.app_config, self.barcode_gen)
         self.billing = BillingManager(self.app_config, self.activity_logger)

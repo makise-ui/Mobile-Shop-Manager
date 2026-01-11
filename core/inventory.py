@@ -214,6 +214,7 @@ class InventoryManager:
         # Metadata
         canonical[FIELD_SOURCE_FILE] = str(file_path)
         canonical['last_updated'] = datetime.datetime.now()
+        canonical['created_at'] = None # Placeholder
         
         # Generate Unique ID using persistent registry
         canonical[FIELD_UNIQUE_ID] = canonical.apply(lambda row: self.id_registry.get_or_create_id(row), axis=1)
@@ -230,6 +231,9 @@ class InventoryManager:
                 # Normalize the app-stored status too!
                 app_status = norm_status(meta[FIELD_STATUS])
                 row[FIELD_STATUS] = app_status
+            
+            if 'created_at' in meta:
+                row['created_at'] = meta['created_at']
                 
             if FIELD_NOTES in meta:
                 row[FIELD_NOTES] = meta[FIELD_NOTES]
@@ -342,7 +346,7 @@ class InventoryManager:
             self.inventory_df = pd.DataFrame(columns=[
                 FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
                 FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE, 
-                'last_updated', FIELD_STATUS, FIELD_COLOR
+                'last_updated', FIELD_STATUS, FIELD_COLOR, 'created_at'
             ])
             
         if self.activity_logger:

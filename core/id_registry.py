@@ -1,6 +1,7 @@
 import json
 import os
 import hashlib
+import datetime
 from pathlib import Path
 from .utils import SafeJsonWriter
 from .config import CONFIG_DIR
@@ -56,6 +57,13 @@ class IDRegistry:
         new_id = self.registry['next_id']
         self.registry['next_id'] += 1
         self.registry['items'][key] = new_id
+        
+        # Store creation time
+        iid_str = str(new_id)
+        if iid_str not in self.registry['metadata']:
+            self.registry['metadata'][iid_str] = {}
+        self.registry['metadata'][iid_str]['created_at'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         self._save_registry()
         
         return new_id
