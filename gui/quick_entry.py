@@ -308,13 +308,14 @@ class QuickEntryScreen(ttk.Frame):
             
         if not val: return
         
+        # Check if it looks like a real IMEI (all digits)
+        # Only enforce for Single Mode to prevent accidental manual entry
         is_real_imei = val.isdigit()
         
-        if not is_real_imei:
-             if not is_batch:
-                self.var_manual_model.set(True)
-                self._toggle_model_entry()
-                self.ent_model.focus_set()
+        if not is_batch and not is_real_imei:
+             self.var_manual_model.set(True)
+             self._toggle_model_entry()
+             self.ent_model.focus_set()
              return
 
         if is_batch:
