@@ -94,6 +94,8 @@ class QuickEntryScreen(ttk.Frame):
         lbl_mod.grid(row=r, column=0, sticky=tk.W, pady=5)
         self.ent_model = ttk.Entry(self.form_frame, textvariable=self.var_model, state='readonly') # Default readonly
         self.ent_model.grid(row=r, column=1, sticky=tk.EW, padx=5, pady=5)
+        # Add traversal binding for Model field
+        self.ent_model.bind('<Return>', lambda e: self.ent_ram_rom.focus_set())
         r += 1
 
         # 3. Spec Row (RAM/ROM / Color)
@@ -208,6 +210,17 @@ class QuickEntryScreen(ttk.Frame):
         self.lbl_queue_count = ttk.Label(f_mid, text="Items in Queue: 0", font=('Segoe UI', 12))
         self.lbl_queue_count.pack(pady=5)
         
+        # Log List
+        f_log = ttk.Frame(f_mid)
+        f_log.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        self.list_batch_log = tk.Listbox(f_log, height=8, width=50, font=('Consolas', 10), bg="#f8f9fa")
+        sb = ttk.Scrollbar(f_log, orient="vertical", command=self.list_batch_log.yview)
+        self.list_batch_log.configure(yscrollcommand=sb.set)
+        
+        self.list_batch_log.pack(side=tk.LEFT, fill=tk.BOTH)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        
         ttk.Label(f_mid, text="Scan IMEIs one by one.\nPress Ctrl+Enter when finished to start editing details.", 
                   justify=tk.CENTER, foreground="gray").pack(pady=20)
 
@@ -218,10 +231,20 @@ class QuickEntryScreen(ttk.Frame):
         self.batch_queue.append(imei)
         self.lbl_queue_count.config(text=f"Items in Queue: {len(self.batch_queue)}")
         
+        # Log to Listbox
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        self.list_batch_log.insert(0, f"[{ts}] Scanned: {imei}")
+        
         # Pre-fetch in background
         def run():
             data = self.scraper.fetch_details(imei)
             self.fetched_data[imei] = data
+            # Update log if model found
+            name = data.get("name")
+            if name:
+                # Find index? It's inserted at 0. 
+                # Updating listbox safely from thread is tricky, better leave simple log.
+                pass
             
         threading.Thread(target=run, daemon=True).start()
 
