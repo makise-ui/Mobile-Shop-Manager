@@ -40,8 +40,7 @@ class QuickEntryScreen(ttk.Frame):
         self._init_ui()
         
         # Shortcuts
-        self.bind_all("<Control-n>", lambda e: self._focus_batch_start(), add='+')
-        self.bind_all("<Control-N>", lambda e: self._focus_batch_start(), add='+')
+        self.bind_all("<Control-Return>", lambda e: self._focus_batch_start(), add='+')
         
     def focus_primary(self):
         self.ent_imei.focus_set()
