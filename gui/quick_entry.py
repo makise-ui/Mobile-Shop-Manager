@@ -35,7 +35,8 @@ class QuickEntryScreen(ttk.Frame):
         
         self.target_file_key = tk.StringVar()
         self.file_options = []
-        self.batch_rows = [] # Store widget references for batch items
+        self.batch_queue = [] # Store list of IMEIs
+        self.fetched_data = {} # Cache for fetched info
         
         self._init_ui()
         
@@ -186,98 +187,86 @@ class QuickEntryScreen(ttk.Frame):
             self.batch_container.pack_forget()
             self.form_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
             self.ent_imei.focus_set()
+            # Note: We do not clear fetched_data or batch_queue here 
+            # because we might be switching due to Ctrl+Enter to process the queue.
 
     def _setup_batch_ui(self):
         # Clear existing
         for w in self.batch_container.winfo_children(): w.destroy()
-        self.batch_rows = []
         
-        # 1. Scan Header
-        f_scan = ttk.Frame(self.batch_container)
-        f_scan.pack(fill=tk.X, pady=(0, 10))
+        # Center Frame
+        f_mid = ttk.Frame(self.batch_container)
+        f_mid.place(relx=0.5, rely=0.4, anchor=tk.CENTER)
         
-        ttk.Label(f_scan, text="Batch Scan IMEI:", font=('bold')).pack(side=tk.LEFT)
+        ttk.Label(f_mid, text="BATCH SCAN MODE", font=('Segoe UI', 18, 'bold'), foreground="#007acc").pack(pady=10)
+        
         self.var_batch_scan = tk.StringVar()
-        self.ent_batch_scan = ttk.Entry(f_scan, textvariable=self.var_batch_scan, width=30, font=('Consolas', 12))
-        self.ent_batch_scan.pack(side=tk.LEFT, padx=10)
+        self.ent_batch_scan = ttk.Entry(f_mid, textvariable=self.var_batch_scan, width=40, font=('Consolas', 16))
+        self.ent_batch_scan.pack(pady=10)
         self.ent_batch_scan.bind('<Return>', self._on_imei_enter)
         
-        ttk.Label(f_scan, text="(Press Ctrl+N to stop scanning and edit list)", foreground="gray").pack(side=tk.LEFT, padx=10)
+        self.lbl_queue_count = ttk.Label(f_mid, text="Items in Queue: 0", font=('Segoe UI', 12))
+        self.lbl_queue_count.pack(pady=5)
         
-        # 2. Scrollable List
-        canvas = tk.Canvas(self.batch_container)
-        scrollbar = ttk.Scrollbar(self.batch_container, orient="vertical", command=canvas.yview)
-        self.batch_list_frame = ttk.Frame(canvas)
-        
-        self.batch_list_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self.batch_list_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        # Headers
-        headers = ["IMEI", "Model Name", "RAM/ROM", "Color", "Price"]
-        f_head = ttk.Frame(self.batch_list_frame)
-        f_head.pack(fill=tk.X, pady=2)
-        for i, h in enumerate(headers):
-             w = 30 if i == 1 else 15
-             ttk.Label(f_head, text=h, width=w, font=('bold')).pack(side=tk.LEFT, padx=2)
+        ttk.Label(f_mid, text="Scan IMEIs one by one.\nPress Ctrl+Enter when finished to start editing details.", 
+                  justify=tk.CENTER, foreground="gray").pack(pady=20)
 
-    def _add_batch_row(self, imei):
-        # Create Row Widgets
-        row_frame = ttk.Frame(self.batch_list_frame)
-        row_frame.pack(fill=tk.X, pady=2)
+    def _add_batch_to_queue(self, imei):
+        if imei in self.batch_queue:
+            return # Avoid duplicates in queue
+            
+        self.batch_queue.append(imei)
+        self.lbl_queue_count.config(text=f"Items in Queue: {len(self.batch_queue)}")
         
-        # Data Vars
-        v_imei = tk.StringVar(value=imei)
-        v_model = tk.StringVar(value="Fetching..." if self.var_auto_fetch.get() else "")
-        v_rr = tk.StringVar(value=self.var_ram_rom.get()) # Inherit from single form (optional)
-        v_col = tk.StringVar(value=self.var_color.get() if self.var_lock_color.get() else "")
-        v_price = tk.StringVar(value=self.var_price.get())
-        
-        # Widgets
-        e_imei = ttk.Entry(row_frame, textvariable=v_imei, width=15, state='readonly')
-        e_imei.pack(side=tk.LEFT, padx=2)
-        
-        e_model = ttk.Entry(row_frame, textvariable=v_model, width=30)
-        e_model.pack(side=tk.LEFT, padx=2)
-        
-        e_rr = ttk.Entry(row_frame, textvariable=v_rr, width=15)
-        e_rr.pack(side=tk.LEFT, padx=2)
-        
-        e_col = ttk.Entry(row_frame, textvariable=v_col, width=15)
-        e_col.pack(side=tk.LEFT, padx=2)
-        
-        e_price = ttk.Entry(row_frame, textvariable=v_price, width=15)
-        e_price.pack(side=tk.LEFT, padx=2)
-        
-        # Store for logic
-        row_data = {
-            "vars": (v_imei, v_model, v_rr, v_col, v_price),
-            "widgets": (e_imei, e_model, e_rr, e_col, e_price)
-        }
-        self.batch_rows.append(row_data)
-        
-        # Key Nav: Enter on Model -> Next Row's Model
-        curr_idx = len(self.batch_rows) - 1
-        def focus_next(idx):
-            if idx + 1 < len(self.batch_rows):
-                self.batch_rows[idx+1]["widgets"][1].focus_set() # Next Model
-            else:
-                self.ent_batch_scan.focus_set() # Back to scan
-        
-        e_model.bind('<Return>', lambda e, i=curr_idx: focus_next(i))
-        
-        # Trigger Fetch
-        if self.var_auto_fetch.get():
-             self._fetch_info_bg(imei, row_data)
+        # Pre-fetch in background
+        def run():
+            data = self.scraper.fetch_details(imei)
+            self.fetched_data[imei] = data
+            
+        threading.Thread(target=run, daemon=True).start()
 
     def _focus_batch_start(self):
-        if not self.var_batch_mode.get() or not self.batch_rows:
+        if not self.var_batch_mode.get():
             return
-        # Focus first row model
-        self.batch_rows[0]["widgets"][1].focus_set()
+            
+        if not self.batch_queue:
+            messagebox.showinfo("Empty Queue", "Please scan at least one IMEI first.")
+            return
+            
+        # Switch back to Single Entry mode
+        self.var_batch_mode.set(False)
+        self._toggle_batch_mode()
+        
+        # Load the first one
+        self._load_next_from_batch()
+
+    def _load_next_from_batch(self):
+        if not self.batch_queue:
+            # All done!
+            self.var_imei.set("")
+            self.var_model.set("")
+            self.lbl_status.config(text="Batch Completed!", foreground="green")
+            self.ent_imei.focus_set()
+            return
+
+        imei = self.batch_queue.pop(0)
+        self.var_imei.set(imei)
+        
+        # Check Cache
+        data = self.fetched_data.get(imei)
+        if data and not data.get("error") and data.get("name"):
+            self.var_model.set(data["name"])
+            self.lbl_status.config(text=f"Loaded from Batch (Remaining: {len(self.batch_queue)})", foreground="blue")
+        else:
+            self.var_model.set("")
+            self.lbl_status.config(text=f"Loading next... (Remaining: {len(self.batch_queue)})", foreground="blue")
+            # If not cached or error, trigger fetch again (just in case)
+            self._fetch_info_bg(imei)
+
+        # Force focus on Model name for quick correction/verification
+        self.ent_model.config(state='normal') # Ensure editable
+        self.ent_model.focus_set()
+        self.ent_model.select_range(0, tk.END)
 
     def _toggle_model_entry(self):
         if self.var_manual_model.get():
@@ -306,7 +295,7 @@ class QuickEntryScreen(ttk.Frame):
              return
 
         if is_batch:
-            self._add_batch_row(val)
+            self._add_batch_to_queue(val)
             # Keep focus on scan
             self.ent_batch_scan.focus_set()
         else:
@@ -396,82 +385,20 @@ class QuickEntryScreen(ttk.Frame):
             messagebox.showerror("Error", f"Failed to create file: {e}")
 
     def _save_entry(self):
-        target = self.target_file_key.get()
-        if not target or target == "No Configured Files":
-            messagebox.showwarning("Target File", "Please select a target Excel file.")
-            return
-
-        # --- BATCH MODE SAVE ---
-        if self.var_batch_mode.get():
-            if not self.batch_rows:
-                return
-            
-            saved_count = 0
-            for row_data in self.batch_rows:
-                # Extract values from row variables
-                vars = row_data["vars"] # (imei, model, rr, col, price)
-                
-                imei = vars[0].get().strip()
-                model = vars[1].get().strip()
-                
-                # Skip invalid rows
-                if not imei or not model or model == "Fetching...":
-                    continue
-                    
-                price = 0.0
-                try:
-                    if vars[4].get(): price = float(vars[4].get())
-                except: pass
-                
-                new_data = {
-                    "imei": imei,
-                    "model": model,
-                    "ram_rom": vars[2].get().strip(),
-                    "color": vars[3].get().strip(),
-                    "price_original": price,
-                    "supplier": self.var_supplier.get().strip(), # Use shared supplier
-                    "grade": self.var_grade.get().strip(),       # Use shared grade
-                    "condition": self.var_condition.get().strip(), # Use shared condition
-                    "status": "IN",
-                    "source_file": target
-                }
-                
-                # Create ID
-                uid = self.app.inventory.id_registry.get_or_create_id(new_data)
-                new_data['unique_id'] = uid
-                
-                # Save
-                if self._append_to_excel(target, new_data):
-                    saved_count += 1
-                    # Print if enabled
-                    if self.var_print_after_save.get():
-                        self._print_label(new_data)
-            
-            if saved_count > 0:
-                messagebox.showinfo("Batch Save", f"Successfully saved {saved_count} items.")
-                # Clear Batch UI
-                for w in self.batch_list_frame.winfo_children():
-                    if isinstance(w, ttk.Frame) and w != self.batch_list_frame: # Skip self
-                         # Actually winfo_children returns children widgets. 
-                         # Headers are labels directly in batch_list_frame? No, check _setup_batch_ui
-                         # Headers are in f_head which is packed. Rows are row_frame which are packed.
-                         pass
-                         
-                # Re-setup UI to clear
-                self._setup_batch_ui()
-                self.ent_batch_scan.focus_set()
-            else:
-                messagebox.showwarning("Save Failed", "No valid items to save.")
-            return
-
-        # --- SINGLE ENTRY SAVE ---
         # Validate
         imei = self.var_imei.get().strip()
         model = self.var_model.get().strip()
+        target = self.target_file_key.get()
         
         if not imei or not model:
             messagebox.showwarning("Missing Data", "IMEI and Model are required.")
-            self.ent_imei.focus_set()
+            # Focus either imei or model based on which is missing
+            if not imei: self.ent_imei.focus_set()
+            else: self.ent_model.focus_set()
+            return
+            
+        if not target or target == "No Configured Files":
+            messagebox.showwarning("Target File", "Please select a target Excel file.")
             return
 
         # Prepare Data
@@ -513,7 +440,7 @@ class QuickEntryScreen(ttk.Frame):
             self.var_model.set("")
             self.var_ram_rom.set("")
             self.var_price.set("")
-            # Respect Color Lock check
+            
             if not self.var_lock_color.get():
                 self.var_color.set("")
             
@@ -522,8 +449,14 @@ class QuickEntryScreen(ttk.Frame):
             if not self.var_lock_grade.get():
                 self.var_grade.set("")
                 self.var_condition.set("")
-                
-            self.ent_imei.focus_set()
+            
+            # --- BATCH CONTINUATION ---
+            if self.batch_queue:
+                # Load next one automatically
+                self._load_next_from_batch()
+            else:
+                # Normal focus reset
+                self.ent_imei.focus_set()
         else:
             messagebox.showerror("Error", "Failed to save to Excel file.")
 
