@@ -9,6 +9,7 @@ DATA_FILE = CONFIG_DIR / "app_data.json"
 DEFAULT_COLORS = ["Black", "White", "Blue", "Red", "Green", "Gold", "Silver", "Grey", "Purple"]
 DEFAULT_BUYERS = ["Walk-in Customer", "Dealer A", "Dealer B"]
 DEFAULT_GRADES = ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "D", "E"]
+DEFAULT_CONDITIONS = ["Mobile Only", "Full Kit", "With Box", "Charger Only"]
 
 class DataRegistry:
     def __init__(self):
@@ -17,6 +18,7 @@ class DataRegistry:
         if "colors" not in self.data: self.data["colors"] = sorted(DEFAULT_COLORS)
         if "buyers" not in self.data: self.data["buyers"] = sorted(DEFAULT_BUYERS)
         if "grades" not in self.data: self.data["grades"] = list(DEFAULT_GRADES)
+        if "conditions" not in self.data: self.data["conditions"] = list(DEFAULT_CONDITIONS)
 
     def _load(self):
         # Migration: Check if old colors.json exists
@@ -35,7 +37,8 @@ class DataRegistry:
             return {
                 "colors": initial_colors, 
                 "buyers": sorted(DEFAULT_BUYERS),
-                "grades": list(DEFAULT_GRADES)
+                "grades": list(DEFAULT_GRADES),
+                "conditions": list(DEFAULT_CONDITIONS)
             }
             
         try:
@@ -45,7 +48,8 @@ class DataRegistry:
             return {
                 "colors": sorted(DEFAULT_COLORS), 
                 "buyers": sorted(DEFAULT_BUYERS),
-                "grades": list(DEFAULT_GRADES)
+                "grades": list(DEFAULT_GRADES),
+                "conditions": list(DEFAULT_CONDITIONS)
             }
 
     def save(self):
@@ -94,3 +98,17 @@ class DataRegistry:
             
     def get_grades(self):
         return self.data.get("grades", DEFAULT_GRADES)
+
+    # --- Conditions ---
+    def add_condition(self, condition):
+        if condition not in self.data.get("conditions", []):
+            self.data.setdefault("conditions", []).append(condition)
+            self.save()
+
+    def remove_condition(self, condition):
+        if condition in self.data.get("conditions", []):
+            self.data["conditions"].remove(condition)
+            self.save()
+            
+    def get_conditions(self):
+        return self.data.get("conditions", DEFAULT_CONDITIONS)

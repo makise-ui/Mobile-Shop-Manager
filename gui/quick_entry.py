@@ -6,6 +6,7 @@ import threading
 import os
 from pathlib import Path
 from core.scraper import PhoneScraper
+from gui.screens import AutocompleteEntry
 
 class QuickEntryScreen(ttk.Frame):
     def __init__(self, parent, app_context):
@@ -92,7 +93,16 @@ class QuickEntryScreen(ttk.Frame):
         # 2. Model
         lbl_mod = ttk.Label(self.form_frame, text="Model Name:")
         lbl_mod.grid(row=r, column=0, sticky=tk.W, pady=5)
-        self.ent_model = ttk.Entry(self.form_frame, textvariable=self.var_model, state='readonly') # Default readonly
+        
+        # Autocomplete Model
+        models_list = []
+        try:
+            df = self.app.inventory.get_inventory()
+            if not df.empty:
+                models_list = df['model'].dropna().unique().tolist()
+        except: pass
+        
+        self.ent_model = AutocompleteEntry(self.form_frame, completion_list=models_list, textvariable=self.var_model, state='readonly') # Default readonly
         self.ent_model.grid(row=r, column=1, sticky=tk.EW, padx=5, pady=5)
         # Add traversal binding for Model field
         self.ent_model.bind('<Return>', lambda e: self.ent_ram_rom.focus_set())
@@ -103,14 +113,25 @@ class QuickEntryScreen(ttk.Frame):
         f_specs.grid(row=r, column=0, columnspan=3, sticky=tk.EW, pady=5)
         
         ttk.Label(f_specs, text="RAM/ROM:").pack(side=tk.LEFT)
-        self.ent_ram_rom = ttk.Entry(f_specs, textvariable=self.var_ram_rom, width=15)
+        # Use AutocompleteEntry for specs
+        from core.data_registry import DataRegistry
+        self.data_reg = DataRegistry()
+        
+        # Get unique specs from inventory for autocomplete
+        specs_list = []
+        try:
+            df = self.app.inventory.get_inventory()
+            if not df.empty:
+                specs_list = df['ram_rom'].dropna().unique().tolist()
+        except: pass
+        
+        self.ent_ram_rom = AutocompleteEntry(f_specs, completion_list=specs_list, textvariable=self.var_ram_rom, width=15)
         self.ent_ram_rom.pack(side=tk.LEFT, padx=5)
         self.ent_ram_rom.bind('<Return>', lambda e: self.cb_col.focus_set())
         
         ttk.Label(f_specs, text="Color:").pack(side=tk.LEFT, padx=(10,0))
         # Color Combo
-        from core.data_registry import DataRegistry
-        colors = DataRegistry().get_colors()
+        colors = self.data_reg.get_colors()
         self.cb_col = ttk.Combobox(f_specs, textvariable=self.var_color, values=colors, width=15)
         self.cb_col.pack(side=tk.LEFT, padx=5)
         self.cb_col.bind('<Return>', lambda e: self.ent_price.focus_set())
@@ -127,7 +148,15 @@ class QuickEntryScreen(ttk.Frame):
         self.ent_price.bind('<Return>', lambda e: self.ent_supplier.focus_set())
         
         ttk.Label(f_ps, text="Supplier:").pack(side=tk.LEFT, padx=(15,0))
-        self.ent_supplier = ttk.Entry(f_ps, textvariable=self.var_supplier, width=15)
+        # Autocomplete for Supplier
+        supp_list = []
+        try:
+            df = self.app.inventory.get_inventory()
+            if not df.empty:
+                supp_list = df['supplier'].dropna().unique().tolist()
+        except: pass
+        
+        self.ent_supplier = AutocompleteEntry(f_ps, completion_list=supp_list, textvariable=self.var_supplier, width=15)
         self.ent_supplier.pack(side=tk.LEFT, padx=5)
         ttk.Checkbutton(f_ps, text="🔒", variable=self.var_lock_supplier).pack(side=tk.LEFT)
         self.ent_supplier.bind('<Return>', lambda e: self.cb_grade.focus_set())
@@ -138,16 +167,18 @@ class QuickEntryScreen(ttk.Frame):
         f_gc.grid(row=r, column=0, columnspan=3, sticky=tk.EW, pady=5)
         
         ttk.Label(f_gc, text="Grade:").pack(side=tk.LEFT)
-        grades = ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "C", "D", "E"]
-        self.cb_grade = ttk.Combobox(f_gc, textvariable=self.var_grade, values=grades, width=5)
+        grades = self.data_reg.get_grades()
+        # Use AutocompleteEntry for Grade per user request ("in the grade add Autocomplete")
+        self.cb_grade = AutocompleteEntry(f_gc, completion_list=grades, textvariable=self.var_grade, width=5)
         self.cb_grade.pack(side=tk.LEFT, padx=5)
-        self.cb_grade.bind('<Return>', lambda e: self.ent_cond.focus_set())
         ttk.Checkbutton(f_gc, text="🔒", variable=self.var_lock_grade).pack(side=tk.LEFT)
         
         ttk.Label(f_gc, text="Condition:").pack(side=tk.LEFT, padx=(15,0))
-        self.ent_cond = ttk.Entry(f_gc, textvariable=self.var_condition, width=20)
+        # Use AutocompleteEntry for Condition
+        conditions = self.data_reg.get_conditions()
+        self.ent_cond = AutocompleteEntry(f_gc, completion_list=conditions, textvariable=self.var_condition, width=20)
         self.ent_cond.pack(side=tk.LEFT, padx=5)
-        self.ent_cond.bind('<Return>', lambda e: self._save_entry()) # Enter on last field saves
+        # self.ent_cond.bind('<Return>', lambda e: self._save_entry()) # Enter on last field saves
         r += 1
 
         # --- Action Bar ---
@@ -162,6 +193,57 @@ class QuickEntryScreen(ttk.Frame):
 
         # Configure Grid Weights
         self.form_frame.columnconfigure(1, weight=1)
+        
+        # --- BINDINGS ---
+        # Define field order for navigation
+        self.field_order = [
+            # (Widget, LockVariable or None)
+            (self.ent_imei, None),
+            (self.ent_model, None),
+            (self.ent_ram_rom, None),
+            (self.cb_col, self.var_lock_color),
+            (self.ent_price, None),
+            (self.ent_supplier, self.var_lock_supplier),
+            (self.cb_grade, self.var_lock_grade),
+            (self.ent_cond, None)
+        ]
+        
+        # Apply Bindings
+        for i, (widget, lock_var) in enumerate(self.field_order):
+            # Enter Key: Custom Smart Move
+            if widget == self.ent_imei:
+                # Keep special IMEI logic, but chain it
+                # It already binds <Return>
+                pass 
+            elif widget == self.ent_cond:
+                widget.bind('<Return>', lambda e: self._save_entry())
+            else:
+                widget.bind('<Return>', lambda e, idx=i: self._smart_focus_next(idx))
+            
+            # Arrows
+            widget.bind('<Down>', lambda e, idx=i: self._smart_focus_next(idx, check_lock=False))
+            widget.bind('<Up>', lambda e, idx=i: self._focus_prev(idx))
+
+    def _smart_focus_next(self, current_idx, check_lock=True):
+        next_idx = current_idx + 1
+        if next_idx >= len(self.field_order):
+            # Focus Save Button or Loop? Let's just Save if it's the last one
+            if current_idx == len(self.field_order) - 1:
+                self._save_entry()
+            return
+
+        widget, lock_var = self.field_order[next_idx]
+        
+        # If checking lock and it's locked, skip it (recurse)
+        if check_lock and lock_var and lock_var.get():
+            self._smart_focus_next(next_idx, check_lock=True)
+        else:
+            widget.focus_set()
+
+    def _focus_prev(self, current_idx):
+        if current_idx > 0:
+            widget, _ = self.field_order[current_idx - 1]
+            widget.focus_set()
 
     def on_show(self):
         self._refresh_files()
@@ -323,8 +405,11 @@ class QuickEntryScreen(ttk.Frame):
             # Keep focus on scan
             self.ent_batch_scan.focus_set()
         else:
-            # Single Mode Logic
-            self.ent_ram_rom.focus_set()
+            # Single Mode Logic: Use smart nav (skip model if fetched?)
+            # Actually just go next. If fetching, model might be updated async.
+            # 0 is IMEI, 1 is Model.
+            self._smart_focus_next(0) 
+            
             if self.var_auto_fetch.get() and not self.var_manual_model.get():
                 self._fetch_info_bg(val)
 
