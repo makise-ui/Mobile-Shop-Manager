@@ -224,6 +224,9 @@ class QuickEntryScreen(ttk.Frame):
             widget.bind('<Down>', lambda e, idx=i: self._smart_focus_next(idx, check_lock=False))
             widget.bind('<Up>', lambda e, idx=i: self._focus_prev(idx))
 
+        # Initialize View based on default mode
+        self._toggle_batch_mode()
+
     def _smart_focus_next(self, current_idx, check_lock=True):
         next_idx = current_idx + 1
         if next_idx >= len(self.field_order):
