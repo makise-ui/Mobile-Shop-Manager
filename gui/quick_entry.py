@@ -303,8 +303,48 @@ class QuickEntryScreen(ttk.Frame):
         self.list_batch_log.pack(side=tk.LEFT, fill=tk.BOTH)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Bindings for removal
+        self.list_batch_log.bind('<Delete>', self._remove_batch_item)
+        self.list_batch_log.bind('<Button-3>', self._show_batch_context_menu)
+        
         ttk.Label(f_mid, text="Scan IMEIs one by one.\nPress Ctrl+Enter when finished to start editing details.", 
                   justify=tk.CENTER, foreground="gray").pack(pady=20)
+
+    def _show_batch_context_menu(self, event):
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Remove Item", command=lambda: self._remove_batch_item(event))
+        menu.post(event.x_root, event.y_root)
+
+    def _remove_batch_item(self, event=None):
+        sel = self.list_batch_log.curselection()
+        if not sel:
+            return
+            
+        # The listbox displays newest on top? 
+        # _add_batch_to_queue inserts at 0: `self.list_batch_log.insert(0, ...)`
+        # But `self.batch_queue` appends: `self.batch_queue.append(imei)`
+        # So Listbox index 0 corresponds to batch_queue index -1 (last item)
+        # Listbox index i corresponds to batch_queue[len - 1 - i]
+        
+        idx = sel[0]
+        # Remove from Listbox
+        self.list_batch_log.delete(idx)
+        
+        # Calculate index in batch_queue
+        # Queue: [A, B, C]
+        # Listbox: 
+        # 0: C
+        # 1: B
+        # 2: A
+        # If I delete idx 1 (B), I need to remove batch_queue[1]
+        
+        queue_idx = len(self.batch_queue) - 1 - idx
+        
+        if 0 <= queue_idx < len(self.batch_queue):
+            removed_imei = self.batch_queue.pop(queue_idx)
+            # Optional: Remove from fetched_data cache? Not strictly necessary.
+            
+        self.lbl_queue_count.config(text=f"Items in Queue: {len(self.batch_queue)}")
 
     def _add_batch_to_queue(self, imei):
         if imei in self.batch_queue:
