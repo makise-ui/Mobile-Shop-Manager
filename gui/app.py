@@ -56,6 +56,7 @@ class MainApp(tb.Window):
         self.bind_all("<Escape>", lambda e: self.show_screen('dashboard'), add='+')
         
         self.license_mgr = LicenseManager(self.app_config)
+        self.suppress_conflicts = False # Flag to suppress conflict dialogs
         
         # --- License Check ---
         if not self.license_mgr.is_activated():
@@ -294,6 +295,10 @@ class MainApp(tb.Window):
     def show_screen(self, key):
         for screen in self.screens.values(): screen.pack_forget()
         target = self.screens.get(key)
+        
+        # Suppress conflict popups while in Quick Entry to avoid interruption
+        self.suppress_conflicts = (key == 'quick_entry')
+        
         if target:
             target.pack(fill=tk.BOTH, expand=True)
             target.on_show()
@@ -322,7 +327,9 @@ class MainApp(tb.Window):
         if hasattr(self.inventory, 'conflicts') and self.inventory.conflicts:
             count = len(self.inventory.conflicts)
             self.status_var.set(f"WARNING: {count} IMEI conflicts detected!")
-            ConflictResolutionDialog(self, self.inventory.conflicts[0], self._resolve_conflict_callback)
+            
+            if not self.suppress_conflicts:
+                ConflictResolutionDialog(self, self.inventory.conflicts[0], self._resolve_conflict_callback)
         else:
             self.status_var.set("Inventory Ready.")
 
