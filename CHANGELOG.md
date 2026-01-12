@@ -1,5 +1,30 @@
 # Changelog
 
+## [v1.7.0] - 2026-01-12: The "Sequential Entry" Update
+
+### 🚀 Batch & Sequential Entry
+*   **Batch Scan Queue:** A new "Batch Mode" in Quick Entry allows you to scan a queue of IMEIs first (e.g., scanning 50 phones in a row) and then process them one by one.
+*   **Sequential Workflow:** When saving an entry in Batch Mode, the form automatically loads the next IMEI from your queue, keeping your hands on the keyboard for maximum speed.
+*   **Queue Management:** You can now see a log of scanned items and remove accidental scans via the **Delete** key or **Right-Click** menu before processing.
+
+### 🧠 Smart Navigation & Autocomplete
+*   **Intelligent Auto-Focus:** Pressing `Enter` now automatically **skips locked fields**. If you lock "Supplier" and "Grade", the cursor jumps straight from Price to Condition, saving keystrokes.
+*   **Full Keyboard Control:** Added `Up/Down` arrow key navigation to move between fields freely, even if they are locked.
+*   **Autocomplete Everywhere:** Replaced standard text boxes with **Smart Autocomplete** for:
+    *   **Model Name** (Learns from your inventory)
+    *   **RAM/ROM & Specs**
+    *   **Suppliers**
+    *   **Conditions** (New!)
+    *   **Grades**
+
+### 🛠 Core & UX Improvements
+*   **Conditions Registry:** Added backend support for tracking item "Conditions" (e.g., "Mobile Only", "Full Kit").
+*   **Flexible ID Entry:** Batch Mode now accepts non-numeric IDs (like "DISPLAY OUT" or alphanumeric codes) without forcing you to toggle "Manual Mode".
+*   **Conflict Suppression:** The "Conflict Detected" popup is now **suppressed** specifically while using the Quick Entry screen, preventing workflow interruptions during high-speed data entry.
+*   **Blank Screen Fix:** Resolved an issue where the Quick Entry screen would sometimes appear blank on initial load.
+
+---
+
 ## [v1.6.0] - 2026-01-10: Architecture & Multi-Select Update
 
 ### ⚡ Performance & Core
