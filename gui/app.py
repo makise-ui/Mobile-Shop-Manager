@@ -27,6 +27,7 @@ from gui.reporting import ReportingScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
 from gui.quick_entry import QuickEntryScreen
 from gui.zpl_designer import ZPLDesignerScreen
+from gui.testing_screen import TestingScreen
 
 class MainApp(tb.Window):
     def __init__(self):
@@ -228,6 +229,8 @@ class MainApp(tb.Window):
         mb_more = ttk.Menubutton(btn_bar, text="Edit / More ▼", style="primary.TButton")
         m_more = tk.Menu(mb_more, tearoff=0, font=('Segoe UI', 10))
         m_more.add_command(label="Edit Mobile Data", command=lambda: self.show_screen('edit'))
+        m_more.add_separator()
+        m_more.add_command(label="System Diagnostics", command=lambda: self.show_screen('testing'))
         mb_more.config(menu=m_more)
         mb_more.pack(side=tk.LEFT, padx=2, pady=10)
 
@@ -268,6 +271,7 @@ class MainApp(tb.Window):
         self.screens['managedata'] = ManageDataScreen(self.content_area, self)
         self.screens['designer'] = ZPLDesignerScreen(self.content_area, self)
         self.screens['help'] = HelpScreen(self.content_area, self)
+        self.screens['testing'] = TestingScreen(self.content_area, self)
         
         self.show_screen('inventory')
         self.status_var = tk.StringVar(value="Ready")
