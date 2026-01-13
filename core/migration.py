@@ -15,7 +15,7 @@ def migrate_json_to_db():
     db = DatabaseManager()
     
     # Check if DB is already populated (Simple check: count items)
-    conn = db.get_connection()
+    conn = db.connect()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM items")
     count = cursor.fetchone()[0]
@@ -39,7 +39,7 @@ def migrate_json_to_db():
     items_map = data.get("items", {})
     items_metadata = data.get("metadata", {})
     
-    conn = db.get_connection()
+    conn = db.connect()
     try:
         total_migrated = 0
         

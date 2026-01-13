@@ -84,7 +84,7 @@ class TestDatabaseMigration(unittest.TestCase):
         
         # 2. Verify DB Content
         db = DatabaseManager(core.database.DB_FILE)
-        conn = db.get_connection()
+        conn = db.connect()
         cursor = conn.cursor()
         
         # Check Items

@@ -11,14 +11,14 @@ class DatabaseManager:
         self.db_path = db_path if db_path else DB_FILE
         self._init_db()
 
-    def get_connection(self):
+    def connect(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row # Access columns by name
         return conn
 
     def _init_db(self):
         """Initialize the database schema."""
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
         
         # 1. Items Table (The Registry)
@@ -60,7 +60,7 @@ class DatabaseManager:
 
     def upsert_item(self, unique_id, imei=None, model=None, status=None, date_added=None):
         """Insert or Update a core item record."""
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
         
         now = datetime.datetime.now()
@@ -102,7 +102,7 @@ class DatabaseManager:
 
     def update_metadata(self, unique_id, meta_dict):
         """Updates the JSON metadata column."""
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
         
         cursor.execute("SELECT metadata FROM items WHERE unique_id = ?", (str(unique_id),))
@@ -125,7 +125,7 @@ class DatabaseManager:
 
     def add_history(self, unique_id, action, details, timestamp=None):
         """Add a structured history log."""
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
         
         if not timestamp:
@@ -141,7 +141,7 @@ class DatabaseManager:
 
     def get_item_data(self, unique_id):
         """Get full item data including metadata."""
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
         
         cursor.execute("SELECT * FROM items WHERE unique_id = ?", (str(unique_id),))
@@ -161,7 +161,7 @@ class DatabaseManager:
 
     def get_history(self, unique_id):
         """Get list of history events."""
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
         
         cursor.execute("SELECT timestamp as ts, action, details FROM history WHERE unique_id = ? ORDER BY timestamp DESC", (str(unique_id),))

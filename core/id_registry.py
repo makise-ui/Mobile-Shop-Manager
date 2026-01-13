@@ -19,7 +19,7 @@ class IDRegistry:
         ram_rom = str(row_data.get('ram_rom', '')).strip()
         supplier = str(row_data.get('supplier', '')).strip()
         
-        conn = self.db.get_connection()
+        conn = self.db.connect()
         cursor = conn.cursor()
         
         found_id = None
@@ -71,7 +71,7 @@ class IDRegistry:
         status = data.pop('status', None)
         
         # Database Update
-        conn = self.db.get_connection()
+        conn = self.db.connect()
         try:
             # 1. Update Core
             if status:
@@ -99,7 +99,7 @@ class IDRegistry:
         Transactional batch update.
         updates_dict: { item_id: {data_dict}, ... }
         """
-        conn = self.db.get_connection()
+        conn = self.db.connect()
         try:
             for uid, data in updates_dict.items():
                 data = data.copy()
@@ -144,7 +144,7 @@ class IDRegistry:
         Synchronizes full item details from Excel to DB.
         items_list: list of dicts with 'unique_id' and other fields.
         """
-        conn = self.db.get_connection()
+        conn = self.db.connect()
         try:
             for item in items_list:
                 # Copy to avoid mutating original
@@ -198,7 +198,7 @@ class IDRegistry:
         # Optimization: Fetch only metadata column
         
         buyers = {}
-        conn = self.db.get_connection()
+        conn = self.db.connect()
         cursor = conn.execute("SELECT metadata FROM items WHERE metadata LIKE '%buyer%'")
         
         while True:
