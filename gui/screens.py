@@ -3311,7 +3311,7 @@ class StatusScreen(BaseScreen):
             # Reset UI
             self.ent_id.delete(0, tk.END)
             self.lbl_details.config(text="Ready to scan next...", fg="gray")
-            self.ent_buyer.set('') # Clear combo
+            self.ent_buyer.delete(0, tk.END) # Clear combo
             self.ent_contact.delete(0, tk.END)
             self.current_item = None
             self.ent_id.focus_set()

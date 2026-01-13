@@ -26,6 +26,7 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 MAPPINGS_FILE = CONFIG_DIR / "file_mappings.json"
+ID_REGISTRY_FILE = CONFIG_DIR / "id_registry.json"
 
 DEFAULT_CONFIG = {
     "label_width_mm": 50,

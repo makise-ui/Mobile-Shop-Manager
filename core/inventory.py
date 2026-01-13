@@ -213,15 +213,28 @@ class InventoryManager:
 
         # Metadata
         canonical[FIELD_SOURCE_FILE] = str(file_path)
-        canonical['last_updated'] = datetime.datetime.now()
+        # canonical['last_updated'] = datetime.datetime.now() # REMOVED: Causes date reset bug
         
         # Generate Unique ID using persistent registry
         canonical[FIELD_UNIQUE_ID] = canonical.apply(lambda row: self.id_registry.get_or_create_id(row), axis=1)
         
+        # Store for batch update
+        batch_meta_updates = {}
+
         # Merge persistent metadata (status, notes, color, price overrides)
         def apply_overrides(row):
-            meta = self.id_registry.get_metadata(row[FIELD_UNIQUE_ID])
+            uid = row[FIELD_UNIQUE_ID]
+            meta = self.id_registry.get_metadata(uid)
             
+            # --- DATE PERSISTENCE FIX ---
+            if 'date_added' in meta:
+                 row['last_updated'] = meta['date_added']
+            else:
+                 # New item or first run with fix
+                 now_ts = datetime.datetime.now()
+                 row['last_updated'] = now_ts
+                 batch_meta_updates[uid] = {'date_added': str(now_ts)}
+
             # Conflict Detection Logic
             excel_status = row[FIELD_STATUS]
             app_status = None
@@ -255,6 +268,10 @@ class InventoryManager:
             return row
             
         canonical = canonical.apply(apply_overrides, axis=1)
+        
+        # Commit batch updates
+        if batch_meta_updates:
+            self.id_registry.batch_update_metadata(batch_meta_updates)
         
         return canonical
 
@@ -338,6 +355,14 @@ class InventoryManager:
                     })
             
             self.inventory_df = full_df
+            
+            # --- SYNC TO DB (Full Details) ---
+            try:
+                records = self.inventory_df.to_dict('records')
+                self.id_registry.batch_sync_details(records)
+            except Exception as e:
+                print(f"DB Sync Warning: {e}")
+
         else:
             self.inventory_df = pd.DataFrame(columns=[
                 FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
