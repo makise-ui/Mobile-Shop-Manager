@@ -342,38 +342,104 @@ class InventoryScreen(BaseScreen):
     def _init_ui(self):
         # -- Filter & Search Bar --
         filter_frame = ttk.LabelFrame(self, text="Search & Filter", padding=10)
-        filter_frame.pack(fill=tk.X, pady=(0, 10))
+        filter_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # Grid layout for filters
+        # Grid layout for basic filters
         ttk.Label(filter_frame, text="Search (All fields):").grid(row=0, column=0, padx=5, sticky=tk.W)
         self.var_search = tk.StringVar()
         self.var_search.trace("w", self._on_filter_change)
         
-        self.ent_search = AutocompleteEntry(filter_frame, textvariable=self.var_search, width=30)
+        self.ent_search = AutocompleteEntry(filter_frame, textvariable=self.var_search, width=40)
         self.ent_search.grid(row=0, column=1, padx=5, sticky=tk.W)
         
-        ttk.Label(filter_frame, text="Supplier:").grid(row=0, column=2, padx=5, sticky=tk.W)
-        self.combo_supplier = ttk.Combobox(filter_frame, state="readonly", width=20)
-        self.combo_supplier.bind("<<ComboboxSelected>>", self._on_filter_change)
-        self.combo_supplier.grid(row=0, column=3, padx=5, sticky=tk.W)
+        # Advanced Toggle
+        self.var_show_adv = tk.BooleanVar(value=False)
+        self.btn_adv = ttk.Checkbutton(filter_frame, text="Advanced Filters 🔽", variable=self.var_show_adv, style="Toolbutton", command=self._toggle_adv_filters)
+        self.btn_adv.grid(row=0, column=2, padx=15)
 
-        ttk.Label(filter_frame, text="Min Price:").grid(row=0, column=4, padx=5, sticky=tk.W)
-        self.var_min_price = tk.StringVar()
-        self.var_min_price.trace("w", self._on_filter_change)
-        ttk.Entry(filter_frame, textvariable=self.var_min_price, width=10).grid(row=0, column=5, padx=5)
-
-        ttk.Button(filter_frame, text="Clear Filters", command=self._clear_filters).grid(row=0, column=6, padx=10)
+        ttk.Button(filter_frame, text="Clear Filters", command=self._clear_filters).grid(row=0, column=3, padx=10)
         
-        # Counter info on right side of filter bar
+        # Counter info
         self.lbl_counter = ttk.Label(filter_frame, text="Total: 0 | Selected: 0", font=("Arial", 9, "bold"))
-        self.lbl_counter.grid(row=0, column=7, padx=20, sticky=tk.E)
+        self.lbl_counter.grid(row=0, column=4, padx=20, sticky=tk.E)
+        filter_frame.columnconfigure(4, weight=1) # Push counter to right
+
+        # -- Advanced Filters Panel (Collapsible) --
+        self.adv_frame = ttk.Frame(self, padding=5) # Frame wrapper
+        self.adv_inner = ttk.LabelFrame(self.adv_frame, text="Detailed Filtering", padding=10)
+        self.adv_inner.pack(fill=tk.X)
+        
+        # 1. Status Filter
+        f_status = ttk.Frame(self.adv_inner)
+        f_status.pack(side=tk.LEFT, padx=10)
+        ttk.Label(f_status, text="Status:", font=('bold')).pack(anchor=tk.W)
+        
+        self.var_status_in = tk.BooleanVar(value=True)
+        self.var_status_out = tk.BooleanVar(value=False)
+        self.var_status_rtn = tk.BooleanVar(value=False)
+        
+        for v in [self.var_status_in, self.var_status_out, self.var_status_rtn]:
+            v.trace("w", self._on_filter_change)
+
+        ttk.Checkbutton(f_status, text="In Stock (IN)", variable=self.var_status_in).pack(anchor=tk.W)
+        ttk.Checkbutton(f_status, text="Sold (OUT)", variable=self.var_status_out).pack(anchor=tk.W)
+        ttk.Checkbutton(f_status, text="Returned (RTN)", variable=self.var_status_rtn).pack(anchor=tk.W)
+
+        ttk.Separator(self.adv_inner, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+
+        # 2. Supplier Filter (Moved here)
+        f_supp = ttk.Frame(self.adv_inner)
+        f_supp.pack(side=tk.LEFT, padx=10, fill=tk.Y)
+        ttk.Label(f_supp, text="Supplier:", font=('bold')).pack(anchor=tk.W)
+        self.combo_supplier = ttk.Combobox(f_supp, state="readonly", width=18)
+        self.combo_supplier.bind("<<ComboboxSelected>>", self._on_filter_change)
+        self.combo_supplier.pack(pady=5)
+
+        ttk.Separator(self.adv_inner, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+
+        # 3. Price Range
+        f_price = ttk.Frame(self.adv_inner)
+        f_price.pack(side=tk.LEFT, padx=10)
+        ttk.Label(f_price, text="Price Range:", font=('bold')).pack(anchor=tk.W)
+        
+        self.var_min_price = tk.StringVar()
+        self.var_max_price = tk.StringVar()
+        self.var_min_price.trace("w", self._on_filter_change)
+        self.var_max_price.trace("w", self._on_filter_change)
+        
+        f_p_inputs = ttk.Frame(f_price)
+        f_p_inputs.pack()
+        ttk.Entry(f_p_inputs, textvariable=self.var_min_price, width=8).pack(side=tk.LEFT)
+        ttk.Label(f_p_inputs, text=" to ").pack(side=tk.LEFT)
+        ttk.Entry(f_p_inputs, textvariable=self.var_max_price, width=8).pack(side=tk.LEFT)
+
+        ttk.Separator(self.adv_inner, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
+        # 4. Date Range (Last Updated)
+        f_date = ttk.Frame(self.adv_inner)
+        f_date.pack(side=tk.LEFT, padx=10)
+        ttk.Label(f_date, text="Date (Last Updated):", font=('bold')).pack(anchor=tk.W)
+        
+        self.var_date_start = tk.StringVar()
+        self.var_date_end = tk.StringVar()
+        self.var_date_start.trace("w", self._on_filter_change)
+        self.var_date_end.trace("w", self._on_filter_change)
+        
+        f_d_inputs = ttk.Frame(f_date)
+        f_d_inputs.pack()
+        ttk.Entry(f_d_inputs, textvariable=self.var_date_start, width=10).pack(side=tk.LEFT)
+        ttk.Label(f_d_inputs, text=" to ").pack(side=tk.LEFT)
+        ttk.Entry(f_d_inputs, textvariable=self.var_date_end, width=10).pack(side=tk.LEFT)
+        ttk.Label(f_date, text="(Format: YYYY-MM-DD)", font=('Arial', 7), foreground="gray").pack(anchor=tk.W)
 
         # -- Actions Bar --
         action_frame = ttk.Frame(self)
-        action_frame.pack(fill=tk.X, pady=(0, 10))
+        action_frame.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Button(action_frame, text="Check All", command=self._select_all).pack(side=tk.LEFT, padx=5)
-        ttk.Button(action_frame, text="Uncheck All", command=self._deselect_all).pack(side=tk.LEFT, padx=5)
+        # Toggle Selection Button
+        self.btn_toggle_select = ttk.Button(action_frame, text="Select All", style="Outline.TButton", width=10, command=self._toggle_select_all)
+        self.btn_toggle_select.pack(side=tk.LEFT, padx=15)
+
         ttk.Separator(action_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
         ttk.Button(action_frame, text="Print Checked", command=self._print_selected).pack(side=tk.LEFT, padx=5)
         ttk.Button(action_frame, text="Add Checked to Invoice", command=self._send_to_billing).pack(side=tk.LEFT, padx=5)
@@ -570,10 +636,29 @@ class InventoryScreen(BaseScreen):
     def _on_filter_change(self, *args):
         self._apply_filters()
 
+    def _toggle_adv_filters(self):
+        if self.var_show_adv.get():
+            # Pack below the filter_frame. filter_frame is first child pack-ed.
+            self.adv_frame.pack(fill=tk.X, after=self.tree.master.master.pack_slaves()[0], pady=(0, 10))
+            self.btn_adv.config(text="Advanced Filters 🔼")
+        else:
+            self.adv_frame.pack_forget()
+            self.btn_adv.config(text="Advanced Filters 🔽")
+
     def _clear_filters(self):
         self.var_search.set("")
         self.combo_supplier.set("")
+        
+        # Reset Advanced
         self.var_min_price.set("")
+        self.var_max_price.set("")
+        self.var_date_start.set("")
+        self.var_date_end.set("")
+        
+        self.var_status_in.set(True)
+        self.var_status_out.set(False)
+        self.var_status_rtn.set(False)
+        
         self._apply_filters()
 
     def _apply_filters(self):
@@ -582,37 +667,71 @@ class InventoryScreen(BaseScreen):
             self._render_tree(df)
             return
 
-        # Search
+        # 1. Search (Global)
         q = self.var_search.get().lower()
         if q:
-            # --- MERGE HANDLING ---
-            # If q looks like an ID, check if it's a hidden merged one
-            # and automatically search for the target instead.
             if q.isdigit():
                 redirect = self.app.inventory.get_merged_target(q)
-                if redirect:
-                    # Modify q to be the target ID, so we find the visible item
-                    q = str(redirect).lower()
-                    # Optional: Visual cue?
+                if redirect: q = str(redirect).lower()
             
-            # Concat all searchable fields
             mask = df.apply(lambda x: q in str(x['model']).lower() or 
                                       q in str(x['imei']).lower() or 
                                       q in str(x['unique_id']).lower() or
                                       q in str(x['supplier']).lower(), axis=1)
             df = df[mask]
         
-        # Supplier
+        # 2. Supplier
         supp = self.combo_supplier.get()
         if supp and supp != "All":
             df = df[df['supplier'] == supp]
             
-        # Min Price
+        # 3. Status (Multi-select)
+        statuses = []
+        if self.var_status_in.get(): statuses.append("IN")
+        if self.var_status_out.get(): statuses.extend(["OUT", "SOLD"])
+        if self.var_status_rtn.get(): statuses.append("RTN")
+        
+        if not statuses:
+             df = df[df['status'] == 'IMPOSSIBLE'] 
+        else:
+             df = df[df['status'].isin(statuses)]
+
+        # 4. Price Range
         try:
             min_p = float(self.var_min_price.get())
             df = df[df['price'] >= min_p]
-        except ValueError:
-            pass
+        except ValueError: pass
+        
+        try:
+            max_p = float(self.var_max_price.get())
+            df = df[df['price'] <= max_p]
+        except ValueError: pass
+
+        # 5. Date Range (Last Updated)
+        d_start = self.var_date_start.get().strip()
+        d_end = self.var_date_end.get().strip()
+        
+        if d_start or d_end:
+            def get_date(val):
+                if not val: return None
+                if isinstance(val, (datetime.date, datetime.datetime)): 
+                    return val.date() if isinstance(val, datetime.datetime) else val
+                try:
+                    return datetime.datetime.fromisoformat(str(val)).date()
+                except:
+                    return None
+
+            if d_start:
+                try:
+                    start_dt = datetime.datetime.strptime(d_start, "%Y-%m-%d").date()
+                    df = df[df['last_updated'].apply(lambda x: get_date(x) >= start_dt if get_date(x) else False)]
+                except: pass
+            
+            if d_end:
+                try:
+                    end_dt = datetime.datetime.strptime(d_end, "%Y-%m-%d").date()
+                    df = df[df['last_updated'].apply(lambda x: get_date(x) <= end_dt if get_date(x) else False)]
+                except: pass
 
         self._render_tree(df)
 
@@ -717,6 +836,15 @@ class InventoryScreen(BaseScreen):
         self.checked_ids.clear()
         self._update_counter()
 
+    def _toggle_select_all(self):
+        total = len(self.tree.get_children())
+        selected = len(self.checked_ids)
+        
+        if total > 0 and selected == total:
+            self._deselect_all()
+        else:
+            self._select_all()
+
     def _update_counter(self):
         """Update the counter label with total and selected items"""
         total_items = len(self.tree.get_children())
@@ -726,6 +854,12 @@ class InventoryScreen(BaseScreen):
             foreground="darkgreen" if selected_items > 0 else "gray"
         )
         self.lbl_info.configure(text=f"{selected_items} Item(s) Checked")
+        
+        # Update Toggle Button Text
+        if total_items > 0 and selected_items == total_items:
+            self.btn_toggle_select.configure(text="Deselect All")
+        else:
+            self.btn_toggle_select.configure(text="Select All")
 
     def _multi_select_down(self, event):
         """Ctrl+Shift+Down: Select next item"""
