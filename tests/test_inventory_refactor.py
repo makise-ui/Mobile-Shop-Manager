@@ -109,5 +109,23 @@ class TestInventoryRefactor(unittest.TestCase):
         # We want to ensure it handles it without key errors.
         self.assertTrue(FIELD_IMEI in df.columns)
 
+    def test_duplicate_imei_detection(self):
+        """Test that duplicate IMEIs across files trigger conflicts."""
+        # File 1
+        path1 = self.create_dummy_excel("source1.xlsx", [{'IMEI': '999999999999999', 'Model': 'M1'}])
+        # File 2 (Same IMEI)
+        path2 = self.create_dummy_excel("source2.xlsx", [{'IMEI': '999999999999999', 'Model': 'M2'}])
+        
+        self.config_manager.mappings = {
+            path1: {'file_path': path1, 'mapping': {'IMEI': FIELD_IMEI, 'Model': 'model'}},
+            path2: {'file_path': path2, 'mapping': {'IMEI': FIELD_IMEI, 'Model': 'model'}}
+        }
+        
+        self.inventory.reload_all()
+        
+        # Check conflicts
+        self.assertTrue(len(self.inventory.conflicts) > 0, "Should detect conflicts")
+        self.assertEqual(self.inventory.conflicts[0]['imei'], '999999999999999')
+
 if __name__ == '__main__':
     unittest.main()
