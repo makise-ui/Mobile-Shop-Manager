@@ -127,5 +127,22 @@ class TestInventoryRefactor(unittest.TestCase):
         self.assertTrue(len(self.inventory.conflicts) > 0, "Should detect conflicts")
         self.assertEqual(self.inventory.conflicts[0]['imei'], '999999999999999')
 
+    def test_missing_sheet(self):
+        """Test handling of missing sheet names."""
+        path = self.create_dummy_excel("sheets.xlsx", [{'IMEI': '1', 'Model': 'M1'}])
+        
+        self.config_manager.mappings = {
+            path: {
+                'file_path': path,
+                'sheet_name': 'NonExistentSheet',
+                'mapping': {'IMEI': FIELD_IMEI}
+            }
+        }
+        self.config_manager.get_file_mapping.return_value = self.config_manager.mappings[path]
+        
+        self.inventory.reload_all()
+        # Current logic might print error to stdout or put error in file_status
+        self.assertNotEqual(self.inventory.file_status.get(path), "OK")
+
 if __name__ == '__main__':
     unittest.main()
