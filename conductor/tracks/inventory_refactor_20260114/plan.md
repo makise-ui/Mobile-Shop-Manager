@@ -13,7 +13,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Refactor Merging Logic' (Protocol in workflow.md) [checkpoint: e91c29a]
 
 ## Phase 3: Data Integrity & Safety
-- [ ] Task: Implement `Red Phase`: Write failing tests for data loss during interrupted save.
+- [x] Task: Implement `Red Phase`: Write failing tests for data loss during interrupted save. [237c80b]
 - [ ] Task: Implement `Green Phase`: Implement staged write (write to temp, then rename) and automatic backups.
 - [ ] Task: Implement `Red Phase`: Write failing tests for IMEI collision resolution.
 - [ ] Task: Implement `Green Phase`: Refine the conflict resolution dialog and auto-merge logic.
