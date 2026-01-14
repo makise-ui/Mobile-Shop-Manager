@@ -376,20 +376,36 @@ class InventoryManager:
         """
         Resolves an IMEI conflict.
         action: 'merge' (hides duplicates)
+        keep_source: (str) file_path or source key to prioritize as the keeper.
         """
         if action == 'merge':
             rows = conflict_data.get('rows', [])
             if not rows: return False
             
-            # Strategy: Keep the first one (or specific if logic allows), hide others
-            keeper = rows[0]
-            others = rows[1:]
+            # Determine keeper
+            keeper = None
+            others = []
+            
+            if keep_source:
+                # Find the row from the target source
+                for row in rows:
+                    if row.get(FIELD_SOURCE_FILE) == keep_source:
+                        keeper = row
+                        break
+            
+            # Fallback: Default to first if not found or no preference
+            if not keeper:
+                keeper = rows[0]
+            
+            # Build list of others
+            for row in rows:
+                if row[FIELD_UNIQUE_ID] != keeper[FIELD_UNIQUE_ID]:
+                    others.append(row)
             
             for row in others:
                 uid = row[FIELD_UNIQUE_ID]
                 
                 # CRITICAL FIX: Do not merge if IDs are identical (Self-Merge)
-                # This prevents an item from hiding itself.
                 if str(uid) == str(keeper[FIELD_UNIQUE_ID]):
                     continue
                     
