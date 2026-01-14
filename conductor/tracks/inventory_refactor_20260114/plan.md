@@ -9,7 +9,7 @@
 - [x] Task: Implement `Red Phase`: Write failing tests for large dataset merging and schema mismatch handling. [86fd2e3]
 - [x] Task: Implement `Green Phase`: Refactor merging logic using optimized Pandas operations. [6fa2143]
 - [x] Task: Implement `Red Phase`: Write failing tests for locked file scenarios. [1cc1761]
-- [ ] Task: Implement `Green Phase`: Add robust file locking detection and retry mechanisms.
+- [x] Task: Implement `Green Phase`: Add robust file locking detection and retry mechanisms. [c4682f3]
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Refactor Merging Logic' (Protocol in workflow.md) [checkpoint: ]
 
 ## Phase 3: Data Integrity & Safety
