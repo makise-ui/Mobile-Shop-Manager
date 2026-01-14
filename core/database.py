@@ -16,6 +16,9 @@ class DatabaseManager:
         conn.row_factory = sqlite3.Row # Access columns by name
         return conn
 
+    def get_connection(self):
+        return self.connect()
+
     def _init_db(self):
         """Initialize the database schema."""
         conn = self.connect()
