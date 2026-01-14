@@ -65,6 +65,15 @@ class InventoryManager:
                 # Handle None or empty string properly
                 if sheet_name is None or sheet_name == "":
                     sheet_name = 0
+                
+                # Check if sheet exists before reading to avoid generic KeyError
+                import openpyxl
+                temp_wb = openpyxl.load_workbook(file_path, read_only=True)
+                if isinstance(sheet_name, str) and sheet_name not in temp_wb.sheetnames:
+                    temp_wb.close()
+                    return None, f"SHEET_NOT_FOUND: {sheet_name}"
+                temp_wb.close()
+
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
             
             # Safety: Ensure DataFrame
@@ -215,36 +224,62 @@ class InventoryManager:
         canonical[FIELD_SOURCE_FILE] = str(file_path)
         canonical['last_updated'] = datetime.datetime.now()
         
-        # Generate Unique ID using persistent registry
-        canonical[FIELD_UNIQUE_ID] = canonical.apply(lambda row: self.id_registry.get_or_create_id(row), axis=1)
+        # Ensure all required columns exist with defaults
+        required_cols = [
+            FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM,
+            FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE,
+            'last_updated', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
+            FIELD_BUYER_CONTACT, 'grade', 'condition'
+        ]
+        for col in required_cols:
+            if col not in canonical.columns:
+                canonical[col] = "" if col != FIELD_PRICE else 0.0
+
+        # --- VECTORIZED ID GENERATION ---
+        # Generate keys for all rows at once
+        has_imei = (canonical[FIELD_IMEI].str.len() > 4)
+        keys = pd.Series("", index=canonical.index)
+        
+        # IMEI Keys
+        keys[has_imei] = "IMEI:" + canonical.loc[has_imei, FIELD_IMEI].str.strip()
+        
+        # Hash Keys for items without valid IMEI
+        no_imei = ~has_imei
+        if no_imei.any():
+            combined = (
+                canonical.loc[no_imei, FIELD_MODEL].astype(str) + "|" +
+                canonical.loc[no_imei, FIELD_RAM_ROM].astype(str) + "|" +
+                canonical.loc[no_imei, 'supplier'].astype(str)
+            )
+            keys[no_imei] = "HASH:" + combined.apply(lambda x: hashlib.md5(x.encode()).hexdigest())
+        
+        # Batch lookup/create IDs
+        canonical[FIELD_UNIQUE_ID] = self.id_registry.get_ids_batch(keys.tolist())
         
         # Merge persistent metadata (status, notes, color, price overrides)
+        # Pre-fetch metadata to avoid repeated dict lookups in apply
+        uids = canonical[FIELD_UNIQUE_ID].unique()
+        metadata_map = {str(uid): self.id_registry.get_metadata(uid) for uid in uids}
+        
         def apply_overrides(row):
-            meta = self.id_registry.get_metadata(row[FIELD_UNIQUE_ID])
+            uid_str = str(row[FIELD_UNIQUE_ID])
+            meta = metadata_map.get(uid_str, {})
+            if not meta: return row
             
-            # Conflict Detection Logic
-            excel_status = row[FIELD_STATUS]
-            app_status = None
-            
+            # Use app-stored status if present
             if FIELD_STATUS in meta:
-                # Normalize the app-stored status too!
-                app_status = norm_status(meta[FIELD_STATUS])
-                row[FIELD_STATUS] = app_status
+                row[FIELD_STATUS] = norm_status(meta[FIELD_STATUS])
                 
-            if FIELD_NOTES in meta:
-                row[FIELD_NOTES] = meta[FIELD_NOTES]
-            if FIELD_COLOR in meta:
-                row[FIELD_COLOR] = meta[FIELD_COLOR]
-            if 'grade' in meta:
-                row['grade'] = meta['grade']
-            if 'condition' in meta:
-                row['condition'] = meta['condition']
+            if FIELD_NOTES in meta: row[FIELD_NOTES] = meta[FIELD_NOTES]
+            if FIELD_COLOR in meta: row[FIELD_COLOR] = meta[FIELD_COLOR]
+            if 'grade' in meta: row['grade'] = meta['grade']
+            if 'condition' in meta: row['condition'] = meta['condition']
+            
             if FIELD_PRICE_ORIGINAL in meta:
                 row[FIELD_PRICE_ORIGINAL] = float(meta[FIELD_PRICE_ORIGINAL])
-                
                 try:
                     markup = float(self.config_manager.get('price_markup_percent', 0.0))
-                except (ValueError, TypeError):
+                except:
                     markup = 0.0
                     
                 if markup > 0:
@@ -255,7 +290,6 @@ class InventoryManager:
             return row
             
         canonical = canonical.apply(apply_overrides, axis=1)
-        
         return canonical
 
     def reload_all(self):
@@ -264,86 +298,73 @@ class InventoryManager:
         mappings = self.config_manager.mappings
         self.conflicts = [] # Reset conflicts
         
-        for key, mapping_data in mappings.items():
-            # Support composite keys "path::sheet" or legacy "path"
-            file_path = mapping_data.get('file_path', key)
-            
-            # Fallback if file_path is not in data and key looks composite
-            if '::' in key and not os.path.exists(key):
-                parts = key.split('::')
-                if os.path.exists(parts[0]):
-                    file_path = parts[0]
-            
-            if os.path.exists(file_path):
-                # Call internal load to ensure we pass the correct mapping_data (with sheet_name)
-                df, status = self._load_file_internal(file_path, mapping_data)
-
-                if status == "SUCCESS" and df is not None:
-                    # Enrich with source info (key acts as unique source ID)
-                    df[FIELD_SOURCE_FILE] = key 
-                    all_frames.append(df)
-                    self.file_status[key] = "OK"
-                else:
-                    self.file_status[key] = f"Error: {status}"
-            else:
-                self.file_status[key] = "Missing"
+        # Performance optimization: Disable auto-save during batch load
+        self.id_registry.auto_save = False
         
-        if all_frames:
-            full_df = pd.concat(all_frames, ignore_index=True)
-            
-            # Filter Hidden Items (Merge Logic)
-            def is_visible(uid):
-                meta = self.id_registry.get_metadata(uid)
-                return not meta.get('is_hidden', False)
-            
-            # Apply visibility filter
-            full_df = full_df[full_df[FIELD_UNIQUE_ID].apply(is_visible)]
-            
-            # Detect Duplicates (Dual IMEI Aware)
-            # Map: Single_IMEI -> list of Row Indices (in full_df)
-            imei_map = {}
-            processed_indices = set()
-            
-            # Iterate using index
-            for idx in full_df.index:
-                row = full_df.loc[idx]
-                raw_imei = str(row[FIELD_IMEI])
-                if not raw_imei: continue
+        try:
+            for key, mapping_data in mappings.items():
+                # Support composite keys "path::sheet" or legacy "path"
+                file_path = mapping_data.get('file_path', key)
                 
-                parts = [p.strip() for p in raw_imei.split('/') if len(p.strip()) > 10]
-                for p in parts:
-                    if p not in imei_map: imei_map[p] = []
-                    imei_map[p].append(idx)
+                # Fallback if file_path is not in data and key looks composite
+                if '::' in key and not os.path.exists(key):
+                    parts = key.split('::')
+                    if os.path.exists(parts[0]):
+                        file_path = parts[0]
+                
+                if os.path.exists(file_path):
+                    df, status = self._load_file_internal(file_path, mapping_data)
+
+                    if status == "SUCCESS" and df is not None:
+                        df[FIELD_SOURCE_FILE] = key 
+                        all_frames.append(df)
+                        self.file_status[key] = "OK"
+                    else:
+                        self.file_status[key] = f"Error: {status}"
+                else:
+                    self.file_status[key] = "Missing"
             
-            # Find conflicts
-            processed_groups = set()
-            
-            for p, indices in imei_map.items():
-                if len(indices) > 1:
-                    # Group Key: Sorted Tuple of Row Indices
-                    # This prevents reporting the same set of rows multiple times 
-                    # (e.g. if they share multiple IMEIs)
-                    group_key = tuple(sorted(indices))
-                    if group_key in processed_groups: continue
-                    processed_groups.add(group_key)
+            if all_frames:
+                full_df = pd.concat(all_frames, ignore_index=True)
+                
+                # Filter Hidden Items (Merge Logic)
+                # Optimization: Vectorized filter
+                uids = full_df[FIELD_UNIQUE_ID].astype(str)
+                hidden_ids = {iid for iid, meta in self.id_registry.registry.get('metadata', {}).items() if meta.get('is_hidden')}
+                full_df = full_df[~uids.isin(hidden_ids)]
+                
+                # Detect Duplicates (Optimized)
+                # Only check items that have IMEIs
+                imei_df = full_df[full_df[FIELD_IMEI].str.len() > 5].copy()
+                if not imei_df.empty:
+                    # Explode dual IMEIs for easier detection
+                    # "IMEI1 / IMEI2" -> ["IMEI1", "IMEI2"]
+                    imei_df['imei_list'] = imei_df[FIELD_IMEI].str.split('/')
+                    exploded = imei_df.explode('imei_list')
+                    exploded['imei_list'] = exploded['imei_list'].str.strip()
+                    exploded = exploded[exploded['imei_list'].str.len() > 5]
                     
-                    rows = full_df.loc[indices]
-                    
-                    self.conflicts.append({
-                        "imei": p,
-                        "unique_ids": rows[FIELD_UNIQUE_ID].tolist(),
-                        "model": rows.iloc[0][FIELD_MODEL],
-                        "sources": list(rows[FIELD_SOURCE_FILE].unique()),
-                        "rows": rows.to_dict('records')
-                    })
-            
-            self.inventory_df = full_df
-        else:
-            self.inventory_df = pd.DataFrame(columns=[
-                FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
-                FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE, 
-                'last_updated', FIELD_STATUS, FIELD_COLOR
-            ])
+                    dupes = exploded[exploded.duplicated('imei_list', keep=False)]
+                    for imei, group in dupes.groupby('imei_list'):
+                        self.conflicts.append({
+                            "imei": imei,
+                            "unique_ids": group[FIELD_UNIQUE_ID].unique().tolist(),
+                            "model": group.iloc[0][FIELD_MODEL],
+                            "sources": group[FIELD_SOURCE_FILE].unique().tolist(),
+                            "rows": group.drop_duplicates(FIELD_UNIQUE_ID).to_dict('records')
+                        })
+                
+                self.inventory_df = full_df
+            else:
+                self.inventory_df = pd.DataFrame(columns=[
+                    FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
+                    FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE, 
+                    'last_updated', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
+                    FIELD_BUYER_CONTACT, 'grade', 'condition'
+                ])
+        finally:
+            self.id_registry.commit()
+            self.id_registry.auto_save = True
             
         if self.activity_logger:
             self.activity_logger.log(ACTION_RELOAD, f"Loaded {len(self.inventory_df)} items from {len(mappings)} sources.")

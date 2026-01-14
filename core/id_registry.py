@@ -11,6 +11,7 @@ class IDRegistry:
     def __init__(self):
         self.file_path = ID_REGISTRY_FILE
         self.registry = self._load_registry()
+        self.auto_save = True # Default behavior
         # registry structure:
         # {
         #   "next_id": 1,
@@ -33,8 +34,31 @@ class IDRegistry:
         except:
             return {"next_id": 1, "items": {}, "metadata": {}}
 
-    def _save_registry(self):
+    def commit(self):
+        """Manually save the registry to disk."""
         SafeJsonWriter.write(self.file_path, self.registry)
+
+    def _save_registry(self):
+        if self.auto_save:
+            self.commit()
+
+    def get_ids_batch(self, keys):
+        """
+        Returns a list of IDs for a list of keys, creating new ones if necessary.
+        """
+        ids = []
+        for key in keys:
+            if key in self.registry['items']:
+                ids.append(self.registry['items'][key])
+            else:
+                new_id = self.registry['next_id']
+                self.registry['next_id'] += 1
+                self.registry['items'][key] = new_id
+                ids.append(new_id)
+        
+        if self.auto_save:
+            self.commit()
+        return ids
 
     def get_or_create_id(self, row_data):
         """
