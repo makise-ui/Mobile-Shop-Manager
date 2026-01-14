@@ -8,7 +8,7 @@ import threading
 from unittest.mock import MagicMock, patch
 from core.inventory import InventoryManager
 from core.config import ConfigManager
-from core.constants import FIELD_IMEI, FIELD_STATUS, STATUS_SOLD, FIELD_SOURCE_FILE, FIELD_MODEL
+from core.constants import FIELD_IMEI, FIELD_STATUS, STATUS_SOLD, FIELD_SOURCE_FILE, FIELD_MODEL, FIELD_UNIQUE_ID, FIELD_UNIQUE_ID, FIELD_UNIQUE_ID
 
 class TestInventoryRefactor(unittest.TestCase):
     def setUp(self):
@@ -235,6 +235,44 @@ class TestInventoryRefactor(unittest.TestCase):
             args, _ = mock_save.call_args
             save_path = args[0]
             self.assertTrue(save_path.endswith('.tmp'), "Should write to .tmp file")
+
+    def test_conflict_resolution(self):
+        """Test conflict resolution logic."""
+        # Setup fake conflict data
+        # Row 1 (ID 100) from Source A
+        # Row 2 (ID 101) from Source B
+        conflict = {
+            "imei": "12345",
+            "unique_ids": ["100", "101"],
+            "rows": [
+                {FIELD_UNIQUE_ID: "100", FIELD_SOURCE_FILE: "SourceA"},
+                {FIELD_UNIQUE_ID: "101", FIELD_SOURCE_FILE: "SourceB"}
+            ]
+        }
+        
+        # Test Default Merge (Should keep first, hide second)
+        self.inventory.resolve_conflict(conflict, 'merge')
+        
+        # Check that ID 101 is hidden
+        self.mock_registry.update_metadata.assert_called_with("101", {
+            'is_hidden': True,
+            'merged_into': "100",
+            'merge_reason': 'Conflict Resolution'
+        })
+        
+        # Reset mocks
+        self.mock_registry.update_metadata.reset_mock()
+        
+        # Test "Keep Source B" (The Red Phase Requirement - Logic likely missing)
+        # We want to keep 101 and hide 100
+        self.inventory.resolve_conflict(conflict, 'merge', keep_source="SourceB")
+        
+        # Expectation: 100 is hidden, merged into 101
+        self.mock_registry.update_metadata.assert_called_with("100", {
+            'is_hidden': True,
+            'merged_into': "101",
+            'merge_reason': 'Conflict Resolution'
+        })
 
     def test_conflict_resolution(self):
         """Test conflict resolution logic."""
