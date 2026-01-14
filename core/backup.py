@@ -6,7 +6,8 @@ import pandas as pd
 import json
 import zipfile
 from pathlib import Path
-from .config import APP_DIR, CONFIG_DIR, DB_FILE
+from .config import APP_DIR, CONFIG_DIR
+from .database import DB_FILE
 
 class BackupManager:
     def __init__(self):
