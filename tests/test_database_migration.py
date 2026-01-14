@@ -30,8 +30,9 @@ class TestDatabaseMigration(unittest.TestCase):
         # PATCH PATHS
         self.orig_config_dir = core.config.CONFIG_DIR
         self.orig_reg_file = core.config.ID_REGISTRY_FILE
-        self.orig_db_file = core.database.DB_FILE
-        self.orig_mig_reg_file = core.migration.ID_REGISTRY_FILE
+        # Use getattr to be safe if DB_FILE is somehow missing (though it shouldn't be)
+        self.orig_db_file = getattr(core.database, 'DB_FILE', None)
+        self.orig_mig_reg_file = getattr(core.migration, 'ID_REGISTRY_FILE', None)
         
         # Apply Patch
         core.config.CONFIG_DIR = self.config_dir
@@ -68,8 +69,10 @@ class TestDatabaseMigration(unittest.TestCase):
         # Restore Paths
         core.config.CONFIG_DIR = self.orig_config_dir
         core.config.ID_REGISTRY_FILE = self.orig_reg_file
-        core.database.DB_FILE = self.orig_db_file
-        core.migration.ID_REGISTRY_FILE = self.orig_mig_reg_file
+        if self.orig_db_file:
+            core.database.DB_FILE = self.orig_db_file
+        if self.orig_mig_reg_file:
+            core.migration.ID_REGISTRY_FILE = self.orig_mig_reg_file
         
         if self.test_dir.exists():
             try:
@@ -83,8 +86,9 @@ class TestDatabaseMigration(unittest.TestCase):
         registry = IDRegistry()
         
         # 2. Verify DB Content
+        # Use the patched DB_FILE directly
         db = DatabaseManager(core.database.DB_FILE)
-        conn = db.connect()
+        conn = db.connect() # Updated to connect()
         cursor = conn.cursor()
         
         # Check Items
