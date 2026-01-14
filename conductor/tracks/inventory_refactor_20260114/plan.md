@@ -6,7 +6,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Diagnostics' (Protocol in workflow.md) [checkpoint: 1cec6f3]
 
 ## Phase 2: Refactor Merging Logic
-- [ ] Task: Implement `Red Phase`: Write failing tests for large dataset merging and schema mismatch handling.
+- [x] Task: Implement `Red Phase`: Write failing tests for large dataset merging and schema mismatch handling. [86fd2e3]
 - [ ] Task: Implement `Green Phase`: Refactor merging logic using optimized Pandas operations.
 - [ ] Task: Implement `Red Phase`: Write failing tests for locked file scenarios.
 - [ ] Task: Implement `Green Phase`: Add robust file locking detection and retry mechanisms.
