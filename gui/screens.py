@@ -4316,3 +4316,75 @@ Start with one item and build from there.
 **Last Updated:** 2026-01-10 | **Version:** 1.4.0 | **Support:** hasanfq818@gmail.com
 """
 
+# --- Backup & Restore Screen ---
+class BackupScreen(BaseScreen):
+    def __init__(self, parent, app_context):
+        super().__init__(parent, app_context)
+        from core.backup import BackupManager
+        self.backup_mgr = BackupManager()
+        self._init_ui()
+
+    def _init_ui(self):
+        # Header
+        ttk.Label(self, text="Backup & Restore", font=('Segoe UI', 16, 'bold')).pack(pady=15)
+        
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True, padx=40, pady=10)
+        
+        # Col 1: System Backup (Move PC)
+        f_sys = ttk.LabelFrame(container, text="1. Full System Backup", padding=20)
+        f_sys.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(f_sys, text="Creates a complete backup of the application including Database, Settings, and Logs.\nUse this to move your data to another computer.", foreground="#555").pack(anchor=tk.W, pady=(0, 10))
+        
+        ttk.Button(f_sys, text="Create Full Backup (ZIP)", command=self._create_sys_backup, style="Accent.TButton", width=30).pack(anchor=tk.W, pady=5)
+        ttk.Button(f_sys, text="Restore from Backup...", command=self._restore_sys_backup, width=30).pack(anchor=tk.W, pady=5)
+
+        # Col 2: Data Export
+        f_data = ttk.LabelFrame(container, text="2. Data Export (Excel)", padding=20)
+        f_data.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(f_data, text="Export your entire inventory database (including hidden details and history)\nto a readable Excel file.", foreground="#555").pack(anchor=tk.W, pady=(0, 10))
+        
+        ttk.Button(f_data, text="Export All Data to Excel", command=self._export_data, style="Success.TButton", width=30).pack(anchor=tk.W)
+
+    def _create_sys_backup(self):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".zip",
+            filetypes=[("Zip Files", "*.zip")],
+            initialfile=f"MSM_Backup_{datetime.datetime.now().strftime('%Y%m%d')}.zip",
+            title="Save Full Backup"
+        )
+        if path:
+            success, msg = self.backup_mgr.create_full_system_backup(path)
+            if success:
+                messagebox.showinfo("Success", f"Backup created successfully:\n{path}")
+            else:
+                messagebox.showerror("Error", f"Backup Failed:\n{msg}")
+
+    def _restore_sys_backup(self):
+        if not messagebox.askyesno("Warning", "Restoring a backup will OVERWRITE all current data.\nThe application will need to restart.\n\nContinue?"):
+            return
+            
+        path = filedialog.askopenfilename(filetypes=[("Zip Files", "*.zip")], title="Select Backup to Restore")
+        if path:
+            success, msg = self.backup_mgr.restore_from_zip(path)
+            if success:
+                messagebox.showinfo("Success", msg)
+                self.quit() # Close app
+            else:
+                messagebox.showerror("Error", msg)
+
+    def _export_data(self):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel Files", "*.xlsx")],
+            initialfile=f"MSM_Inventory_Export_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+            title="Export Database to Excel"
+        )
+        if path:
+            success, msg = self.backup_mgr.export_data_to_excel(path)
+            if success:
+                messagebox.showinfo("Success", f"Data exported to:\n{msg}")
+            else:
+                messagebox.showerror("Error", f"Export Failed:\n{msg}")

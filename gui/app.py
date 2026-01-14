@@ -21,7 +21,7 @@ from gui.screens import (
     InventoryScreen, BillingScreen, AnalyticsScreen, SettingsScreen, 
     ManageDataScreen, SearchScreen, StatusScreen, EditDataScreen, 
     HelpScreen, InvoiceHistoryScreen, ActivityLogScreen, ConflictScreen,
-    DashboardScreen, ManageFilesScreen
+    DashboardScreen, ManageFilesScreen, BackupScreen
 )
 from gui.reporting import ReportingScreen
 from gui.dialogs import ConflictResolutionDialog, SplashScreen, WelcomeDialog
@@ -236,6 +236,7 @@ class MainApp(tb.Window):
 
         mb_manage = ttk.Menubutton(btn_bar, text="Manage ▼", style="primary.TButton")
         m_manage = tk.Menu(mb_manage, tearoff=0, font=('Segoe UI', 10))
+        m_manage.add_command(label="Backup & Restore", command=lambda: self.show_screen('backup'))
         m_manage.add_command(label="Manage Files", command=lambda: self.show_screen('files'))
         m_manage.add_command(label="Manage Data (Colors/Grades)", command=lambda: self.show_screen('managedata'))
         m_manage.add_command(label="Label Designer", command=lambda: self.show_screen('designer'))
@@ -260,6 +261,7 @@ class MainApp(tb.Window):
         self.screens['search'] = SearchScreen(self.content_area, self)
         self.screens['status'] = StatusScreen(self.content_area, self)
         self.screens['edit'] = EditDataScreen(self.content_area, self)
+        self.screens['backup'] = BackupScreen(self.content_area, self)
         self.screens['files'] = ManageFilesScreen(self.content_area, self)
         self.screens['billing'] = BillingScreen(self.content_area, self)
         self.screens['invoices'] = InvoiceHistoryScreen(self.content_area, self)
