@@ -5,12 +5,12 @@
 - [x] Task: Create a comprehensive test suite for current merging logic (expect failures in edge cases). [e33521e]
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Diagnostics' (Protocol in workflow.md) [checkpoint: 1cec6f3]
 
-## Phase 2: Refactor Merging Logic
+## Phase 2: Refactor Merging Logic [checkpoint: e91c29a]
 - [x] Task: Implement `Red Phase`: Write failing tests for large dataset merging and schema mismatch handling. [86fd2e3]
 - [x] Task: Implement `Green Phase`: Refactor merging logic using optimized Pandas operations. [6fa2143]
 - [x] Task: Implement `Red Phase`: Write failing tests for locked file scenarios. [1cc1761]
 - [x] Task: Implement `Green Phase`: Add robust file locking detection and retry mechanisms. [c4682f3]
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Refactor Merging Logic' (Protocol in workflow.md) [checkpoint: ]
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Refactor Merging Logic' (Protocol in workflow.md) [checkpoint: e91c29a]
 
 ## Phase 3: Data Integrity & Safety
 - [ ] Task: Implement `Red Phase`: Write failing tests for data loss during interrupted save.
