@@ -67,15 +67,11 @@ class InventoryManager:
                 if sheet_name is None or sheet_name == "":
                     sheet_name = 0
                 
-                # Check if sheet exists before reading to avoid generic KeyError
-                import openpyxl
-                temp_wb = openpyxl.load_workbook(file_path, read_only=True)
-                if isinstance(sheet_name, str) and sheet_name not in temp_wb.sheetnames:
-                    temp_wb.close()
-                    return None, f"SHEET_NOT_FOUND: {sheet_name}"
-                temp_wb.close()
-
-                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                try:
+                    df = pd.read_excel(file_path, sheet_name=sheet_name)
+                except (ValueError, IndexError, KeyError) as e:
+                    # Pandas raises ValueError for missing sheet name/index usually
+                    return None, f"SHEET_ERROR: {e}"
             
             # Safety: Ensure DataFrame
             if isinstance(df, pd.Series):
