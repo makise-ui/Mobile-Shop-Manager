@@ -16,7 +16,7 @@
 - [x] Task: Implement `Red Phase`: Write failing tests for data loss during interrupted save. [237c80b]
 - [~] Task: Implement `Green Phase`: Implement staged write (write to temp, then rename) and automatic backups.
 - [x] Task: Implement `Red Phase`: Write failing tests for IMEI collision resolution. [46567a4]
-- [ ] Task: Implement `Green Phase`: Refine the conflict resolution dialog and auto-merge logic.
+- [x] Task: Implement `Green Phase`: Refine the conflict resolution dialog and auto-merge logic. [6baf6b2]
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Data Integrity & Safety' (Protocol in workflow.md) [checkpoint: ]
 
 ## Phase 4: Verification & Polishing
