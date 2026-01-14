@@ -144,5 +144,26 @@ class TestInventoryRefactor(unittest.TestCase):
         # Current logic might print error to stdout or put error in file_status
         self.assertNotEqual(self.inventory.file_status.get(path), "OK")
 
+    @patch('openpyxl.load_workbook')
+    def test_file_lock_retry(self, mock_load):
+        """Test that the writer retries when a file is locked."""
+        path = self.create_dummy_excel("retry.xlsx", [{'IMEI': '1', 'Model': 'T'}])
+        
+        # Simulate 2 failures followed by 1 success
+        mock_load.side_effect = [
+            PermissionError("Locked"),
+            PermissionError("Locked"),
+            MagicMock() # Success
+        ]
+        
+        row_data = {FIELD_SOURCE_FILE: path, FIELD_IMEI: '1', FIELD_MODEL: 'T'}
+        updates = {FIELD_STATUS: STATUS_SOLD}
+        
+        # This should fail currently because there is no retry logic
+        success, msg = self.inventory._write_excel_generic(row_data, updates)
+        
+        # Expecting failure for now (Red Phase)
+        self.assertFalse(success, "Should fail without retry logic")
+
 if __name__ == '__main__':
     unittest.main()
