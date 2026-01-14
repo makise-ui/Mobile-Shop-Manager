@@ -2,7 +2,7 @@
 
 ## Phase 1: Foundation & Diagnostics
 - [x] Task: Audit current `core/inventory.py` and identify critical failure points. [19354e6]
-- [ ] Task: Create a comprehensive test suite for current merging logic (expect failures in edge cases).
+- [x] Task: Create a comprehensive test suite for current merging logic (expect failures in edge cases). [e33521e]
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Diagnostics' (Protocol in workflow.md) [checkpoint: ]
 
 ## Phase 2: Refactor Merging Logic
