@@ -55,17 +55,42 @@ class BackupManager:
             meta_rows = []
             for idx, row in df.iterrows():
                 d = row.to_dict()
+                core_model = d.get('model', '')
+                
                 if d.get('metadata'):
                     try:
                         meta = json.loads(d['metadata'])
-                        # Prefix meta keys if collision? No, merge is usually intended.
                         d.update(meta)
                     except: pass
-                # Remove blob
+                
+                # Restore Model if lost
+                if not d.get('model') and core_model:
+                    d['model'] = core_model
+                    
                 del d['metadata']
                 meta_rows.append(d)
                 
             df_export = pd.DataFrame(meta_rows)
+            
+            # Formatting
+            priority = ['unique_id', 'imei', 'model', 'status', 'price', 'color', 'supplier', 'date_added', 'last_updated']
+            cols = [c for c in priority if c in df_export.columns]
+            remaining = [c for c in df_export.columns if c not in cols]
+            df_export = df_export[cols + sorted(remaining)]
+            
+            rename_map = {
+                'unique_id': 'ID',
+                'imei': 'IMEI',
+                'model': 'Model',
+                'status': 'Status',
+                'price': 'Selling Price',
+                'color': 'Color',
+                'supplier': 'Supplier',
+                'date_added': 'Date In',
+                'last_updated': 'Last Mod',
+                'price_original': 'Buy Price'
+            }
+            df_export.rename(columns=rename_map, inplace=True)
             
             # 2. Fetch History
             df_hist = pd.read_sql_query("SELECT * FROM history", conn)

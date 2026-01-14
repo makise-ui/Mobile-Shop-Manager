@@ -686,15 +686,17 @@ class InventoryScreen(BaseScreen):
             df = df[df['supplier'] == supp]
             
         # 3. Status (Multi-select)
-        statuses = []
-        if self.var_status_in.get(): statuses.append("IN")
-        if self.var_status_out.get(): statuses.extend(["OUT", "SOLD"])
-        if self.var_status_rtn.get(): statuses.append("RTN")
-        
-        if not statuses:
-             df = df[df['status'] == 'IMPOSSIBLE'] 
-        else:
-             df = df[df['status'].isin(statuses)]
+        # UX Improvement: If searching, show ALL matching items regardless of status
+        if not q:
+            statuses = []
+            if self.var_status_in.get(): statuses.append("IN")
+            if self.var_status_out.get(): statuses.extend(["OUT", "SOLD"])
+            if self.var_status_rtn.get(): statuses.append("RTN")
+            
+            if not statuses:
+                 df = df[df['status'] == 'IMPOSSIBLE'] 
+            else:
+                 df = df[df['status'].isin(statuses)]
 
         # 4. Price Range
         try:
