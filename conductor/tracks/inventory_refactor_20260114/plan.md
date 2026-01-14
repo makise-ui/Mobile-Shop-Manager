@@ -1,9 +1,9 @@
 # Track Plan: Refactor Core Inventory Merging and Add Robust Error Handling
 
-## Phase 1: Foundation & Diagnostics
+## Phase 1: Foundation & Diagnostics [checkpoint: 1cec6f3]
 - [x] Task: Audit current `core/inventory.py` and identify critical failure points. [19354e6]
 - [x] Task: Create a comprehensive test suite for current merging logic (expect failures in edge cases). [e33521e]
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Diagnostics' (Protocol in workflow.md) [checkpoint: ]
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Foundation & Diagnostics' (Protocol in workflow.md) [checkpoint: 1cec6f3]
 
 ## Phase 2: Refactor Merging Logic
 - [ ] Task: Implement `Red Phase`: Write failing tests for large dataset merging and schema mismatch handling.
