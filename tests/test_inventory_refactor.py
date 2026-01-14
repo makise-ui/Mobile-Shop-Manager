@@ -189,5 +189,40 @@ class TestInventoryRefactor(unittest.TestCase):
         self.assertTrue(success, f"Should succeed with retry logic. Error: {msg}")
         self.assertEqual(mock_load.call_count, 3)
 
+    def test_interrupted_save(self):
+        """Test that data is preserved if save is interrupted (simulated)."""
+        path = self.create_dummy_excel("interrupted.xlsx", [{'IMEI': '1', 'Model': 'T'}])
+        
+        # We need to verify that we are writing to a temp file first, then renaming.
+        # We can check if `wb.save` is called with a temp path.
+        
+        row_data = {FIELD_SOURCE_FILE: path, FIELD_IMEI: '1', FIELD_MODEL: 'T'}
+        updates = {FIELD_STATUS: STATUS_SOLD}
+        
+        with patch('openpyxl.Workbook.save') as mock_save:
+            # Simulate save failure
+            mock_save.side_effect = IOError("Disk full")
+            
+            self.inventory.config_manager.mappings = {
+                path: {'file_path': path, 'mapping': {'IMEI': FIELD_IMEI}}
+            }
+            self.inventory.config_manager.get_file_mapping.return_value = self.inventory.config_manager.mappings[path]
+
+            success, msg = self.inventory._write_excel_generic(row_data, updates)
+            
+            self.assertFalse(success)
+            self.assertIn("Disk full", msg)
+            
+            # CRITICAL: Verify the original file still exists and is valid
+            # (In a real scenario, we'd verify it wasn't partially overwritten, but here we check logic)
+            self.assertTrue(os.path.exists(path))
+            
+            # Verify we TRIED to save to a temp file, not the original
+            # This is the "Red Phase" assertion - currently it saves to `path`, so this should fail
+            # if we assert that the arg passed to save was NOT `path`
+            args, _ = mock_save.call_args
+            save_path = args[0]
+            self.assertNotEqual(save_path, path, "Should write to temp file first")
+
 if __name__ == '__main__':
     unittest.main()
