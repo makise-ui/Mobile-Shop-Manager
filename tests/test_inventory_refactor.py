@@ -217,12 +217,11 @@ class TestInventoryRefactor(unittest.TestCase):
             # (In a real scenario, we'd verify it wasn't partially overwritten, but here we check logic)
             self.assertTrue(os.path.exists(path))
             
-            # Verify we TRIED to save to a temp file, not the original
-            # This is the "Red Phase" assertion - currently it saves to `path`, so this should fail
-            # if we assert that the arg passed to save was NOT `path`
+            # Verify we TRIED to save to a temp file
+            # Since mock_save calls args[0], we verify it was indeed the temp file
             args, _ = mock_save.call_args
             save_path = args[0]
-            self.assertNotEqual(save_path, path, "Should write to temp file first")
+            self.assertTrue(save_path.endswith('.tmp'), "Should write to .tmp file")
 
 if __name__ == '__main__':
     unittest.main()

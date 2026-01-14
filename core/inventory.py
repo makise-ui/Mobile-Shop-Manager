@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import shutil
 import datetime
 import hashlib
 import re
@@ -700,8 +701,16 @@ class InventoryManager:
                     print(f"Warning: No matching row found in Excel for {target_imei} / {target_model}")
                     return False, f"Row not found for {target_imei}"
                     
-                wb.save(file_path)
-                return True, "Success"
+                # STAGED WRITE: Write to temp file first
+                temp_path = f"{file_path}.tmp"
+                wb.save(temp_path)
+                
+                if os.path.exists(temp_path):
+                    # Atomic replacement
+                    shutil.move(temp_path, file_path)
+                    return True, "Success"
+                else:
+                    return False, "Failed to write temp file"
                 
             except PermissionError:
                 print(f"Write Attempt {attempt+1} failed: File open in Excel. Retrying...")
