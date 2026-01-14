@@ -566,142 +566,150 @@ class InventoryManager:
             if k in field_to_col:
                 excel_updates[field_to_col[k]] = v
         
-        try:
-            wb = load_workbook(file_path)
-            
-            # Determine Sheet
-            sheet_name = mapping_data.get('sheet_name', 0)
-            if '::' in key:
-                 try:
-                     sheet_part = key.split('::')[1]
-                     if sheet_part: 
-                         # Try converting to int if it looks like one
-                         if sheet_part.isdigit():
-                             sheet_name = int(sheet_part)
-                         else:
-                             sheet_name = sheet_part
-                 except: pass
-
-            ws = None
-            # 1. Try Integer Index
-            if isinstance(sheet_name, int):
-                try:
-                    ws = wb.worksheets[sheet_name]
-                except IndexError:
-                    print(f"Sheet index {sheet_name} out of range, falling back to active.")
-            
-            # 2. Try String Name
-            elif isinstance(sheet_name, str):
-                 if sheet_name in wb.sheetnames:
-                     ws = wb[sheet_name]
-                 elif sheet_name.isdigit(): # "0" as string?
+        max_retries = 3
+        retry_delay = 1.5 # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                wb = load_workbook(file_path)
+                
+                # Determine Sheet
+                sheet_name = mapping_data.get('sheet_name', 0)
+                if '::' in key:
                      try:
-                         ws = wb.worksheets[int(sheet_name)]
+                         sheet_part = key.split('::')[1]
+                         if sheet_part: 
+                             # Try converting to int if it looks like one
+                             if sheet_part.isdigit():
+                                 sheet_name = int(sheet_part)
+                             else:
+                                 sheet_name = sheet_part
                      except: pass
 
-            # 3. Fallback
-            if ws is None:
-                ws = wb.active
+                ws = None
+                # 1. Try Integer Index
+                if isinstance(sheet_name, int):
+                    try:
+                        ws = wb.worksheets[sheet_name]
+                    except IndexError:
+                        print(f"Sheet index {sheet_name} out of range, falling back to active.")
                 
-            print(f"BG-WRITE: Writing to Sheet '{ws.title}' in '{file_path}'")
+                # 2. Try String Name
+                elif isinstance(sheet_name, str):
+                     if sheet_name in wb.sheetnames:
+                         ws = wb[sheet_name]
+                     elif sheet_name.isdigit(): # "0" as string?
+                         try:
+                             ws = wb.worksheets[int(sheet_name)]
+                         except: pass
 
-            # Find Header Columns
-            col_indices = {}
-            max_col_idx = 0
-            for cell in ws[1]:
-                val = str(cell.value).strip()
-                if val:
-                    col_indices[val] = cell.column
-                    if cell.column > max_col_idx: max_col_idx = cell.column
-            
-            default_headers = {
-                FIELD_BUYER: 'Buyer Name',
-                FIELD_BUYER_CONTACT: 'Buyer Contact',
-                FIELD_NOTES: 'Notes',
-                FIELD_STATUS: 'Status',
-                FIELD_COLOR: 'Color',
-                FIELD_PRICE: 'Selling Price',
-                'grade': 'Grade',
-                'condition': 'Condition'
-            }
-            
-            for field, value in updates.items():
-                header_name = None
-                if field in field_to_col:
-                    header_name = field_to_col[field]
-                elif field in default_headers:
-                    header_name = default_headers[field]
-                
-                if header_name:
-                    if header_name not in col_indices:
-                        # Create New Column
-                        max_col_idx += 1
-                        ws.cell(row=1, column=max_col_idx).value = header_name
-                        col_indices[header_name] = max_col_idx
-                    excel_updates[header_name] = value
+                # 3. Fallback
+                if ws is None:
+                    ws = wb.active
+                    
+                print(f"BG-WRITE: Writing to Sheet '{ws.title}' in '{file_path}' (Attempt {attempt+1})")
 
-            # Find Row (Match IMEI or Model)
-            target_imei = str(row_data[FIELD_IMEI])
-            target_model = str(row_data[FIELD_MODEL])
-            
-            # Find IMEI/Model col for matching
-            imei_header = field_to_col.get(FIELD_IMEI)
-            model_header = field_to_col.get(FIELD_MODEL)
-            
-            imei_col_idx = col_indices.get(imei_header)
-            model_col_idx = col_indices.get(model_header)
-            
-            row_found = False
-            
-            for row in ws.iter_rows(min_row=2):
-                match = False
-                if imei_col_idx:
-                    cell_val = row[imei_col_idx-1].value
-                    if cell_val:
-                        s_cell = str(cell_val).strip().replace('.0', '')
-                        # Robust Check: Exact match or partial (for dual IMEI scenarios)
-                        # target_imei might be "A / B", cell might be "A" or "B" or "A/B"
-                        if s_cell == target_imei:
-                            match = True
-                        elif target_imei and (target_imei in s_cell or s_cell in target_imei):
-                            match = True
+                # Find Header Columns
+                col_indices = {}
+                max_col_idx = 0
+                for cell in ws[1]:
+                    val = str(cell.value).strip()
+                    if val:
+                        col_indices[val] = cell.column
+                        if cell.column > max_col_idx: max_col_idx = cell.column
                 
-                if not match and model_col_idx:
-                    if str(row[model_col_idx-1].value).strip() == target_model:
-                        match = True # Weak match fallback
+                default_headers = {
+                    FIELD_BUYER: 'Buyer Name',
+                    FIELD_BUYER_CONTACT: 'Buyer Contact',
+                    FIELD_NOTES: 'Notes',
+                    FIELD_STATUS: 'Status',
+                    FIELD_COLOR: 'Color',
+                    FIELD_PRICE: 'Selling Price',
+                    'grade': 'Grade',
+                    'condition': 'Condition'
+                }
                 
-                if match:
-                    row_found = True
-                    # Apply updates
-                    for col_name, new_val in excel_updates.items():
-                        if col_name in col_indices:
-                            cell = ws.cell(row=row[0].row, column=col_indices[col_name])
-                            
-                            # Enforce Uppercase for strings
-                            if isinstance(new_val, str):
-                                new_val = new_val.upper()
+                for field, value in updates.items():
+                    header_name = None
+                    if field in field_to_col:
+                        header_name = field_to_col[field]
+                    elif field in default_headers:
+                        header_name = default_headers[field]
+                    
+                    if header_name:
+                        if header_name not in col_indices:
+                            # Create New Column
+                            max_col_idx += 1
+                            ws.cell(row=1, column=max_col_idx).value = header_name
+                            col_indices[header_name] = max_col_idx
+                        excel_updates[header_name] = value
+
+                # Find Row (Match IMEI or Model)
+                target_imei = str(row_data[FIELD_IMEI])
+                target_model = str(row_data[FIELD_MODEL])
+                
+                # Find IMEI/Model col for matching
+                imei_header = field_to_col.get(FIELD_IMEI)
+                model_header = field_to_col.get(FIELD_MODEL)
+                
+                imei_col_idx = col_indices.get(imei_header)
+                model_col_idx = col_indices.get(model_header)
+                
+                row_found = False
+                
+                for row in ws.iter_rows(min_row=2):
+                    match = False
+                    if imei_col_idx:
+                        cell_val = row[imei_col_idx-1].value
+                        if cell_val:
+                            s_cell = str(cell_val).strip().replace('.0', '')
+                            # Robust Check: Exact match or partial (for dual IMEI scenarios)
+                            # target_imei might be "A / B", cell might be "A" or "B" or "A/B"
+                            if s_cell == target_imei:
+                                match = True
+                            elif target_imei and (target_imei in s_cell or s_cell in target_imei):
+                                match = True
+                    
+                    if not match and model_col_idx:
+                        if str(row[model_col_idx-1].value).strip() == target_model:
+                            match = True # Weak match fallback
+                    
+                    if match:
+                        row_found = True
+                        # Apply updates
+                        for col_name, new_val in excel_updates.items():
+                            if col_name in col_indices:
+                                cell = ws.cell(row=row[0].row, column=col_indices[col_name])
                                 
-                            cell.value = new_val
-                            
-                            # --- ENFORCE USER STYLE ---
-                            # Times New Roman, 11, Bold, Center, All Borders
-                            thin = Side(border_style="thin", color="000000")
-                            cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
-                            cell.font = Font(name='Times New Roman', size=11, bold=True)
-                            cell.alignment = Alignment(horizontal='center', vertical='center')
+                                # Enforce Uppercase for strings
+                                if isinstance(new_val, str):
+                                    new_val = new_val.upper()
+                                    
+                                cell.value = new_val
                                 
-                    break
-            
-            if not row_found:
-                print(f"Warning: No matching row found in Excel for {target_imei} / {target_model}")
-                return False, f"Row not found for {target_imei}"
+                                # --- ENFORCE USER STYLE ---
+                                # Times New Roman, 11, Bold, Center, All Borders
+                                thin = Side(border_style="thin", color="000000")
+                                cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
+                                cell.font = Font(name='Times New Roman', size=11, bold=True)
+                                cell.alignment = Alignment(horizontal='center', vertical='center')
+                                    
+                        break
                 
-            wb.save(file_path)
-            return True, "Success"
-            
-        except PermissionError:
-            print("Write Error: File open in Excel")
-            return False, "File is open in Excel. Please close it."
-        except Exception as e:
-            print(f"Write Error: {e}")
-            return False, f"Excel Write Error: {e}"
+                if not row_found:
+                    print(f"Warning: No matching row found in Excel for {target_imei} / {target_model}")
+                    return False, f"Row not found for {target_imei}"
+                    
+                wb.save(file_path)
+                return True, "Success"
+                
+            except PermissionError:
+                print(f"Write Attempt {attempt+1} failed: File open in Excel. Retrying...")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                else:
+                    return False, "File is open in Excel. Please close it."
+            except Exception as e:
+                print(f"Write Error: {e}")
+                return False, f"Excel Write Error: {e}"

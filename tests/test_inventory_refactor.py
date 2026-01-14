@@ -149,21 +149,45 @@ class TestInventoryRefactor(unittest.TestCase):
         """Test that the writer retries when a file is locked."""
         path = self.create_dummy_excel("retry.xlsx", [{'IMEI': '1', 'Model': 'T'}])
         
+        self.config_manager.get_file_mapping.return_value = {
+            'mapping': {'IMEI': FIELD_IMEI}
+        }
+        
+        # Setup mock workbook to allow iterative scanning
+        mock_wb = MagicMock()
+        mock_ws = MagicMock()
+        mock_wb.worksheets = [mock_ws]
+        mock_wb.active = mock_ws
+        
+        # Mock headers ws[1]
+        mock_header_cell = MagicMock()
+        mock_header_cell.value = 'IMEI'
+        mock_header_cell.column = 1
+        mock_ws.__getitem__.return_value = [mock_header_cell]
+        
+        # Mock a row that matches
+        mock_cell_imei = MagicMock()
+        mock_cell_imei.value = '1'
+        mock_cell_imei.row = 2
+        mock_row = [mock_cell_imei]
+        mock_ws.iter_rows.return_value = [mock_row]
+        mock_ws.cell.return_value = MagicMock()
+        
         # Simulate 2 failures followed by 1 success
         mock_load.side_effect = [
             PermissionError("Locked"),
             PermissionError("Locked"),
-            MagicMock() # Success
+            mock_wb # Success
         ]
         
         row_data = {FIELD_SOURCE_FILE: path, FIELD_IMEI: '1', FIELD_MODEL: 'T'}
         updates = {FIELD_STATUS: STATUS_SOLD}
         
-        # This should fail currently because there is no retry logic
+        # This should succeed now with retry logic
         success, msg = self.inventory._write_excel_generic(row_data, updates)
         
-        # Expecting failure for now (Red Phase)
-        self.assertFalse(success, "Should fail without retry logic")
+        self.assertTrue(success, f"Should succeed with retry logic. Error: {msg}")
+        self.assertEqual(mock_load.call_count, 3)
 
 if __name__ == '__main__':
     unittest.main()
