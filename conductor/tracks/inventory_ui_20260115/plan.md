@@ -18,6 +18,6 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Filter UI Implementation' (Protocol in workflow.md) [checkpoint: 9523e21]
 
 ## Phase 4: Integration & Polish
-- [ ] Task: Remove old filter widgets to reclaim space.
-- [ ] Task: Ensure all buttons have tooltips and keyboard shortcuts still work.
+- [x] Task: Remove old filter widgets to reclaim space. [c727897]
+- [x] Task: Ensure all buttons have tooltips and keyboard shortcuts still work. [c727897]
 - [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration & Polish' (Protocol in workflow.md) [checkpoint: ]
