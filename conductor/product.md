@@ -18,6 +18,7 @@ Mobile Shop Manager is a specialized Windows desktop application for mobile reta
 
 ## 4. Key Features
 *   **Real-time Excel Sync:** Automatically watches and merges inventory data from multiple supplier files without manual import.
+*   **Advanced Filtering:** Collapsible filter panel with date ranges, supplier, and status multi-selection for powerful inventory searches.
 *   **Serialized Inventory Tracking:** Permanent status tracking (IN/OUT/RTN) for individual units based on unique IDs/IMEI, persisting across file updates.
 *   **Precision Labeling:** Native ZPL support for high-speed, 2-up thermal label printing.
 *   **GST Billing:** Professional, compliant PDF invoice generation.

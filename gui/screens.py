@@ -365,6 +365,10 @@ class InventoryScreen(BaseScreen):
                 print(f"Error loading icon {filename}: {e}")
 
     def _init_ui(self):
+        # Initialize Filter Variables
+        self.var_search = tk.StringVar()
+        self.var_min_price = tk.StringVar()
+        
         # -- Compact Toolbar --
         toolbar = ttk.Frame(self)
         toolbar.pack(fill=tk.X, pady=(0, 5))
@@ -451,10 +455,6 @@ class InventoryScreen(BaseScreen):
         # Added 'check' column for checkboxes
         cols = ('check', 'unique_id', 'imei', 'model', 'ram_rom', 'price_original', 'price', 'supplier', 'status')
         self.tree = ttk.Treeview(self.paned, columns=cols, show='headings', selectmode='extended')
-        
-        # Initialize Filter Variables (needed for logic)
-        self.var_search = tk.StringVar()
-        self.var_min_price = tk.StringVar()
         
         # -- Status Bar --
         status_bar = ttk.Frame(self)
