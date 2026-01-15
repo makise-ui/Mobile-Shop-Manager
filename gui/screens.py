@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
+import sys
 from PIL import ImageTk, Image
 from .dialogs import MapColumnsDialog, ZPLPreviewDialog, PrinterSelectionDialog, FileSelectionDialog, ItemSelectionDialog
 from .markdown_renderer import MarkdownText
