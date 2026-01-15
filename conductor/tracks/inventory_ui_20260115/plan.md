@@ -6,10 +6,10 @@
 - [x] Task: Refactor `gui/screens.py` (Inventory Screen) to replace the top button bar with a compact toolbar using the new `IconButton`. [81898f7]
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Icon Infrastructure & Toolbar Refactor' (Protocol in workflow.md) [checkpoint: 81898f7]
 
-## Phase 2: Advanced Filter Logic
+## Phase 2: Advanced Filter Logic [checkpoint: 2b45cdb]
 - [x] Task: Implement `Red Phase`: Write failing tests for a new `AdvancedFilter` class that filters the inventory DataFrame based on complex criteria (Date ranges, Supplier list). [26dd47a]
 - [x] Task: Implement `Green Phase`: Implement the `AdvancedFilter` logic in `core/inventory.py` (or `core/filters.py`). [2b45cdb]
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Advanced Filter Logic' (Protocol in workflow.md) [checkpoint: ]
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Advanced Filter Logic' (Protocol in workflow.md) [checkpoint: 2b45cdb]
 
 ## Phase 3: Filter UI Implementation
 - [ ] Task: Create a `CollapsiblePanel` widget in `gui/widgets.py`.
