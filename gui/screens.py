@@ -468,6 +468,8 @@ class InventoryScreen(BaseScreen):
         
         self.lbl_info = ttk.Label(status_bar, text="")
         
+        self._setup_tree_columns()
+        
     def _toggle_filter_panel(self):
         self.filter_panel.toggle(fill=tk.X, pady=(0, 10))
 
@@ -477,18 +479,8 @@ class InventoryScreen(BaseScreen):
 
     # REMOVE OLD MOCKS
     # class MagicMockCombobox...
-    
-class MagicMockCombobox: # Kept only if needed by other screens? No, local to this file.
-    def get(self): return ""
-    def set(self, val): pass
-    def __setitem__(self, key, value): pass
-
-class MagicMockEntry:
-    def set_completion_list(self, lst): pass
-    def focus_set(self): pass
-    def delete(self, *args): pass
-    def insert(self, *args): pass
         
+    def _setup_tree_columns(self):
         # Configure Columns
         self.tree.heading('check', text='[x]')
         self.tree.column('check', width=40, anchor='center', stretch=False)
@@ -4281,6 +4273,18 @@ Start with one item and build from there.
 
 ---
 
-**Last Updated:** 2026-01-10 | **Version:** 1.4.0 | **Support:** hasanfq818@gmail.com
 """
+
+# --- Mocks for Phase 3 Transition ---
+class MagicMockCombobox:
+    def get(self): return ""
+    def set(self, val): pass
+    def __setitem__(self, key, value): pass
+
+class MagicMockEntry:
+    def set_completion_list(self, lst): pass
+    def focus_set(self): pass
+    def delete(self, *args): pass
+    def insert(self, *args): pass
+""
 
