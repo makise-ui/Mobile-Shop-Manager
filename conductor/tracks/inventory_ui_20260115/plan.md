@@ -7,7 +7,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Icon Infrastructure & Toolbar Refactor' (Protocol in workflow.md) [checkpoint: 81898f7]
 
 ## Phase 2: Advanced Filter Logic
-- [ ] Task: Implement `Red Phase`: Write failing tests for a new `AdvancedFilter` class that filters the inventory DataFrame based on complex criteria (Date ranges, Supplier list).
+- [x] Task: Implement `Red Phase`: Write failing tests for a new `AdvancedFilter` class that filters the inventory DataFrame based on complex criteria (Date ranges, Supplier list). [26dd47a]
 - [ ] Task: Implement `Green Phase`: Implement the `AdvancedFilter` logic in `core/inventory.py` (or `core/filters.py`).
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Advanced Filter Logic' (Protocol in workflow.md) [checkpoint: ]
 
