@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.8.0] - 2026-01-15: The Stability & Icon Update
+
+### 🎨 Visual & UI Enhancements
+*   **Emoji Icons:** Replaced missing image-based icons in the Inventory toolbar (Filter, Add, Print, Refresh, Search) with standard Unicode emojis (⚡, ➕, 🖨️, 🔄, 🔍). This ensures controls are always visible regardless of theme or missing assets.
+*   **Consistent Styling:** Unified button styles in the Inventory screen for a cleaner look.
+
+### 🛡️ Core Stability & Fixes
+*   **Conflict Suppression:** The "Conflict Detected" popup is now suppressed in the **Quick Status** screen (in addition to Quick Entry), preventing interruptions during high-speed status updates (IN/OUT/RTN).
+*   **Crash Fix:** Resolved a critical crash (`AttributeError`) in the Status Screen when confirming an update, related to incorrect method calls on autocomplete fields.
+*   **Date Persistence:** Fixed a bug where "Date Added" and "Date Sold" would reset to the current date on every reload. The app now persistently tracks the original import date for each item using its internal registry.
+*   **Startup Fix:** Fixed a `NameError: name 'sys' is not defined` crash that could occur on certain platforms/environments during startup.
+
 ## [v1.7.0] - 2026-01-12: The "Sequential Entry" Update
 
 ### 🚀 Batch & Sequential Entry
