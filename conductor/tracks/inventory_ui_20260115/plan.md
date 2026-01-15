@@ -3,7 +3,7 @@
 ## Phase 1: Icon Infrastructure & Toolbar Refactor
 - [x] Task: Create or source a set of Bootstrap-style icons (PNG/ICO) for Add, Print, Delete, Refresh, Filter, Search. [a8e20e3]
 - [x] Task: Implement `Green Phase`: Create a reusable `IconButton` component in `gui/widgets.py` (or equivalent) that supports tooltips. [c3863e8]
-- [ ] Task: Refactor `gui/screens.py` (Inventory Screen) to replace the top button bar with a compact toolbar using the new `IconButton`.
+- [x] Task: Refactor `gui/screens.py` (Inventory Screen) to replace the top button bar with a compact toolbar using the new `IconButton`. [81898f7]
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Icon Infrastructure & Toolbar Refactor' (Protocol in workflow.md) [checkpoint: ]
 
 ## Phase 2: Advanced Filter Logic
