@@ -11,11 +11,11 @@
 - [x] Task: Implement `Green Phase`: Implement the `AdvancedFilter` logic in `core/inventory.py` (or `core/filters.py`). [2b45cdb]
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Advanced Filter Logic' (Protocol in workflow.md) [checkpoint: 2b45cdb]
 
-## Phase 3: Filter UI Implementation
+## Phase 3: Filter UI Implementation [checkpoint: 9523e21]
 - [x] Task: Create a `CollapsiblePanel` widget in `gui/widgets.py`. [ad2591b]
-- [ ] Task: Implement the "Advanced Filter" form inside the collapsible panel on the Inventory screen.
-- [ ] Task: Wire up the UI inputs (Date pickers, Dropdowns) to the `AdvancedFilter` logic.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Filter UI Implementation' (Protocol in workflow.md) [checkpoint: ]
+- [x] Task: Implement the "Advanced Filter" form inside the collapsible panel on the Inventory screen. [81898f7]
+- [x] Task: Wire up the UI inputs (Date pickers, Dropdowns) to the `AdvancedFilter` logic. [9523e21]
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Filter UI Implementation' (Protocol in workflow.md) [checkpoint: 9523e21]
 
 ## Phase 4: Integration & Polish
 - [ ] Task: Remove old filter widgets to reclaim space.
