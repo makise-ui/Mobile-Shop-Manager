@@ -84,6 +84,16 @@ class IDRegistry:
         
         return new_id
 
+    def set_date_added_if_empty(self, item_id, date_str):
+        """Sets 'added_date' in metadata only if not already present."""
+        iid_str = str(item_id)
+        if iid_str not in self.registry['metadata']:
+            self.registry['metadata'][iid_str] = {}
+            
+        if 'added_date' not in self.registry['metadata'][iid_str]:
+            self.registry['metadata'][iid_str]['added_date'] = date_str
+            self._save_registry()
+
     def update_metadata(self, item_id, data):
         """Stores app-level changes (status, notes) for an ID."""
         iid_str = str(item_id)

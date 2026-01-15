@@ -219,13 +219,15 @@ class InventoryManager:
 
         # Metadata
         canonical[FIELD_SOURCE_FILE] = str(file_path)
-        canonical['last_updated'] = datetime.datetime.now()
+        now_ts = datetime.datetime.now()
+        canonical['last_updated'] = now_ts
+        canonical['date_added'] = now_ts
         
         # Ensure all required columns exist with defaults
         required_cols = [
             FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM,
             FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE,
-            'last_updated', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
+            'last_updated', 'date_added', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
             FIELD_BUYER_CONTACT, 'grade', 'condition'
         ]
         for col in required_cols:
@@ -261,6 +263,16 @@ class InventoryManager:
         def apply_overrides(row):
             uid_str = str(row[FIELD_UNIQUE_ID])
             meta = metadata_map.get(uid_str, {})
+            
+            # Date Persistence
+            if 'added_date' in meta:
+                try:
+                    row['date_added'] = datetime.datetime.fromisoformat(meta['added_date'])
+                except: pass
+            else:
+                # First time seen: persist the current import date
+                self.id_registry.set_date_added_if_empty(row[FIELD_UNIQUE_ID], now_ts.isoformat())
+
             if not meta: return row
             
             # Use app-stored status if present
