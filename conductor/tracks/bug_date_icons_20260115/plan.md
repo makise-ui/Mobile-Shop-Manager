@@ -8,6 +8,6 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Date Persistence (Search Screen)' (Protocol in workflow.md) [checkpoint: 12585d7]
 
 ## Phase 2: UI Icons Fix (Inventory Screen)
-- [ ] Task: Diagnose asset loading. Create a script `tests/verify_assets.py` to check if `assets/icons/` files exist and are loadable by Tkinter/PIL.
-- [ ] Task: Implement `Green Phase`: Fix the `_load_icons` method in `gui/screens.py` (or `gui/widgets.py` if moved) to use absolute paths or proper resource path resolution (handling both `src` and `pyinstaller` contexts).
+- [~] Task: Diagnose asset loading. Create a script `tests/verify_assets.py` to check if `assets/icons/` files exist and are loadable by Tkinter/PIL.
+- [x] Task: Implement `Green Phase`: Fix the `_load_icons` method in `gui/screens.py` (or `gui/widgets.py` if moved) to use absolute paths or proper resource path resolution (handling both `src` and `pyinstaller` contexts). [74da060]
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: UI Icons Fix (Inventory Screen)' (Protocol in workflow.md) [checkpoint: ]
