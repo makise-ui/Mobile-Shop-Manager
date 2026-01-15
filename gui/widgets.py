@@ -7,7 +7,7 @@ class IconButton(tb.Button):
     """
     A reusable Icon Button with ToolTip support.
     """
-    def __init__(self, master, image=None, command=None, tooltip=None, bootstyle="light-outline", **kwargs):
+    def __init__(self, master, image=None, command=None, tooltip=None, bootstyle="secondary-outline", **kwargs):
         super().__init__(master, image=image, command=command, bootstyle=bootstyle, **kwargs)
         self.image = image # Keep reference to avoid garbage collection
         

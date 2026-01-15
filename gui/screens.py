@@ -354,13 +354,23 @@ class InventoryScreen(BaseScreen):
             "search": "search.png"
         }
         
+        # Robust path resolution
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.abspath(".")
+            
+        assets_dir = os.path.join(base_dir, "assets", "icons")
+        
         for name, filename in icon_map.items():
             try:
-                path = os.path.join("assets", "icons", filename)
+                path = os.path.join(assets_dir, filename)
                 if os.path.exists(path):
-                    # Resize to 20x20
-                    pil_img = Image.open(path).resize((20, 20), Image.LANCZOS)
+                    pil_img = Image.open(path)
+                    # Use original size (24x24) to avoid quality loss
                     self.icons[name] = ImageTk.PhotoImage(pil_img)
+                else:
+                    print(f"Warning: Icon missing at {path}")
             except Exception as e:
                 print(f"Error loading icon {filename}: {e}")
 
