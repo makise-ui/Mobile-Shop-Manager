@@ -346,13 +346,10 @@ class InventoryScreen(BaseScreen):
     def _load_icons(self):
         self.icons = {}
         # Map: internal_name -> filename
+        # Assets for toolbar are now replaced with emojis. 
+        # Keeping logic for any future non-emoji assets.
         icon_map = {
-            "add": "plus-lg.png", 
-            "print": "printer.png", 
-            "delete": "trash.png", 
-            "refresh": "arrow-clockwise.png",
-            "filter": "filter.png",
-            "search": "search.png"
+            "delete": "trash.png"
         }
         
         # Robust path resolution
@@ -385,7 +382,7 @@ class InventoryScreen(BaseScreen):
         toolbar.pack(fill=tk.X, pady=(0, 5))
         
         # Left: Filter Toggle
-        self.btn_filter = IconButton(toolbar, image=self.icons.get("filter"), 
+        self.btn_filter = IconButton(toolbar, text="⚡", 
                                      command=self._toggle_filter_panel, 
                                      tooltip="Toggle Filters")
         self.btn_filter.pack(side=tk.LEFT, padx=2)
@@ -393,11 +390,11 @@ class InventoryScreen(BaseScreen):
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
         
         # Actions
-        IconButton(toolbar, image=self.icons.get("add"), 
+        IconButton(toolbar, text="➕", 
                    command=self._send_to_billing, # Reusing 'Add Checked to Invoice' logic for now or 'Add Item'
                    tooltip="Add Checked to Invoice").pack(side=tk.LEFT, padx=2)
                    
-        IconButton(toolbar, image=self.icons.get("print"), 
+        IconButton(toolbar, text="🖨️", 
                    command=self._print_selected, 
                    tooltip="Print Checked").pack(side=tk.LEFT, padx=2)
                    
@@ -410,7 +407,7 @@ class InventoryScreen(BaseScreen):
         ttk.Button(toolbar, text="Rtn", command=lambda: self._bulk_update_status("RTN"), bootstyle="danger-outline-small").pack(side=tk.LEFT, padx=2)
         
         # Right Side
-        IconButton(toolbar, image=self.icons.get("refresh"), 
+        IconButton(toolbar, text="🔄", 
                    command=self.refresh_data, 
                    tooltip="Refresh Data").pack(side=tk.RIGHT, padx=2)
                    
@@ -426,8 +423,9 @@ class InventoryScreen(BaseScreen):
         
         # Row 0: Search
         ttk.Label(fp, text="Search Keywords:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        self.ent_search = AutocompleteEntry(fp, textvariable=self.var_search, width=40)
-        self.ent_search.grid(row=0, column=1, columnspan=3, sticky="we", padx=5)
+        self.ent_search = AutocompleteEntry(fp, textvariable=self.var_search, width=35)
+        self.ent_search.grid(row=0, column=1, columnspan=2, sticky="we", padx=5)
+        ttk.Button(fp, text="🔍 Search", command=self._apply_filters, bootstyle="secondary-outline").grid(row=0, column=3, sticky="w", padx=5)
         
         # Row 1: Supplier & Status
         ttk.Label(fp, text="Supplier:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
