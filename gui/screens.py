@@ -398,6 +398,11 @@ class InventoryScreen(BaseScreen):
                    command=self._print_selected, 
                    tooltip="Print Checked").pack(side=tk.LEFT, padx=2)
                    
+        self.btn_select_all = IconButton(toolbar, text="☑ All", 
+                   command=self._toggle_select_all, 
+                   tooltip="Check/Uncheck All Visible")
+        self.btn_select_all.pack(side=tk.LEFT, padx=2)
+                   
         # Mark Sold/RTN - Text buttons are better for these status changes, or use Icons if available
         # Spec said "Replace large text buttons... with small, icon-only...".
         # But "Mark Sold" is a status action.
@@ -958,6 +963,37 @@ class InventoryScreen(BaseScreen):
         # Ensure type match
         mask = df['unique_id'].astype(str).isin(self.checked_ids)
         return df[mask].to_dict('records')
+
+    def _select_all(self):
+        if not hasattr(self, 'df_display') or self.df_display.empty:
+            return
+        
+        # Only select visible items
+        uids = self.df_display['unique_id'].astype(str).tolist()
+        self.checked_ids.update(uids)
+        self._refresh_tree_checks()
+        self._update_counter()
+
+    def _deselect_all(self):
+        self.checked_ids.clear()
+        self._refresh_tree_checks()
+        self._update_counter()
+
+    def _toggle_select_all(self):
+        if not hasattr(self, 'df_display') or self.df_display.empty:
+            return
+            
+        visible_uids = set(self.df_display['unique_id'].astype(str).tolist())
+        
+        # Check if ALL visible are checked
+        if visible_uids.issubset(self.checked_ids):
+            self._deselect_all()
+            if hasattr(self, 'btn_select_all'):
+                self.btn_select_all.configure(text="☑ All")
+        else:
+            self._select_all()
+            if hasattr(self, 'btn_select_all'):
+                self.btn_select_all.configure(text="☐ All")
 
     def _print_selected(self):
         items = self._get_checked_data()
