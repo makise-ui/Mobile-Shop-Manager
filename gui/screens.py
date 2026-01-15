@@ -461,6 +461,11 @@ class InventoryScreen(BaseScreen):
         status_bar.pack(fill=tk.X, pady=(5, 0))
         self.lbl_counter = ttk.Label(status_bar, text="Total: 0 | Selected: 0", font=("Arial", 9, "bold"))
         self.lbl_counter.pack(side=tk.LEFT)
+        
+        # Shortcuts Hint
+        shortcuts_text = "Tip: Ctrl+F to Search"
+        ttk.Label(status_bar, text=shortcuts_text, font=("Arial", 8), foreground="gray").pack(side=tk.RIGHT, padx=10)
+        
         self.lbl_info = ttk.Label(status_bar, text="")
         
     def _toggle_filter_panel(self):
