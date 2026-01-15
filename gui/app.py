@@ -296,8 +296,8 @@ class MainApp(tb.Window):
         for screen in self.screens.values(): screen.pack_forget()
         target = self.screens.get(key)
         
-        # Suppress conflict popups while in Quick Entry to avoid interruption
-        self.suppress_conflicts = (key == 'quick_entry')
+        # Suppress conflict popups while in Quick Entry or Status screens to avoid interruption
+        self.suppress_conflicts = (key in ['quick_entry', 'status'])
         
         if target:
             target.pack(fill=tk.BOTH, expand=True)
