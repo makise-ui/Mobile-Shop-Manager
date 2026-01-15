@@ -931,6 +931,7 @@ class InventoryScreen(BaseScreen):
         except IndexError:
             pass
 
+
     def _update_preview(self, row_data):
         w_mm = self.app.app_config.get('label_width_mm', 50)
         h_mm = self.app.app_config.get('label_height_mm', 22)
@@ -2724,6 +2725,21 @@ class SearchScreen(BaseScreen):
         row = self.matches[idx]
         self._show_details(row)
 
+    def _get_display_date(self, row):
+        # 1. Prefer persisted 'date_added'
+        if row.get('date_added'):
+            return str(row.get('date_added'))
+            
+        # 2. Fallback to history
+        reg_meta = self.app.inventory.id_registry.get_metadata(row['unique_id'])
+        history = reg_meta.get('history', [])
+        if history:
+            sorted_h = sorted(history, key=lambda x: x.get('ts', ''))
+            return sorted_h[0].get('ts')
+            
+        # 3. Last resort
+        return str(row.get('last_updated', 'Unknown'))
+
     def _show_details(self, row):
         # 1. Header
         self.lbl_model.config(text=row.get('model', 'Unknown'))
@@ -2751,16 +2767,7 @@ class SearchScreen(BaseScreen):
         if str(row.get('status')).upper() in ['OUT', 'SOLD']:
             date_out = str(row.get('last_updated'))
             
-        date_in = "Unknown"
-        reg_meta = self.app.inventory.id_registry.get_metadata(row['unique_id'])
-        history = reg_meta.get('history', [])
-        
-        if history:
-            # Sort oldest first
-            sorted_h = sorted(history, key=lambda x: x.get('ts', ''))
-            date_in = sorted_h[0].get('ts')
-        elif row.get('last_updated'):
-             date_in = str(row.get('last_updated'))
+        date_in = self._get_display_date(row)
 
         buyer_str = f"{row.get('buyer', '-')} {row.get('buyer_contact', '')}".strip() or "-"
 
