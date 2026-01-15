@@ -12,7 +12,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Advanced Filter Logic' (Protocol in workflow.md) [checkpoint: 2b45cdb]
 
 ## Phase 3: Filter UI Implementation
-- [ ] Task: Create a `CollapsiblePanel` widget in `gui/widgets.py`.
+- [x] Task: Create a `CollapsiblePanel` widget in `gui/widgets.py`. [ad2591b]
 - [ ] Task: Implement the "Advanced Filter" form inside the collapsible panel on the Inventory screen.
 - [ ] Task: Wire up the UI inputs (Date pickers, Dropdowns) to the `AdvancedFilter` logic.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Filter UI Implementation' (Protocol in workflow.md) [checkpoint: ]
