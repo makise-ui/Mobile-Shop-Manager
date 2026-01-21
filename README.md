@@ -54,7 +54,7 @@ An open-source Windows desktop application for mobile shop inventory management,
 User data (config, logs, backups) is stored in your Documents folder: `Documents/MobileShopManager/`.
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Contact
 Email: hasanfq818@gmail.com
