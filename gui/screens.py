@@ -806,24 +806,7 @@ class InventoryScreen(BaseScreen):
         
         self._update_counter()
 
-    def _select_all(self):
-        for item_id in self.tree.get_children():
-            if item_id not in self.checked_ids:
-                self.checked_ids.add(item_id)
-                vals = list(self.tree.item(item_id, 'values'))
-                vals[0] = "☑"
-                self.tree.item(item_id, values=vals)
-                self.last_selected_idx = item_id
-        self._update_counter()
 
-    def _deselect_all(self):
-        for item_id in self.tree.get_children():
-            if item_id in self.checked_ids:
-                vals = list(self.tree.item(item_id, 'values'))
-                vals[0] = "☐"
-                self.tree.item(item_id, values=vals)
-        self.checked_ids.clear()
-        self._update_counter()
 
     def _update_counter(self):
         """Update the counter label with total and selected items"""
@@ -963,6 +946,14 @@ class InventoryScreen(BaseScreen):
         # Ensure type match
         mask = df['unique_id'].astype(str).isin(self.checked_ids)
         return df[mask].to_dict('records')
+
+    def _refresh_tree_checks(self):
+        for item_id in self.tree.get_children():
+            icon = "☑" if item_id in self.checked_ids else "☐"
+            vals = list(self.tree.item(item_id, 'values'))
+            if vals:
+                vals[0] = icon
+                self.tree.item(item_id, values=vals)
 
     def _select_all(self):
         if not hasattr(self, 'df_display') or self.df_display.empty:
