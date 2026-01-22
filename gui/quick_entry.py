@@ -36,6 +36,7 @@ class QuickEntryScreen(ttk.Frame):
         
         self.target_file_key = tk.StringVar()
         self.file_options = []
+        self.file_display_map = {} # Display Name -> Full Path
         self.batch_queue = [] # Store list of IMEIs
         self.fetched_data = {} # Cache for fetched info
         
@@ -253,11 +254,18 @@ class QuickEntryScreen(ttk.Frame):
         self.ent_imei.focus_set()
 
     def _refresh_files(self):
+        from core.utils import generate_file_display_map
         mappings = self.app.app_config.mappings
-        self.file_options = list(mappings.keys())
+        raw_paths = list(mappings.keys())
+        
+        self.file_display_map = generate_file_display_map(raw_paths)
+        self.file_options = sorted(self.file_display_map.keys())
+        
         self.combo_file['values'] = self.file_options
+        
+        current_display = self.target_file_key.get()
         if self.file_options:
-            if not self.target_file_key.get():
+            if not current_display or current_display not in self.file_options:
                 self.combo_file.current(0)
         else:
             self.combo_file.set("No Configured Files")
@@ -530,7 +538,12 @@ class QuickEntryScreen(ttk.Frame):
             
             # Refresh
             self._refresh_files()
-            self.target_file_key.set(path)
+            
+            # Auto-select the new file (find its display name)
+            display_name = next((k for k, v in self.file_display_map.items() if v == path), None)
+            if display_name:
+                self.target_file_key.set(display_name)
+                
             messagebox.showinfo("Success", f"Created {os.path.basename(path)}")
             
         except Exception as e:
@@ -540,7 +553,9 @@ class QuickEntryScreen(ttk.Frame):
         # Validate
         imei = self.var_imei.get().strip()
         model = self.var_model.get().strip()
-        target = self.target_file_key.get()
+        
+        target_display = self.target_file_key.get()
+        target = self.file_display_map.get(target_display)
         
         if not imei or not model:
             messagebox.showwarning("Missing Data", "IMEI and Model are required.")
@@ -549,7 +564,7 @@ class QuickEntryScreen(ttk.Frame):
             else: self.ent_model.focus_set()
             return
             
-        if not target or target == "No Configured Files":
+        if not target or target_display == "No Configured Files":
             messagebox.showwarning("Target File", "Please select a target Excel file.")
             return
 
