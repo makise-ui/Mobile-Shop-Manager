@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.8.1] - 2026-01-15: Critical Stability Patch
+
+### 🛠 Fixes
+*   **Crash Fix:** Resolved a crash in the Inventory Screen ("Select All" toggle) caused by a missing method reference. The "Check/Uncheck All" feature now functions correctly.
+
 ## [v1.8.0] - 2026-01-15: The Stability & Icon Update
 
 ### 🎨 Visual & UI Enhancements
