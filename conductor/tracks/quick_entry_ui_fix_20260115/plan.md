@@ -8,6 +8,6 @@
     - [x] Update `_save_entry` and other methods to resolve full paths from display names. [d6573a5]
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Implementation' (Protocol in workflow.md) [checkpoint: d6573a5]
 
-## Phase 2: Refinement
-- [ ] Task: Increase `combo_file` width slightly in `_init_ui` for better visibility of long filenames.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Refinement' (Protocol in workflow.md) [checkpoint: ]
+## Phase 2: Refinement [checkpoint: 0afba83]
+- [x] Task: Increase `combo_file` width slightly in `_init_ui` for better visibility of long filenames. [0afba83]
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Refinement' (Protocol in workflow.md) [checkpoint: 0afba83]
