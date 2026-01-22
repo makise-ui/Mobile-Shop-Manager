@@ -97,3 +97,27 @@ def backup_excel_file(file_path):
     except Exception as e:
         print(f"Backup Error: {e}")
         return None
+
+def generate_file_display_map(paths):
+    """
+    Generates a map { 'Display Name': 'Full Path' } for a list of file paths.
+    Handles duplicate filenames by appending the parent directory name.
+    """
+    from collections import defaultdict
+    base_map = defaultdict(list)
+    for p in paths:
+        base_map[os.path.basename(p)].append(p)
+        
+    final_map = {}
+    for base, full_paths in base_map.items():
+        if len(full_paths) == 1:
+            final_map[base] = full_paths[0]
+        else:
+            for p in full_paths:
+                parent = os.path.basename(os.path.dirname(p)) or "root"
+                display = f"{base} ({parent})"
+                # Fallback if collision persists
+                if display in final_map:
+                     display = p 
+                final_map[display] = p
+    return final_map
