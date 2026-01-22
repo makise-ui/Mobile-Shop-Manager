@@ -54,7 +54,7 @@ class QuickEntryScreen(ttk.Frame):
         top_bar.pack(fill=tk.X)
         
         ttk.Label(top_bar, text="Target File:", font=('bold')).pack(side=tk.LEFT)
-        self.combo_file = ttk.Combobox(top_bar, textvariable=self.target_file_key, state="readonly", width=25)
+        self.combo_file = ttk.Combobox(top_bar, textvariable=self.target_file_key, state="readonly", width=35)
         self.combo_file.pack(side=tk.LEFT, padx=5)
         
         ttk.Button(top_bar, text="+ New", command=self._create_new_file, width=6).pack(side=tk.LEFT)
