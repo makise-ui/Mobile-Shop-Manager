@@ -2801,7 +2801,12 @@ class SearchScreen(BaseScreen):
         # Determine Dates
         date_out = "-"
         if str(row.get('status')).upper() in ['OUT', 'SOLD']:
-            date_out = str(row.get('last_updated'))
+            # Use persistent sold date if available
+            sold_val = row.get('date_sold')
+            if sold_val:
+                date_out = str(sold_val)
+            else:
+                date_out = "Unknown" # Was showing current date (last_updated) incorrectly
             
         date_in = self._get_display_date(row)
 

@@ -227,7 +227,7 @@ class InventoryManager:
         required_cols = [
             FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM,
             FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE,
-            'last_updated', 'date_added', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
+            'last_updated', 'date_added', 'date_sold', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
             FIELD_BUYER_CONTACT, 'grade', 'condition'
         ]
         for col in required_cols:
@@ -278,6 +278,11 @@ class InventoryManager:
             # Use app-stored status if present
             if FIELD_STATUS in meta:
                 row[FIELD_STATUS] = norm_status(meta[FIELD_STATUS])
+                
+            if 'sold_date' in meta and meta['sold_date']:
+                try:
+                    row['date_sold'] = datetime.datetime.fromisoformat(meta['sold_date'])
+                except: pass
                 
             if FIELD_NOTES in meta: row[FIELD_NOTES] = meta[FIELD_NOTES]
             if FIELD_COLOR in meta: row[FIELD_COLOR] = meta[FIELD_COLOR]
@@ -490,7 +495,18 @@ class InventoryManager:
             item_model = row[FIELD_MODEL]
 
         # 2. Update Internal Registry
-        self.id_registry.update_metadata(item_id, {FIELD_STATUS: new_status})
+        updates = {FIELD_STATUS: new_status}
+        
+        # Capture Sold Date
+        if new_status == STATUS_OUT:
+            # Only set if not already set? Or update? Spec implies capture current time.
+            # Assuming "Sold Now"
+            updates['sold_date'] = datetime.datetime.now().isoformat()
+        elif new_status == STATUS_IN:
+            # Reset sold date if returned/available
+            updates['sold_date'] = ""
+            
+        self.id_registry.update_metadata(item_id, updates)
         self.id_registry.add_history_log(item_id, ACTION_STATUS_CHANGE, f"Moved from {old_status} to {new_status}")
         
         if self.activity_logger:
