@@ -13,7 +13,7 @@ An open-source Windows desktop application for mobile shop inventory management,
 ## Installation & Running
 
 ### For Users
-1.  Download the latest release from the [Releases](https://github.com/hasanfq6/Mobile-Shop-Manager/releases) page.
+1.  Download the latest release from the [Releases](https://github.com/makise-ui/Mobile-Shop-Manager/releases) page.
 2.  Run the `.exe` file.
 3.  On first launch, enter your Store Details and map your Inventory Excel file.
 
