@@ -48,3 +48,9 @@ Thumbs.db
 .genkit/
 keygen.py
 BUILD_GUIDE.md
+
+# Project Metadata
+conductor/tracks/
+conductor/archive/
+conductor/setup_state.json
+conductor/tracks.md
