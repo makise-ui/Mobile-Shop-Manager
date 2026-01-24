@@ -6,7 +6,7 @@ import threading
 import os
 from pathlib import Path
 from core.scraper import PhoneScraper
-from gui.screens import AutocompleteEntry
+from gui.base import AutocompleteEntry
 
 class QuickEntryScreen(ttk.Frame):
     def __init__(self, parent, app_context):
