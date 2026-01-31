@@ -12,16 +12,16 @@
     - [x] Test Custom Expression parsing and safety.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Logic & Backend' (Protocol in workflow.md) [411197b]
 
-## Phase 2: UI Components (Widgets)
-- [ ] Task: Create `AdvancedFilterPanel` Widget
-    - [ ] Refactor existing filter row logic into `gui/widgets.py` or `gui/screens/reporting.py`.
-    - [ ] Integrate `ttkbootstrap.DateEntry` for date fields.
-    - [ ] Add "Relative Date" dropdown logic.
-- [ ] Task: Create `SamplingPanel` Widget
-    - [ ] Create UI for "Row Limit" (Spinbox).
-    - [ ] Create UI for "Modulo" (Field selector + Divisor + Remainder).
-    - [ ] Create UI for "Custom Expression" (Text Area).
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: UI Components (Widgets)' (Protocol in workflow.md)
+## Phase 2: UI Components (Widgets) [checkpoint: 67e7996]
+- [x] Task: Create `AdvancedFilterPanel` Widget [67e7996]
+    - [x] Refactor existing filter row logic into `gui/widgets.py` or `gui/screens/reporting.py`.
+    - [x] Integrate `ttkbootstrap.DateEntry` for date fields.
+    - [x] Add "Relative Date" dropdown logic.
+- [x] Task: Create `SamplingPanel` Widget [67e7996]
+    - [x] Create UI for "Row Limit" (Spinbox).
+    - [x] Create UI for "Modulo" (Field selector + Divisor + Remainder).
+    - [x] Create UI for "Custom Expression" (Text Area).
+- [x] Task: Conductor - User Manual Verification 'Phase 2: UI Components (Widgets)' (Protocol in workflow.md) [67e7996]
 
 ## Phase 3: Screen Integration & Preview Flow
 - [ ] Task: Refactor `ReportingScreen` Layout
