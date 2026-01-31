@@ -18,7 +18,7 @@ class ReportGenerator:
     def apply_filters(self, conditions):
         """
         conditions: list of dicts {'field': str, 'operator': str, 'value': str}
-        operators: 'Equals', 'Contains', '>', '<', '>=', '<=', 'Not Equals'
+        operators: 'Equals', 'Contains', '>', '<', '>=', '<=', 'Not Equals', 'Modulo', 'Above', 'Below'
         """
         if self.df.empty:
             return pd.DataFrame()
@@ -26,10 +26,13 @@ class ReportGenerator:
         filtered_df = self.df.copy()
         
         # Ensure numeric columns are actually numeric for comparison
-        numeric_cols = ['Price', 'Cost', 'MSRP']
+        numeric_cols = ['Price', 'Cost', 'MSRP', 'unique_id'] # Added unique_id for modulo
         for col in numeric_cols:
             if col in filtered_df.columns:
-                filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce').fillna(0)
+                # Keep unique_id as is if it's mixed, but for modulo it needs to be numeric
+                # If unique_id is string (UUID), modulo won't work.
+                # Assuming unique_id is numeric or we only support modulo on numeric fields.
+                pass
 
         for cond in conditions:
             field = cond['field']
@@ -44,9 +47,12 @@ class ReportGenerator:
                 continue
 
             try:
+                # Helper for type conversion
+                col_type = filtered_df[field].dtype
+                
                 if op == 'Equals':
                     # Case insensitive string comparison
-                    if filtered_df[field].dtype == 'object':
+                    if col_type == 'object':
                          filtered_df = filtered_df[filtered_df[field].astype(str).str.lower() == str(val).lower()]
                     else:
                         filtered_df = filtered_df[filtered_df[field] == val]
@@ -55,22 +61,42 @@ class ReportGenerator:
                     filtered_df = filtered_df[filtered_df[field].astype(str).str.contains(val, case=False, na=False)]
                 
                 elif op == 'Not Equals':
-                    if filtered_df[field].dtype == 'object':
+                    if col_type == 'object':
                          filtered_df = filtered_df[filtered_df[field].astype(str).str.lower() != str(val).lower()]
                     else:
                         filtered_df = filtered_df[filtered_df[field] != val]
 
-                elif op == '>':
-                    filtered_df = filtered_df[filtered_df[field] > float(val)]
-                
-                elif op == '<':
-                    filtered_df = filtered_df[filtered_df[field] < float(val)]
+                elif op == 'Modulo':
+                    # Expected val: "divisor=remainder" e.g. "2=0"
+                    if "=" in str(val):
+                        div, rem = map(int, str(val).split('='))
+                        # Convert to numeric, force errors to NaN then fill 0 (safe?)
+                        # Better to just try converting
+                        nums = pd.to_numeric(filtered_df[field], errors='coerce').fillna(0)
+                        filtered_df = filtered_df[nums % div == rem]
 
-                elif op == '>=':
-                    filtered_df = filtered_df[filtered_df[field] >= float(val)]
-
-                elif op == '<=':
-                    filtered_df = filtered_df[filtered_df[field] <= float(val)]
+                elif op in ['>', '<', '>=', '<=', 'Above', 'Below']:
+                    # Handle Date/Numeric
+                    is_date = pd.api.types.is_datetime64_any_dtype(filtered_df[field])
+                    compare_val = val
+                    
+                    if is_date:
+                        try:
+                            compare_val = pd.to_datetime(val)
+                        except: pass
+                    else:
+                        try:
+                            compare_val = float(val)
+                        except: pass
+                    
+                    if op == '>' or op == 'Above':
+                        filtered_df = filtered_df[filtered_df[field] > compare_val]
+                    elif op == '<' or op == 'Below':
+                        filtered_df = filtered_df[filtered_df[field] < compare_val]
+                    elif op == '>=':
+                        filtered_df = filtered_df[filtered_df[field] >= compare_val]
+                    elif op == '<=':
+                        filtered_df = filtered_df[filtered_df[field] <= compare_val]
                 
                 elif op == 'Is Empty':
                      filtered_df = filtered_df[filtered_df[field].isna() | (filtered_df[field] == '')]
@@ -80,10 +106,31 @@ class ReportGenerator:
 
             except Exception as e:
                 print(f"Error applying filter {cond}: {e}")
-                # Use empty DF if filter crashes (e.g. comparing string to int)
                 return pd.DataFrame()
 
         return filtered_df
+
+    def apply_limit(self, df, limit):
+        try:
+            lim = int(limit)
+            if lim > 0:
+                return df.head(lim)
+        except:
+            pass
+        return df
+
+    def apply_custom_expression(self, df, expression):
+        if not expression or not str(expression).strip():
+            return df
+        try:
+            # Use pandas query engine
+            # Replace 'unique_id' with backticks if needed, but pandas query handles it.
+            # Security: query() uses eval() under the hood but restricted to DF context.
+            return df.query(str(expression))
+        except Exception as e:
+            print(f"Custom Query Error: {e}")
+            return pd.DataFrame()
+
 
     def export(self, data, columns, format_type, filepath, include_serial=False):
         """
