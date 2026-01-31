@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import sys
 import os
+import threading
 from PIL import ImageTk, Image
 import pandas as pd
 import datetime
@@ -295,14 +296,29 @@ class InventoryScreen(BaseScreen):
             self.paned.remove(self.preview_frame)
 
     def on_show(self):
-        self.refresh_data()
+        self.refresh_data(reload_from_disk=False)
         # LOAD MODELS for Autocomplete
         self.ent_search.set_completion_list(self._get_all_models())
 
     def focus_primary(self):
         self.ent_search.focus_set()
 
-    def refresh_data(self):
+    def refresh_data(self, reload_from_disk=True):
+        if reload_from_disk:
+            self._show_loading()
+            threading.Thread(target=self._reload_worker, daemon=True).start()
+        else:
+            self._refresh_ui_only()
+
+    def _reload_worker(self):
+        self.app.inventory.reload_all()
+        self.after(0, self._on_reload_complete)
+
+    def _on_reload_complete(self):
+        self._hide_loading()
+        self._refresh_ui_only()
+
+    def _refresh_ui_only(self):
         df = self.app.inventory.get_inventory()
         if df.empty:
             self.df_display = df
@@ -315,6 +331,29 @@ class InventoryScreen(BaseScreen):
             self.combo_supplier['values'] = ["All"] + suppliers
             
         self._apply_filters()
+
+    def _show_loading(self):
+        self.loading_win = tk.Toplevel(self)
+        self.loading_win.title("Loading...")
+        self.loading_win.geometry("300x120")
+        self.loading_win.transient(self)
+        self.loading_win.grab_set()
+        
+        try:
+            x = self.winfo_rootx() + self.winfo_width()//2 - 150
+            y = self.winfo_rooty() + self.winfo_height()//2 - 60
+            self.loading_win.geometry(f"+{x}+{y}")
+        except: pass
+        
+        ttk.Label(self.loading_win, text="Reading Excel Files...", font=("Segoe UI", 11)).pack(pady=20)
+        self.pb = ttk.Progressbar(self.loading_win, mode='indeterminate')
+        self.pb.pack(fill=tk.X, padx=20)
+        self.pb.start(10)
+        
+    def _hide_loading(self):
+        if hasattr(self, 'loading_win') and self.loading_win:
+            self.loading_win.destroy()
+            self.loading_win = None
 
     def _on_filter_change(self, *args):
         self._apply_filters()
@@ -667,7 +706,7 @@ class InventoryScreen(BaseScreen):
                 
         messagebox.showinfo("Done", f"Updated {success_count} items to {new_status}")
         self.checked_ids.clear()
-        self.refresh_data()
+        self.refresh_data(reload_from_disk=False)
 
     def _show_mark_sold_dialog(self, items):
         df = self.app.inventory.get_inventory()
@@ -722,7 +761,7 @@ class InventoryScreen(BaseScreen):
                 
             dlg.destroy()
             self.checked_ids.clear()
-            self.refresh_data()
+            self.refresh_data(reload_from_disk=False)
             messagebox.showinfo("Success", f"Sold {success_count} items." + ("\nInvoice Generated." if var_auto.get() else ""))
 
         ttk.Button(dlg, text="CONFIRM SOLD", command=do_confirm, style="Accent.TButton").pack(pady=20)
