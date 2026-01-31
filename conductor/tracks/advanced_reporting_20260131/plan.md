@@ -33,10 +33,10 @@
     - [x] Render `pd.DataFrame` result into a temporary Treeview in "Preview View".
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Screen Integration & Preview Flow' (Protocol in workflow.md) [7203b16]
 
-## Phase 4: Final Polish & Export
-- [ ] Task: Connect Export Functionality
-    - [ ] Ensure "Export" button on Preview screen uses the filtered data.
-- [ ] Task: Validation & UX
-    - [ ] Add tooltips for Custom Expressions (examples).
-    - [ ] Validate numeric inputs for Modulo/Limit.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Final Polish & Export' (Protocol in workflow.md)
+## Phase 4: Final Polish & Export [checkpoint: a3eb529]
+- [x] Task: Connect Export Functionality [a3eb529]
+    - [x] Ensure "Export" button on Preview screen uses the filtered data.
+- [x] Task: Validation & UX [a3eb529]
+    - [x] Add tooltips for Custom Expressions (examples).
+    - [x] Validate numeric inputs for Modulo/Limit.
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Final Polish & Export' (Protocol in workflow.md) [a3eb529]
