@@ -23,15 +23,15 @@
     - [x] Create UI for "Custom Expression" (Text Area).
 - [x] Task: Conductor - User Manual Verification 'Phase 2: UI Components (Widgets)' (Protocol in workflow.md) [67e7996]
 
-## Phase 3: Screen Integration & Preview Flow
-- [ ] Task: Refactor `ReportingScreen` Layout
-    - [ ] Split screen into "Config View" and "Preview View".
-    - [ ] Integrate `AdvancedFilterPanel` and `SamplingPanel` into "Config View".
-- [ ] Task: Implement Preview Logic
-    - [ ] Add "Preview Data" button.
-    - [ ] Implement state switching (Config <-> Preview).
-    - [ ] Render `pd.DataFrame` result into a temporary Treeview in "Preview View".
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Screen Integration & Preview Flow' (Protocol in workflow.md)
+## Phase 3: Screen Integration & Preview Flow [checkpoint: 7203b16]
+- [x] Task: Refactor `ReportingScreen` Layout [7203b16]
+    - [x] Split screen into "Config View" and "Preview View".
+    - [x] Integrate `AdvancedFilterPanel` and `SamplingPanel` into "Config View".
+- [x] Task: Implement Preview Logic [7203b16]
+    - [x] Add "Preview Data" button.
+    - [x] Implement state switching (Config <-> Preview).
+    - [x] Render `pd.DataFrame` result into a temporary Treeview in "Preview View".
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Screen Integration & Preview Flow' (Protocol in workflow.md) [7203b16]
 
 ## Phase 4: Final Polish & Export
 - [ ] Task: Connect Export Functionality
