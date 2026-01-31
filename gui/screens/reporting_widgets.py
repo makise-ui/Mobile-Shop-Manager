@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import ttkbootstrap as tb
 from datetime import datetime, timedelta
+from ttkbootstrap.tooltip import ToolTip
 
 class AdvancedFilterPanel(ttk.LabelFrame):
     def __init__(self, parent, available_fields, **kwargs):
@@ -33,6 +34,9 @@ class AdvancedFilterPanel(ttk.LabelFrame):
 
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def update_fields(self, fields):
+        self.available_fields = fields
 
     def add_condition_row(self, initial_data=None):
         row = ConditionRow(self.scroll_frame, self.available_fields, self.remove_condition_row)
@@ -131,7 +135,6 @@ class ConditionRow(ttk.Frame):
                 self.de = tb.DateEntry(self.val_container)
                 self.de.pack(fill=tk.X)
             except:
-                # Fallback if DateEntry fails (e.g. no display during init)
                 self.val_entry = ttk.Entry(self.val_container, textvariable=self.val_var)
                 self.val_entry.pack(fill=tk.X)
 
@@ -164,25 +167,35 @@ class SamplingPanel(ttk.LabelFrame):
         self._init_ui()
 
     def _init_ui(self):
+        vcmd = (self.register(self._validate_int), '%P')
+
+        # Toggle Switch
+        self.var_enable = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self, text="Enable Advanced Sampling", variable=self.var_enable, 
+                        command=self._toggle_visibility, bootstyle="round-toggle").pack(anchor=tk.W, padx=5, pady=5)
+        
+        # Inner Frame (Hidden by default)
+        self.inner_frame = ttk.Frame(self)
+        
         # 1. Row Limit
-        f_limit = ttk.Frame(self)
+        f_limit = ttk.Frame(self.inner_frame)
         f_limit.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(f_limit, text="Row Limit:").pack(side=tk.LEFT)
-        self.spin_limit = ttk.Spinbox(f_limit, from_=0, to=10000, width=10)
+        self.spin_limit = ttk.Spinbox(f_limit, from_=0, to=10000, width=10, validate="key", validatecommand=vcmd)
         self.spin_limit.set(0)
         self.spin_limit.pack(side=tk.RIGHT)
         
         # 2. Modulo Logic
-        f_mod = ttk.LabelFrame(self, text="Modulo Filter (e.g. Even IDs)")
+        f_mod = ttk.LabelFrame(self.inner_frame, text="Modulo Filter (e.g. Even IDs)")
         f_mod.pack(fill=tk.X, padx=5, pady=5)
         
         ttk.Label(f_mod, text="Divisor:").grid(row=0, column=0, padx=2, pady=2)
-        self.ent_div = ttk.Entry(f_mod, width=5)
+        self.ent_div = ttk.Entry(f_mod, width=5, validate="key", validatecommand=vcmd)
         self.ent_div.insert(0, "2")
         self.ent_div.grid(row=0, column=1, padx=2, pady=2)
         
         ttk.Label(f_mod, text="Remainder:").grid(row=1, column=0, padx=2, pady=2)
-        self.ent_rem = ttk.Entry(f_mod, width=5)
+        self.ent_rem = ttk.Entry(f_mod, width=5, validate="key", validatecommand=vcmd)
         self.ent_rem.insert(0, "0")
         self.ent_rem.grid(row=1, column=1, padx=2, pady=2)
         
@@ -190,7 +203,7 @@ class SamplingPanel(ttk.LabelFrame):
         ttk.Checkbutton(f_mod, text="Apply Modulo", variable=self.var_mod_enabled).grid(row=2, column=0, columnspan=2)
 
         # 3. Custom Expression
-        f_expr = ttk.LabelFrame(self, text="Custom Logic (Expression)")
+        f_expr = ttk.LabelFrame(self.inner_frame, text="Custom Logic (Expression)")
         f_expr.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.txt_expr = tk.Text(f_expr, height=4, width=30, font=("Consolas", 9))
@@ -199,8 +212,30 @@ class SamplingPanel(ttk.LabelFrame):
         hint = "Example: price > 500 and status == 'IN'"
         lbl_hint = ttk.Label(f_expr, text=hint, font=("Arial", 8, "italic"), foreground="gray")
         lbl_hint.pack(fill=tk.X)
+        
+        ToolTip(lbl_hint, text="Enter a valid Pandas query string.\nFields: unique_id, price, model, status, etc.\nUse 'and', 'or', '==', '!=', '>', '<'", bootstyle="info")
+        
+        # Initial State
+        self._toggle_visibility()
+
+    def _validate_int(self, P):
+        if P == "": return True
+        return P.isdigit()
+
+    def _toggle_visibility(self):
+        if self.var_enable.get():
+            self.inner_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        else:
+            self.inner_frame.pack_forget()
 
     def get_sampling_data(self):
+        if not self.var_enable.get():
+            return {
+                'limit': 0,
+                'modulo': {'enabled': False, 'divisor': '2', 'remainder': '0'},
+                'custom_expression': ''
+            }
+            
         return {
             'limit': self.spin_limit.get(),
             'modulo': {
