@@ -33,13 +33,31 @@ class UpdateChecker:
                         self.latest_version = tag_name
                         self.release_notes = body
                         
-                        # Find .exe asset
+                        # Detect variant (Free vs Licensed)
+                        is_free = False
+                        if hasattr(sys, '_MEIPASS'):
+                            is_free = os.path.exists(os.path.join(sys._MEIPASS, "no_license.flag"))
+                        
+                        target_keyword = "Free" if is_free else "Licensed"
+                        self.asset_url = None
+                        
+                        # 1. Try Exact Match
                         for asset in data.get('assets', []):
-                            if asset['name'].endswith('.exe'):
+                            if asset['name'].endswith('.exe') and target_keyword in asset['name']:
                                 self.asset_url = asset['browser_download_url']
                                 break
                         
-                        callback(True, tag_name, body)
+                        # 2. Fallback (Any .exe if exact match fails)
+                        if not self.asset_url:
+                            for asset in data.get('assets', []):
+                                if asset['name'].endswith('.exe'):
+                                    self.asset_url = asset['browser_download_url']
+                                    break
+                        
+                        if self.asset_url:
+                            callback(True, tag_name, body)
+                        else:
+                            callback(False, None, None)
                     else:
                         callback(False, None, None)
                 else:

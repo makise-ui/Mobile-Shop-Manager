@@ -183,7 +183,7 @@ class DashboardScreen(BaseScreen):
             self._update_alerts(available, aging_stock, df)
             
         self.card_stock.lbl_val.config(text=str(count))
-        self.card_value.lbl_val.config(text=f"₹{val:,0f}")
+        self.card_value.lbl_val.config(text=f"₹{val:,.0f}")
         
         # AI Forecast Logic
         if str(self.app.app_config.get("enable_ai_features", "True")) == "True":
