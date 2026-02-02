@@ -39,7 +39,10 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         self.available_fields = fields
 
     def add_condition_row(self, initial_data=None):
-        row = ConditionRow(self.scroll_frame, self.available_fields, self.remove_condition_row)
+        # Show logic dropdown if this is NOT the first row
+        show_logic = len(self.condition_widgets) > 0
+        
+        row = ConditionRow(self.scroll_frame, self.available_fields, self.remove_condition_row, show_logic=show_logic)
         row.pack(fill=tk.X, pady=2)
         if initial_data:
             row.set_data(initial_data)
@@ -49,6 +52,18 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         row.destroy()
         if row in self.condition_widgets:
             self.condition_widgets.remove(row)
+            # Re-evaluate logic visibility logic?
+            # If we remove row 0, row 1 becomes row 0 and shouldn't have logic?
+            # Complexity: If we remove the first row, the second row (now first) should hide its logic operator.
+            self._update_logic_visibility()
+
+    def _update_logic_visibility(self):
+        # Ensure first row has no logic, others do.
+        # But wait, ConditionRow creates widgets in __init__.
+        # We need a method in ConditionRow to toggle logic visibility or recreating them is hard.
+        # Simpler: Just refresh the list.
+        pass # For now, let's accept that if you delete row 1, row 2 keeps "AND". 
+             # Logic: "AND (Cond 2)" is fine if we treat the base as "All True".
 
     def clear_conditions(self):
         for row in self.condition_widgets:
@@ -59,11 +74,13 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         return [row.get_data() for row in self.condition_widgets]
 
 class ConditionRow(ttk.Frame):
-    def __init__(self, parent, available_fields, on_delete):
+    def __init__(self, parent, available_fields, on_delete, show_logic=False):
         super().__init__(parent)
         self.available_fields = available_fields
         self.on_delete = on_delete
+        self.show_logic = show_logic
         
+        self.logic_var = tk.StringVar(value="AND")
         self.field_var = tk.StringVar()
         self.op_var = tk.StringVar()
         self.val_var = tk.StringVar()
@@ -71,6 +88,16 @@ class ConditionRow(ttk.Frame):
         self._init_ui()
 
     def _init_ui(self):
+        # 0. Logic (Conditional)
+        if self.show_logic:
+            self.logic_cb = ttk.Combobox(self, values=['AND', 'OR', 'AND NOT', 'OR NOT', 'XOR'], 
+                                         textvariable=self.logic_var, state="readonly", width=7)
+            self.logic_cb.pack(side=tk.LEFT, padx=2)
+        else:
+            # Placeholder to align? Or just nothing.
+            # ttk.Label(self, width=9).pack(side=tk.LEFT, padx=2) # Alignment
+            pass
+
         # 1. Field
         self.field_cb = ttk.Combobox(self, values=self.available_fields, textvariable=self.field_var, state="readonly", width=15)
         self.field_cb.pack(side=tk.LEFT, padx=2)
@@ -150,12 +177,15 @@ class ConditionRow(ttk.Frame):
                 val = w.entry.get()
         
         return {
+            'logic': self.logic_var.get() if self.show_logic else 'START',
             'field': self.field_var.get(),
             'operator': self.op_var.get(),
             'value': val
         }
 
     def set_data(self, data):
+        if self.show_logic:
+            self.logic_var.set(data.get('logic', 'AND'))
         self.field_var.set(data.get('field', ''))
         self.op_var.set(data.get('operator', ''))
         self.val_var.set(data.get('value', ''))

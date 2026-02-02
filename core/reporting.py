@@ -17,29 +17,31 @@ class ReportGenerator:
 
     def apply_filters(self, conditions):
         """
-        conditions: list of dicts {'field': str, 'operator': str, 'value': str}
+        conditions: list of dicts {'logic': str, 'field': str, 'operator': str, 'value': str}
         operators: 'Equals', 'Contains', '>', '<', '>=', '<=', 'Not Equals', 'Modulo', 'Above', 'Below'
+        logic: 'START', 'AND', 'OR', 'AND NOT', 'OR NOT', 'XOR'
         """
         if self.df.empty:
             return pd.DataFrame()
+            
+        if not conditions:
+            return self.df
 
-        filtered_df = self.df.copy()
-        
-        # Ensure numeric columns are actually numeric for comparison
-        numeric_cols = ['Price', 'Cost', 'MSRP', 'unique_id'] # Added unique_id for modulo
-        for col in numeric_cols:
-            if col in filtered_df.columns:
-                # Keep unique_id as is if it's mixed, but for modulo it needs to be numeric
-                # If unique_id is string (UUID), modulo won't work.
-                # Assuming unique_id is numeric or we only support modulo on numeric fields.
-                pass
+        # Initialize the master mask
+        # If the first condition is valid, we'll set it.
+        # Otherwise, we start with all True.
+        final_mask = pd.Series([True] * len(self.df), index=self.df.index)
+        first_valid = True
 
-        for cond in conditions:
+        for i, cond in enumerate(conditions):
+            logic = cond.get('logic', 'AND')
+            if i == 0: logic = 'START' # Force start logic for first item
+            
             field = cond['field']
             op = cond['operator']
             val = cond['value']
 
-            if field not in filtered_df.columns:
+            if field not in self.df.columns:
                 continue
             
             # Handle empty values
@@ -47,68 +49,94 @@ class ReportGenerator:
                 continue
 
             try:
-                # Helper for type conversion
-                col_type = filtered_df[field].dtype
+                current_mask = self._build_mask(field, op, val)
                 
-                if op == 'Equals':
-                    # Case insensitive string comparison
-                    if col_type == 'object':
-                         filtered_df = filtered_df[filtered_df[field].astype(str).str.lower() == str(val).lower()]
-                    else:
-                        filtered_df = filtered_df[filtered_df[field] == val]
-                
-                elif op == 'Contains':
-                    filtered_df = filtered_df[filtered_df[field].astype(str).str.contains(val, case=False, na=False)]
-                
-                elif op == 'Not Equals':
-                    if col_type == 'object':
-                         filtered_df = filtered_df[filtered_df[field].astype(str).str.lower() != str(val).lower()]
-                    else:
-                        filtered_df = filtered_df[filtered_df[field] != val]
-
-                elif op == 'Modulo':
-                    # Expected val: "divisor=remainder" e.g. "2=0"
-                    if "=" in str(val):
-                        div, rem = map(int, str(val).split('='))
-                        # Convert to numeric, force errors to NaN then fill 0 (safe?)
-                        # Better to just try converting
-                        nums = pd.to_numeric(filtered_df[field], errors='coerce').fillna(0)
-                        filtered_df = filtered_df[nums % div == rem]
-
-                elif op in ['>', '<', '>=', '<=', 'Above', 'Below']:
-                    # Handle Date/Numeric
-                    is_date = pd.api.types.is_datetime64_any_dtype(filtered_df[field])
-                    compare_val = val
-                    
-                    if is_date:
-                        try:
-                            compare_val = pd.to_datetime(val)
-                        except: pass
-                    else:
-                        try:
-                            compare_val = float(val)
-                        except: pass
-                    
-                    if op == '>' or op == 'Above':
-                        filtered_df = filtered_df[filtered_df[field] > compare_val]
-                    elif op == '<' or op == 'Below':
-                        filtered_df = filtered_df[filtered_df[field] < compare_val]
-                    elif op == '>=':
-                        filtered_df = filtered_df[filtered_df[field] >= compare_val]
-                    elif op == '<=':
-                        filtered_df = filtered_df[filtered_df[field] <= compare_val]
-                
-                elif op == 'Is Empty':
-                     filtered_df = filtered_df[filtered_df[field].isna() | (filtered_df[field] == '')]
-                     
-                elif op == 'Is Not Empty':
-                     filtered_df = filtered_df[filtered_df[field].notna() & (filtered_df[field] != '')]
+                if logic == 'START' or first_valid:
+                    final_mask = current_mask
+                    first_valid = False
+                elif logic == 'AND':
+                    final_mask = final_mask & current_mask
+                elif logic == 'OR':
+                    final_mask = final_mask | current_mask
+                elif logic == 'AND NOT':
+                    final_mask = final_mask & (~current_mask)
+                elif logic == 'OR NOT':
+                    final_mask = final_mask | (~current_mask)
+                elif logic == 'XOR':
+                    final_mask = final_mask ^ current_mask
+                else:
+                    # Default AND
+                    final_mask = final_mask & current_mask
 
             except Exception as e:
                 print(f"Error applying filter {cond}: {e}")
-                return pd.DataFrame()
+                # Don't break the whole chain?
+                pass
 
-        return filtered_df
+        return self.df[final_mask]
+
+    def _build_mask(self, field, op, val):
+        """Generates a boolean Series mask for a single condition."""
+        # Helper for type conversion
+        df = self.df
+        col_type = df[field].dtype
+        mask = pd.Series([False] * len(df), index=df.index)
+        
+        try:
+            if op == 'Equals':
+                if col_type == 'object':
+                     mask = df[field].astype(str).str.lower() == str(val).lower()
+                else:
+                    mask = df[field] == val
+            
+            elif op == 'Contains':
+                mask = df[field].astype(str).str.contains(val, case=False, na=False)
+            
+            elif op == 'Not Equals':
+                if col_type == 'object':
+                     mask = df[field].astype(str).str.lower() != str(val).lower()
+                else:
+                    mask = df[field] != val
+
+            elif op == 'Modulo':
+                if "=" in str(val):
+                    div, rem = map(int, str(val).split('='))
+                    nums = pd.to_numeric(df[field], errors='coerce').fillna(0)
+                    mask = (nums % div == rem)
+
+            elif op in ['>', '<', '>=', '<=', 'Above', 'Below']:
+                # Handle Date/Numeric
+                is_date = pd.api.types.is_datetime64_any_dtype(df[field])
+                compare_val = val
+                
+                if is_date:
+                    try:
+                        compare_val = pd.to_datetime(val)
+                    except: pass
+                else:
+                    try:
+                        compare_val = float(val)
+                    except: pass
+                
+                if op == '>' or op == 'Above':
+                    mask = df[field] > compare_val
+                elif op == '<' or op == 'Below':
+                    mask = df[field] < compare_val
+                elif op == '>=':
+                    mask = df[field] >= compare_val
+                elif op == '<=':
+                    mask = df[field] <= compare_val
+            
+            elif op == 'Is Empty':
+                 mask = df[field].isna() | (df[field] == '')
+                 
+            elif op == 'Is Not Empty':
+                 mask = df[field].notna() & (df[field] != '')
+        except Exception as e:
+            print(f"Mask build error: {e}")
+            return mask # False mask on error
+            
+        return mask
 
     def apply_limit(self, df, limit):
         try:
