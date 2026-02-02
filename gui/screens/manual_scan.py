@@ -81,9 +81,13 @@ class ManualScanScreen(ttk.Frame):
         toolbar.pack(fill=tk.X, pady=5)
         
         self.lbl_count = ttk.Label(toolbar, text="Items Scanned: 0", font=("Segoe UI", 10, "bold"))
-        self.lbl_count.pack(side=tk.LEFT)
+        self.lbl_count.pack(side=tk.LEFT, padx=(0, 20))
+        
+        self.lbl_total = ttk.Label(toolbar, text="Total Value: 0", font=("Segoe UI", 10, "bold"), foreground="#28a745")
+        self.lbl_total.pack(side=tk.LEFT)
         
         ttk.Button(toolbar, text="Clear Session", command=self._clear_session, bootstyle="danger-outline").pack(side=tk.RIGHT)
+        ttk.Button(toolbar, text="Remove Selected", command=lambda: self._delete_selected(None), bootstyle="warning-outline").pack(side=tk.RIGHT, padx=5)
         
         # Treeview Container
         tree_frame = ttk.Frame(left_frame)
@@ -213,6 +217,16 @@ class ManualScanScreen(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         items = self.manual_session.get_items()
         self.lbl_count.config(text=f"Items Scanned: {len(items)}")
+        
+        # Calculate Total
+        total_price = 0.0
+        for item in items:
+            try:
+                p = float(str(item.get('price', 0)).replace(',', ''))
+                total_price += p
+            except: pass
+            
+        self.lbl_total.config(text=f"Total Value: {total_price:,.2f}")
         
         for item in items:
             vals = [item.get(c, '') for c in cols]
