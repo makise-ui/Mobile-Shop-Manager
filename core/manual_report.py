@@ -1,5 +1,6 @@
 import json
 import datetime
+import pandas as pd
 from pathlib import Path
 from .utils import SafeJsonWriter
 
@@ -35,9 +36,20 @@ class ManualReportSession:
             print(f"Error loading manual session: {e}")
             return []
 
+    def _make_serializable(self, data):
+        """Recursively converts datetimes/Timestamps to strings."""
+        if isinstance(data, dict):
+            return {k: self._make_serializable(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._make_serializable(v) for v in data]
+        elif isinstance(data, (datetime.datetime, datetime.date, pd.Timestamp)):
+            return str(data)
+        return data
+
     def save(self):
         """Saves the current list to disk."""
-        SafeJsonWriter.write(self.session_file, self.scanned_items)
+        serializable_items = self._make_serializable(self.scanned_items)
+        SafeJsonWriter.write(self.session_file, serializable_items)
 
     def add_item(self, item_dict):
         """
