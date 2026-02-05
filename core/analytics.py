@@ -68,7 +68,9 @@ class AnalyticsManager:
         top_models = df['model'].value_counts().head(5).to_dict()
         
         # Supplier Distribution
-        supplier_dist = df['supplier'].value_counts().to_dict()
+        supplier_dist = {}
+        if 'supplier' in df.columns:
+            supplier_dist = df['supplier'].value_counts().to_dict()
         
         return {
             "total_items": total_items,
@@ -143,3 +145,46 @@ class AnalyticsManager:
         # Sort by urgency (Out of stock first, then low days)
         alerts.sort(key=lambda x: x['days_left'])
         return alerts
+
+    def get_goal_progress(self, goal_name="Financial Goal", target_amount=500000):
+        """
+        Track progress towards a financial goal based on Realized Profit.
+        """
+        summary = self.get_summary()
+        current_profit = summary.get('realized_profit', 0.0)
+        
+        display_profit = max(0, current_profit)
+        
+        progress_pct = min(100.0, (display_profit / target_amount) * 100.0) if target_amount > 0 else 0
+        remaining = max(0, target_amount - display_profit)
+        
+        df = self.inv_manager.get_inventory()
+        daily_profit_velocity = 0.0
+        days_to_goal = 9999
+        
+        if not df.empty:
+            sold_recent = df[
+                (df['status'] == 'OUT') & 
+                (pd.to_datetime(df['last_updated'], errors='coerce') >= pd.Timestamp.now() - pd.Timedelta(days=30))
+            ].copy()
+            
+            if not sold_recent.empty:
+                if 'price_original' in sold_recent.columns:
+                    recent_profit = (sold_recent['price'] - sold_recent['price_original']).sum()
+                else:
+                    recent_profit = (sold_recent['price'] * 0.10).sum()
+                
+                daily_profit_velocity = recent_profit / 30.0
+                
+                if daily_profit_velocity > 0:
+                    days_to_goal = int(remaining / daily_profit_velocity)
+
+        return {
+            "goal_name": goal_name,
+            "target": target_amount,
+            "current": display_profit,
+            "percent": round(progress_pct, 1),
+            "remaining": remaining,
+            "daily_profit_avg": round(daily_profit_velocity, 2),
+            "est_days_to_goal": days_to_goal
+        }
