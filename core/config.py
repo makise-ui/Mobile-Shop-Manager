@@ -32,9 +32,9 @@ DEFAULT_CONFIG = {
     "label_height_mm": 22,
     "printer_type": "windows",  # or 'escpos'
     "gst_default_percent": 18.0,
-    "price_markup_percent": 0.0,
-    "enable_buyer_tracking": True,
-    "store_name": "My Mobile Shop",
+    "enable_goal_tracking": False,
+    "financial_goal_target": 500000,
+    "financial_goal_name": "My Financial Goal",
     "app_display_name": "Mobile Shop Manager",
     "store_address": "123 Mobile Street, India",
     "store_gstin": "",
