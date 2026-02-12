@@ -10,6 +10,8 @@ class ManageFilesScreen(BaseScreen):
     def __init__(self, parent, app_context):
         super().__init__(parent, app_context)
         
+        self.add_header("Manage Inventory Files", help_section="Excel and File Management")
+        
         # Toolbar
         tb = ttk.Frame(self)
         tb.pack(fill=tk.X, pady=10)
@@ -109,7 +111,7 @@ class SettingsScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Application Settings", font=('Segoe UI', 16, 'bold')).pack(pady=20)
+        self.add_header("Application Settings", help_section="Features and Functionality")
         
         # Tabs
         tabs = ttk.Notebook(self)
@@ -243,7 +245,7 @@ class ManageDataScreen(BaseScreen):
         self.registry = DataRegistry()
         
         # UI
-        ttk.Label(self, text="Manage App Data", font=('Segoe UI', 14, 'bold')).pack(pady=10)
+        self.add_header("Manage App Data", help_section="Data Management")
         
         # Tabs
         self.notebook = ttk.Notebook(self)

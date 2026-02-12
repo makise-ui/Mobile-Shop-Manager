@@ -55,6 +55,21 @@ class BaseScreen(ttk.Frame):
         """Focus on the primary input widget of the screen"""
         pass
 
+    def add_header(self, title, help_section=None):
+        """Adds a standard header with optional Help button."""
+        header_frame = ttk.Frame(self)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(header_frame, text=title, font=("Segoe UI", 16, "bold")).pack(side=tk.LEFT)
+        
+        if help_section:
+            # ? Button
+            btn = ttk.Button(header_frame, text="❓ Help", bootstyle="link",
+                             command=lambda: self.app.show_help_section(help_section))
+            btn.pack(side=tk.RIGHT)
+        
+        return header_frame
+
     def _get_all_models(self):
         """Helper to get unique models for autocomplete"""
         try:

@@ -2,12 +2,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 import datetime
+from ..base import BaseScreen
 from core.manual_report import ManualReportSession
 from core.reporting import ReportGenerator
 
-class ManualScanScreen(ttk.Frame):
+class ManualScanScreen(BaseScreen):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        super().__init__(parent, controller)
         self.controller = controller
         self.manual_session = ManualReportSession(self.controller.app_config)
         
@@ -15,8 +16,7 @@ class ManualScanScreen(ttk.Frame):
 
     def _init_ui(self):
         # Header
-        header = ttk.Label(self, text="Manual Scan Reporting", font=("Segoe UI", 16, "bold"))
-        header.pack(pady=10, anchor="w", padx=20)
+        self.add_header("Manual Scan Reporting", help_section="Core Features")
         
         # Main Layout: Split Log (Left) and Config (Right)
         self.main_container = ttk.Frame(self)

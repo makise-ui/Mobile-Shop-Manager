@@ -54,3 +54,13 @@ conductor/tracks/
 conductor/archive/
 conductor/setup_state.json
 conductor/tracks.md
+
+# Node / JS
+node_modules/
+package-lock.json
+package.json
+gemini-auth-app/
+
+# Temp Scripts
+gemini_*.py
+generate_license.py

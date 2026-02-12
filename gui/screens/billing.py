@@ -16,6 +16,9 @@ class BillingScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
+        # Header
+        self.add_header("Billing & Invoicing", help_section="Invoicing and Billing")
+
         # 0. Scan Bar
         scan_frame = ttk.Frame(self)
         scan_frame.pack(fill=tk.X, pady=(0, 10))
@@ -425,11 +428,9 @@ class InvoiceHistoryScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        # Toolbar
-        tb = ttk.Frame(self)
-        tb.pack(fill=tk.X, pady=10)
-        
-        ttk.Label(tb, text="Generated Invoices", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        # Toolbar / Header
+        header = self.add_header("Generated Invoices", help_section="Invoicing and Billing")
+        ttk.Button(header, text="Refresh List", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
         
         # Filter Frame
         f_filter = ttk.LabelFrame(self, text="Filter", padding=5)
@@ -447,8 +448,6 @@ class InvoiceHistoryScreen(BaseScreen):
         
         ttk.Button(f_filter, text="Search", command=self._refresh_list).pack(side=tk.LEFT, padx=10)
         ttk.Button(f_filter, text="Clear", command=self._clear_filters).pack(side=tk.LEFT)
-        
-        ttk.Button(tb, text="Refresh List", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
         
         # Actions
         actions = ttk.Frame(self)

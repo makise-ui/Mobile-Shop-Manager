@@ -3,19 +3,22 @@ from tkinter import ttk, filedialog, messagebox
 from core.reporting import ReportGenerator
 import datetime
 import pandas as pd
+from .base import BaseScreen
 from .screens.reporting_widgets import AdvancedFilterPanel, SamplingPanel
 
-class ReportingScreen(ttk.Frame):
+class ReportingScreen(BaseScreen):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        super().__init__(parent, controller)
         self.controller = controller
         
         self._init_ui()
 
     def _init_ui(self):
         # Header
-        header = ttk.Label(self, text="Advanced Reporting & Export", font=("Segoe UI", 16, "bold"))
-        header.pack(pady=10, anchor="w", padx=20)
+        header_frame = self.add_header("Advanced Reporting & Export", help_section="Advanced Reporting")
+        
+        # Move Preview Button to Top Action Bar
+        ttk.Button(header_frame, text="PREVIEW DATA >>", command=self.show_preview, bootstyle="primary").pack(side=tk.RIGHT, padx=10)
 
         # Container
         self.container = ttk.Frame(self)
@@ -25,23 +28,26 @@ class ReportingScreen(ttk.Frame):
         self.config_frame = ttk.Frame(self.container)
         self.config_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Split Config
-        left_panel = ttk.Frame(self.config_frame)
-        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        # ADJUSTABLE SPLIT: Using Panedwindow
+        self.pw = ttk.Panedwindow(self.config_frame, orient=tk.HORIZONTAL)
+        self.pw.pack(fill=tk.BOTH, expand=True)
         
-        right_panel = ttk.Frame(self.config_frame, width=400)
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False)
+        left_panel = ttk.Frame(self.pw)
+        right_panel = ttk.Frame(self.pw)
+        
+        self.pw.add(left_panel, weight=3) # Logic takes more space
+        self.pw.add(right_panel, weight=2) # Fields takes less
         
         # Widgets
-        self.filter_panel = AdvancedFilterPanel(left_panel, [])
-        self.filter_panel.pack(fill=tk.BOTH, expand=True)
+        self.filter_panel = AdvancedFilterPanel(left_panel, self.controller)
+        self.filter_panel.pack(fill=tk.BOTH, expand=True, padx=(0, 5))
         
         self.sampling_panel = SamplingPanel(right_panel)
-        self.sampling_panel.pack(fill=tk.X, pady=(0, 10))
+        self.sampling_panel.pack(fill=tk.X, pady=(0, 10), padx=(5, 0))
         
         # Field Selection (Dual Listbox)
         fields_group = ttk.LabelFrame(right_panel, text="2. Select Fields")
-        fields_group.pack(fill=tk.BOTH, expand=True)
+        fields_group.pack(fill=tk.BOTH, expand=True, padx=(5, 0))
         
         dl_frame = ttk.Frame(fields_group)
         dl_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -67,9 +73,6 @@ class ReportingScreen(ttk.Frame):
 
         self.serial_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(fields_group, text="Include S.No", variable=self.serial_var).pack(pady=5)
-
-        # Preview Button
-        ttk.Button(self.config_frame, text="PREVIEW DATA >>", command=self.show_preview, bootstyle="primary").pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
         # 2. Preview View
         self.preview_frame = ttk.Frame(self.container)
@@ -101,10 +104,10 @@ class ReportingScreen(ttk.Frame):
         df = getattr(self.controller.inventory, 'inventory_df', None)
         if df is None or df.empty: return
 
-        cols = sorted(list(df.columns))
+        # Update Filter Panel with full data for dynamic lookups
+        self.filter_panel.update_data(df)
         
-        # Update available fields in Filter Panel
-        self.filter_panel.update_fields(cols)
+        cols = sorted(list(df.columns))
         
         # Update Lists
         current_sel = self.lb_sel.get(0, tk.END)
