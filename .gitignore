@@ -38,6 +38,16 @@ GEMINI.md
 4BrosManager.spec
 Analytics_Report.pdf
 
+# Temp ZPL
+*.zpl
+!config/custom_template.zpl
+
+# Project Management & Agent Context (Excluded per user request)
+specs/
+.specify/
+.gemini/
+MANUAL_BUILD_GUIDE.md
+
 # IDEs
 .vscode/
 .idea/
