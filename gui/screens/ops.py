@@ -12,7 +12,7 @@ class SearchScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Search & History", font=('Segoe UI', 16, 'bold')).pack(pady=(10, 5))
+        self.add_header("Search & History", help_section="Core Features")
         
         self.paned = tk.PanedWindow(self, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
         self.paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -321,7 +321,7 @@ class StatusScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="Quick Status Update", font=('Segoe UI', 16, 'bold')).pack(pady=10)
+        self.add_header("Quick Status Update", help_section="Core Features")
         
         self.var_batch_mode = tk.BooleanVar(value=False)
         f_top = ttk.Frame(self)
@@ -752,7 +752,7 @@ class EditDataScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        ttk.Label(self, text="High-Speed Edit", font=('Segoe UI', 16, 'bold'), bootstyle="primary").pack(pady=10)
+        self.add_header("High-Speed Edit", help_section="Data Management")
         
         frame_search = ttk.Frame(self, padding=10)
         frame_search.pack(fill=tk.X, padx=20)

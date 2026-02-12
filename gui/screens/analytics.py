@@ -15,6 +15,10 @@ class DashboardScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
+        # Header
+        h_frame = self.add_header("Dashboard", help_section="Understand the Dashboard")
+        ttk.Button(h_frame, text="⚙ Price Simulation", bootstyle="info-outline", command=self.open_sim_settings).pack(side=tk.RIGHT, padx=5)
+
         # Scrollable Container
         canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
@@ -25,13 +29,6 @@ class DashboardScreen(BaseScreen):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Header Frame
-        f_head = ttk.Frame(self.scroll_frame)
-        f_head.pack(fill=tk.X, padx=20, pady=20)
-        
-        ttk.Label(f_head, text="Dashboard", font=('Segoe UI', 20, 'bold')).pack(side=tk.LEFT)
-        ttk.Button(f_head, text="⚙ Price Simulation", bootstyle="info-outline", command=self.open_sim_settings).pack(side=tk.RIGHT)
-        
         self.lbl_sim = ttk.Label(self.scroll_frame, text="⚠️ SIMULATION MODE ACTIVE: Profits based on assumed costs.", bootstyle="warning-inverse", anchor="center")
         
         # 1. Main KPI Cards
@@ -264,9 +261,7 @@ class ActivityLogScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        tb = ttk.Frame(self)
-        tb.pack(fill=tk.X, pady=10)
-        ttk.Label(tb, text="Activity Log", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        tb = self.add_header("Activity Log", help_section="Data Loss After Excel Update")
         ttk.Button(tb, text="Refresh", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
         ttk.Button(tb, text="Clear Logs", command=self._clear_logs).pack(side=tk.RIGHT, padx=5)
         
@@ -316,9 +311,7 @@ class ConflictScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
-        tb = ttk.Frame(self)
-        tb.pack(fill=tk.X, pady=10)
-        ttk.Label(tb, text="Data Conflicts", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        tb = self.add_header("Data Conflicts", help_section="Conflict Detected")
         ttk.Button(tb, text="Refresh", command=self._refresh_list).pack(side=tk.RIGHT, padx=5)
         ttk.Button(tb, text="Resolve Selected", command=self._resolve).pack(side=tk.RIGHT, padx=5)
         
@@ -380,6 +373,9 @@ class AnalyticsScreen(BaseScreen):
         self._init_ui()
 
     def _init_ui(self):
+        h_frame = self.add_header("Business Intelligence Dashboard", help_section="Analytics and Business Intelligence")
+        ttk.Button(h_frame, text="⚙ Price Simulation", bootstyle="info-outline", command=self.open_sim_settings).pack(side=tk.RIGHT, padx=5)
+
         canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         self.scroll_frame = ttk.Frame(canvas)
@@ -391,11 +387,6 @@ class AnalyticsScreen(BaseScreen):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        f_head = ttk.Frame(self.scroll_frame)
-        f_head.pack(fill=tk.X, padx=20, pady=20)
-        ttk.Label(f_head, text="Business Intelligence Dashboard", font=('Segoe UI', 20, 'bold'), bootstyle="primary").pack(side=tk.LEFT)
-        ttk.Button(f_head, text="⚙ Price Simulation", bootstyle="info-outline", command=self.open_sim_settings).pack(side=tk.RIGHT)
-        
         self.lbl_sim = ttk.Label(self.scroll_frame, text="⚠️ SIMULATION MODE ACTIVE: Profits based on assumed costs.", bootstyle="warning-inverse", anchor="center")
 
         kpi_container = ttk.Frame(self.scroll_frame)

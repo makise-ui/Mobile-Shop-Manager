@@ -13,49 +13,60 @@ class HelpScreen(BaseScreen):
 
     def _init_ui(self):
         # Header Frame
-        header_frame = ttk.Frame(self)
-        header_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        ttk.Label(header_frame, text="📖 Complete User Guide & Help", font=('Segoe UI', 16, 'bold')).pack(side=tk.LEFT)
+        header_frame = self.add_header("📖 Complete User Guide & Help")
         ttk.Button(header_frame, text="🔄 Reload", command=self._reload_content).pack(side=tk.RIGHT, padx=5)
         ttk.Button(header_frame, text="🔍 Search Help", command=self._search_help).pack(side=tk.RIGHT, padx=5)
         
         # Notebook for sections
-        nb = ttk.Notebook(self)
-        nb.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Load content from markdown file
         self.markdown_content = self._load_markdown_content()
         
         # 1. Complete Guide (Full Content)
-        f_guide = ttk.Frame(nb)
-        nb.add(f_guide, text="📚 Complete Guide")
+        f_guide = ttk.Frame(self.nb)
+        self.nb.add(f_guide, text="📚 Complete Guide")
         self._add_markdown_text(f_guide, self.markdown_content)
         
         # 2. Quick Start
-        f_start = ttk.Frame(nb)
-        nb.add(f_start, text="🚀 Quick Start")
+        f_start = ttk.Frame(self.nb)
+        self.nb.add(f_start, text="🚀 Quick Start")
         self._add_markdown_text(f_start, self._get_quick_start())
         
         # 3. Features & How-To
-        f_feat = ttk.Frame(nb)
-        nb.add(f_feat, text="✨ Core Features")
+        f_feat = ttk.Frame(self.nb)
+        self.nb.add(f_feat, text="✨ Core Features")
         self._add_markdown_text(f_feat, self._get_features_guide())
         
         # 4. Keyboard Shortcuts
-        f_shortcuts = ttk.Frame(nb)
-        nb.add(f_shortcuts, text="⌨️ Shortcuts")
+        f_shortcuts = ttk.Frame(self.nb)
+        self.nb.add(f_shortcuts, text="⌨️ Shortcuts")
         self._add_markdown_text(f_shortcuts, self._get_shortcuts())
         
         # 5. Troubleshooting
-        f_trouble = ttk.Frame(nb)
-        nb.add(f_trouble, text="🔧 Troubleshooting")
+        f_trouble = ttk.Frame(self.nb)
+        self.nb.add(f_trouble, text="🔧 Troubleshooting")
         self._add_markdown_text(f_trouble, self._get_troubleshooting())
         
         # 6. FAQ
-        f_faq = ttk.Frame(nb)
-        nb.add(f_faq, text="❓ FAQ")
+        f_faq = ttk.Frame(self.nb)
+        self.nb.add(f_faq, text="❓ FAQ")
         self._add_markdown_text(f_faq, self._get_faq_text())
+
+    def navigate_to(self, section_name):
+        """Switch to a specific tab by text (partial match)."""
+        if not section_name: return
+        
+        # Normalize
+        target = section_name.lower()
+        
+        for tab_id in self.nb.tabs():
+            # Get tab text
+            text = self.nb.tab(tab_id, "text").lower()
+            if target in text:
+                self.nb.select(tab_id)
+                return
 
     def _load_markdown_content(self):
         """Load help content from markdown file if it exists."""
@@ -249,25 +260,75 @@ Create professional stickers for your items.
 
 ## 3. Advanced Reporting
 
-Create filtered reports and export data.
+Create powerful, custom filtered reports to export exactly the data you need.
 
-**Steps:**
-1. Go to **Reports** → **Advanced Reporting**
-2. **Create Filters:**
-   - Status = "IN" AND Price > 15,000
-   - Combine multiple conditions
-3. **Select Columns:**
-   - Choose which fields to display
-   - Drag to reorder columns
-4. **Export:**
-   - **Excel** (.xlsx)
-   - **PDF** (formatted report)
-   - **Word** (.docx)
-5. **Save as Preset:**
-   - Reuse filters for "In-Stock Premium", "Budget Phones", etc.
+**Go to:** **Reports** → **Advanced Reporting**
 
-> **Example Filter:** Status = "IN" AND Price ≥ 20,000 AND Model = "Vivo"
-> Result: All in-stock premium Vivo phones
+### How it Works
+The reporting engine lets you build a "sentence" to describe the items you want. You can stack multiple conditions to narrow down your search.
+
+### 1. Build Your Filters
+Click **"+ Add Condition"** to add a rule. A rule has 4 parts:
+- **Logic**: How this rule connects to the previous one (AND, OR).
+- **Field**: The column to check (e.g., Status, Price, Brand).
+- **Operator**: The comparison (e.g., Equals, Contains, Is Empty).
+- **Value**: The text or number to match.
+
+**Logic Types Explained:**
+- **AND**: *Both* conditions must be true. (Narrower results)
+  - *Example:* `Status=IN` **AND** `Price>10000` (Only items that match BOTH)
+- **OR**: *Either* condition can be true. (Wider results)
+  - *Example:* `Brand=Vivo` **OR** `Brand=Oppo` (Items that are EITHER Vivo OR Oppo)
+- **AND NOT**: Exclude specific items.
+  - *Example:* `Status=IN` **AND NOT** `Model Contains "Broken"`
+- **XOR**: Exclusive OR. One must be true, but not both. (Rarely used)
+
+**Common Operators:**
+- **Equals**: Exact match.
+- **Contains**: Partial match (e.g., "iPhone" finds "Apple iPhone 13").
+- **> / <**: Greater than / Less than (for Price or Dates).
+- **Is Empty**: Finds items with missing data (e.g., missing Grade).
+
+### 2. Select Columns to Export
+Use the list on the right to choose which fields appear in your Excel/PDF file.
+- **Available**: Fields you can add.
+- **Selected**: Fields that will be in the report.
+- Use **>** and **<** buttons to move fields.
+- Drag and drop fields in the "Selected" list to reorder them.
+
+### 3. Sampling (Optional)
+Use the "Sampling & Limits" panel to restrict the output:
+- **Row Limit**: Only get the top X rows (e.g., top 10 items).
+- **Modulo**: Advanced sampling (e.g., every 2nd item).
+
+### 4. Export
+- **Preview Data**: See a quick snapshot of the results at the bottom.
+- **Export Excel**: Full .xlsx file.
+- **Export PDF**: Formatted printable report.
+
+### 💡 Real-World Examples
+
+### Scenario A: High-Value Stock Audit
+*Goal: Find all in-stock phones worth more than ₹20,000.*
+1. **Condition 1**: `START` | `Status` | `Equals` | `IN`
+2. **Condition 2**: `AND` | `Price` | `>` | `20000`
+
+### Scenario B: Sales from Last Week
+*Goal: See what sold in the last 7 days.*
+1. **Condition 1**: `START` | `Status` | `Equals` | `OUT`
+2. **Condition 2**: `AND` | `Date Sold` | `>=` | `Last 7 Days` (Use dropdown)
+
+### Scenario C: Finding "Bad" Data
+*Goal: Find items missing a Grade or Supplier.*
+1. **Condition 1**: `START` | `Status` | `Equals` | `IN`
+2. **Condition 2**: `AND` | `Grade` | `Is Empty` | ``
+
+### Scenario D: Specific Brand Search
+*Goal: Find all iPhones (any model).*
+1. **Condition 1**: `START` | `Model` | `Contains` | `iPhone`
+2. **Condition 2**: `AND` | `Status` | `Equals` | `IN`
+
+> **Pro Tip:** Use the **"💡 Examples"** button in the reporting toolbar to load these presets instantly!
 
 ## 4. Invoicing and Billing
 

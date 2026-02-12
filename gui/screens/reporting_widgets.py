@@ -1,15 +1,35 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox, filedialog
+import json
 import ttkbootstrap as tb
 from datetime import datetime, timedelta
 from ttkbootstrap.tooltip import ToolTip
 
 class AdvancedFilterPanel(ttk.LabelFrame):
-    def __init__(self, parent, available_fields, **kwargs):
+    def __init__(self, parent, controller, **kwargs):
         super().__init__(parent, text="1. Filter Logic (If/Else Conditions)", **kwargs)
-        self.available_fields = available_fields
+        self.controller = controller
+        self.available_fields = []
+        self.inventory_df = None
         self.condition_widgets = []
+        
+        # Auto-persistence path
+        try:
+            self.persistence_file = self.controller.app_config.get_config_dir() / "last_filters.json"
+        except:
+            self.persistence_file = None
+
         self._init_ui()
+
+        # Try to get initial data from inventory if available
+        try:
+            df = getattr(self.controller.inventory, 'inventory_df', None)
+            if df is not None:
+                self.update_data(df)
+        except: pass
+        
+        # Auto-load after UI is ready
+        self.after(100, self.load_last_filters)
 
     def _init_ui(self):
         # Toolbar
@@ -17,7 +37,20 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         toolbar.pack(fill=tk.X, padx=5, pady=5)
         
         ttk.Button(toolbar, text="+ Add Condition", command=self.add_condition_row, bootstyle="success-outline").pack(side=tk.LEFT)
-        ttk.Button(toolbar, text="Clear Filters", command=self.clear_conditions, bootstyle="secondary-outline").pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="Clear", command=self.clear_conditions, bootstyle="secondary-outline").pack(side=tk.LEFT, padx=5)
+        
+        # Presets Menu
+        self.preset_btn = ttk.Menubutton(toolbar, text="💡 Examples", bootstyle="warning-outline")
+        self.preset_btn.pack(side=tk.LEFT)
+        
+        self.preset_menu = tk.Menu(self.preset_btn, tearoff=0)
+        self.preset_btn.config(menu=self.preset_menu)
+        
+        self._setup_presets()
+        
+        # Persistence
+        ttk.Button(toolbar, text="💾 Save", command=self.save_filters, bootstyle="info-outline").pack(side=tk.RIGHT, padx=2)
+        ttk.Button(toolbar, text="📂 Load", command=self.load_filters, bootstyle="info-outline").pack(side=tk.RIGHT, padx=2)
 
         # Scrollable area
         self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
@@ -35,14 +68,77 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+    def _setup_presets(self):
+        examples = {
+            "Expensive Stock (IN > 20k)": [
+                {'logic': 'START', 'field': 'status', 'operator': 'Equals', 'value': 'IN'},
+                {'logic': 'AND', 'field': 'price', 'operator': '>', 'value': '20000'}
+            ],
+            "Items Sold Today": [
+                {'logic': 'START', 'field': 'status', 'operator': 'Equals', 'value': 'OUT'},
+                {'logic': 'AND', 'field': 'date_sold', 'operator': 'Equals', 'value': datetime.now().strftime('%Y-%m-%d')}
+            ],
+            "Premium iPhone Sales (30 Days)": [
+                {'logic': 'START', 'field': 'status', 'operator': 'Equals', 'value': 'OUT'},
+                {'logic': 'AND', 'field': 'model', 'operator': 'Contains', 'value': 'iPhone'},
+                {'logic': 'AND', 'field': 'price', 'operator': '>', 'value': '40000'},
+                {'logic': 'AND', 'field': 'date_sold', 'operator': '>=', 'value': (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')}
+            ],
+            "Aged Budget Stock (Audit)": [
+                {'logic': 'START', 'field': 'status', 'operator': 'Equals', 'value': 'IN'},
+                {'logic': 'AND', 'field': 'price', 'operator': '<', 'value': '10000'},
+                {'logic': 'AND', 'field': 'date_added', 'operator': '<=', 'value': (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')},
+                {'logic': 'AND', 'field': 'grade', 'operator': 'Not Equals', 'value': 'A'}
+            ],
+            "High-Value Returns (XOR Demo)": [
+                {'logic': 'START', 'field': 'status', 'operator': 'Equals', 'value': 'RTN'},
+                {'logic': 'XOR', 'field': 'price', 'operator': '>', 'value': '50000'}
+            ],
+            "Missing Grade/Info": [
+                {'logic': 'START', 'field': 'status', 'operator': 'Equals', 'value': 'IN'},
+                {'logic': 'AND', 'field': 'grade', 'operator': 'Is Empty', 'value': ''}
+            ]
+        }
+        
+        for name, data in examples.items():
+            self.preset_menu.add_command(label=name, command=lambda d=data: self.apply_preset(d))
+
+    def apply_preset(self, filters):
+        self.clear_conditions()
+        for f_data in filters:
+            self.add_condition_row(f_data)
+        messagebox.showinfo("Preset Applied", "Example filter has been loaded.")
+
+    def update_data(self, df):
+        self.inventory_df = df
+        if df is not None:
+            self.available_fields = sorted(list(df.columns))
+            # Also update existing rows if any
+            for row in self.condition_widgets:
+                row.available_fields = self.available_fields
+                row.field_cb.config(values=self.available_fields)
+
     def update_fields(self, fields):
+        """Legacy compatibility"""
         self.available_fields = fields
 
+    def get_unique_values(self, field):
+        if self.inventory_df is None or field not in self.inventory_df.columns:
+            return []
+        try:
+            # Get unique values, drop NaNs, convert to string, sort
+            vals = self.inventory_df[field].dropna().unique().tolist()
+            return sorted([str(v) for v in vals])
+        except:
+            return []
+
     def add_condition_row(self, initial_data=None):
-        # Show logic dropdown if this is NOT the first row
         show_logic = len(self.condition_widgets) > 0
         
-        row = ConditionRow(self.scroll_frame, self.available_fields, self.remove_condition_row, show_logic=show_logic)
+        row = ConditionRow(self.scroll_frame, self.available_fields, 
+                           self.remove_condition_row, 
+                           get_values_func=self.get_unique_values,
+                           show_logic=show_logic)
         row.pack(fill=tk.X, pady=2)
         if initial_data:
             row.set_data(initial_data)
@@ -52,18 +148,6 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         row.destroy()
         if row in self.condition_widgets:
             self.condition_widgets.remove(row)
-            # Re-evaluate logic visibility logic?
-            # If we remove row 0, row 1 becomes row 0 and shouldn't have logic?
-            # Complexity: If we remove the first row, the second row (now first) should hide its logic operator.
-            self._update_logic_visibility()
-
-    def _update_logic_visibility(self):
-        # Ensure first row has no logic, others do.
-        # But wait, ConditionRow creates widgets in __init__.
-        # We need a method in ConditionRow to toggle logic visibility or recreating them is hard.
-        # Simpler: Just refresh the list.
-        pass # For now, let's accept that if you delete row 1, row 2 keeps "AND". 
-             # Logic: "AND (Cond 2)" is fine if we treat the base as "All True".
 
     def clear_conditions(self):
         for row in self.condition_widgets:
@@ -71,13 +155,68 @@ class AdvancedFilterPanel(ttk.LabelFrame):
         self.condition_widgets = []
 
     def get_filters(self):
-        return [row.get_data() for row in self.condition_widgets]
+        filters = [row.get_data() for row in self.condition_widgets]
+        self.save_last_filters(filters)
+        return filters
+
+    def save_last_filters(self, filters):
+        if self.persistence_file:
+            try:
+                with open(self.persistence_file, 'w') as f:
+                    json.dump(filters, f)
+            except: pass
+
+    def load_last_filters(self):
+        if self.persistence_file and self.persistence_file.exists():
+            try:
+                with open(self.persistence_file, 'r') as f:
+                    filters = json.load(f)
+                
+                self.clear_conditions()
+                for f_data in filters:
+                    self.add_condition_row(f_data)
+            except: pass
+
+    def save_filters(self):
+        filters = self.get_filters()
+        if not filters: return
+        
+        f_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            initialfile="filter_preset.json",
+            title="Save Filter Preset"
+        )
+        if f_path:
+            try:
+                with open(f_path, 'w') as f:
+                    json.dump(filters, f, indent=4)
+                messagebox.showinfo("Success", "Filter preset saved.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save: {e}")
+
+    def load_filters(self):
+        f_path = filedialog.askopenfilename(
+            defaultextension=".json",
+            title="Load Filter Preset"
+        )
+        if f_path:
+            try:
+                with open(f_path, 'r') as f:
+                    filters = json.load(f)
+                
+                self.clear_conditions()
+                for f_data in filters:
+                    self.add_condition_row(f_data)
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load: {e}")
 
 class ConditionRow(ttk.Frame):
-    def __init__(self, parent, available_fields, on_delete, show_logic=False):
+    def __init__(self, parent, available_fields, on_delete, get_values_func=None, show_logic=False):
         super().__init__(parent)
         self.available_fields = available_fields
         self.on_delete = on_delete
+        self.get_values_func = get_values_func
         self.show_logic = show_logic
         
         self.logic_var = tk.StringVar(value="AND")
@@ -93,18 +232,11 @@ class ConditionRow(ttk.Frame):
             self.logic_cb = ttk.Combobox(self, values=['AND', 'OR', 'AND NOT', 'OR NOT', 'XOR'], 
                                          textvariable=self.logic_var, state="readonly", width=7)
             self.logic_cb.pack(side=tk.LEFT, padx=2)
-        else:
-            # Placeholder to align? Or just nothing.
-            # ttk.Label(self, width=9).pack(side=tk.LEFT, padx=2) # Alignment
-            pass
 
         # 1. Field
         self.field_cb = ttk.Combobox(self, values=self.available_fields, textvariable=self.field_var, state="readonly", width=15)
         self.field_cb.pack(side=tk.LEFT, padx=2)
         self.field_cb.bind("<<ComboboxSelected>>", self._on_field_change)
-        
-        if self.available_fields:
-            self.field_cb.set(self.available_fields[0])
 
         # 2. Operator
         self.ops = ['Equals', 'Contains', '>', '<', '>=', '<=', 'Not Equals', 'Is Empty', 'Is Not Empty', 'Modulo', 'Above', 'Below']
@@ -113,35 +245,56 @@ class ConditionRow(ttk.Frame):
         self.op_cb.set('Equals')
         self.op_cb.bind("<<ComboboxSelected>>", self._on_op_change)
 
-        # 3. Value Container (Swap between Entry and DateEntry)
+        # 3. Value Container
         self.val_container = ttk.Frame(self)
         self.val_container.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
         
-        self.val_entry = ttk.Entry(self.val_container, textvariable=self.val_var)
-        self.val_entry.pack(fill=tk.X)
+        # Now that container exists, set initial field and trigger UI update
+        if self.available_fields:
+            self.field_cb.set(self.available_fields[0])
+            self._on_field_change()
+        else:
+            self._show_text_entry() # Initial
         
         # 4. Delete
         ttk.Button(self, text="X", width=3, bootstyle="danger-outline",
                    command=lambda: self.on_delete(self)).pack(side=tk.LEFT, padx=2)
 
     def _on_field_change(self, event=None):
-        field = self.field_var.get().lower()
-        if 'date' in field or 'updated' in field or 'added' in field:
+        field = self.field_var.get()
+        field_lower = field.lower()
+        
+        if 'date' in field_lower or 'updated' in field_lower or 'added' in field_lower:
             self._show_date_picker()
         else:
-            self._show_text_entry()
+            # Check if we should show dropdown for values
+            if self.get_values_func:
+                vals = self.get_values_func(field)
+                if vals:
+                    self._show_dropdown(vals)
+                else:
+                    self._show_text_entry()
+            else:
+                self._show_text_entry()
 
     def _on_op_change(self, event=None):
         op = self.op_var.get()
         if op in ['Above', 'Below']:
             self._show_date_picker()
         elif op == 'Modulo':
-            self.val_var.set("2=0") # Default hint
+            self.val_var.set("2=0")
             self._show_text_entry()
+
+    def _show_dropdown(self, values):
+        for w in self.val_container.winfo_children(): w.destroy()
+        # state="normal" allows manual input
+        self.val_cb = ttk.Combobox(self.val_container, values=values, textvariable=self.val_var, state="normal")
+        self.val_cb.pack(fill=tk.X)
+        ToolTip(self.val_cb, text="Select from list or type manually")
 
     def _show_date_picker(self):
         for w in self.val_container.winfo_children(): w.destroy()
-        rel_dates = ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month", "Pick Date..."]
+        rel_dates = ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month", "Pick Date...", "Manual Input..."]
         self.date_cb = ttk.Combobox(self.val_container, values=rel_dates, state="readonly")
         self.date_cb.pack(fill=tk.X)
         self.date_cb.set("Today")
@@ -162,8 +315,9 @@ class ConditionRow(ttk.Frame):
                 self.de = tb.DateEntry(self.val_container)
                 self.de.pack(fill=tk.X)
             except:
-                self.val_entry = ttk.Entry(self.val_container, textvariable=self.val_var)
-                self.val_entry.pack(fill=tk.X)
+                self._show_text_entry()
+        elif val == "Manual Input...":
+            self._show_text_entry()
 
     def _show_text_entry(self):
         for w in self.val_container.winfo_children(): w.destroy()
@@ -172,8 +326,9 @@ class ConditionRow(ttk.Frame):
 
     def get_data(self):
         val = self.val_var.get()
+        # Handle DateEntry specially if it exists
         for w in self.val_container.winfo_children():
-            if hasattr(w, 'entry'): # Look for tb.DateEntry's entry
+            if hasattr(w, 'entry'):
                 val = w.entry.get()
         
         return {
@@ -184,12 +339,17 @@ class ConditionRow(ttk.Frame):
         }
 
     def set_data(self, data):
-        if self.show_logic:
-            self.logic_var.set(data.get('logic', 'AND'))
+        # We need to set variables and THEN update UI
         self.field_var.set(data.get('field', ''))
         self.op_var.set(data.get('operator', ''))
         self.val_var.set(data.get('value', ''))
+        if self.show_logic:
+            self.logic_var.set(data.get('logic', 'AND'))
+        
+        # Manually trigger field change to show correct widget
         self._on_field_change()
+        # Force the value back if the dropdown/date picker cleared it or changed it
+        self.val_var.set(data.get('value', ''))
 
 class SamplingPanel(ttk.LabelFrame):
     def __init__(self, parent, **kwargs):

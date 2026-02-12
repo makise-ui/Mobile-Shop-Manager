@@ -1,5 +1,25 @@
 # Changelog
 
+## [v1.10.0] - 2026-02-12: The Reporting & Help Update
+
+### 🚀 Major Features
+*   **Context-Aware Help System:** Added a **"❓ Help"** button to every screen header. Clicking it instantly opens the relevant section of the User Guide (e.g., Inventory Help, Billing Guide).
+*   **Manual Scan Reporting:** A dedicated module for high-speed barcode scanning sessions with live metrics, persistent sessions, and direct Excel/PDF export.
+*   **Advanced Reporting 2.0:**
+    *   **Dynamic Filters:** Dropdowns now populate with *real data* from your inventory (e.g., existing Brands/Suppliers).
+    *   **Logic Gates:** Added powerful `AND`, `OR`, `XOR`, `AND NOT` operators for complex queries.
+    *   **Presets:** Included built-in examples (e.g., "High-Value Stock", "Sales Last Week") to help you get started quickly.
+    *   **Persistence:** Your complex filters are now saved automatically between sessions.
+
+### 🛠 Enhancements
+*   **Duplicate IMEI Protection:** Quick Entry now warns you *immediately* (in the status bar) if an IMEI exists. It also enforces a hard stop confirmation before saving a duplicate.
+*   **Adjustable UI:** The Reporting screen now features a resizable split-pane layout for better usability on different screen sizes.
+*   **Markdown Engine:** Refactored the internal help viewer for better text wrapping, spacing, and stability.
+
+### 🐛 Fixes
+*   **ZPL Designer:** Fixed threading issues with preview generation.
+*   **Navigation:** Improved keyboard traversal in Quick Entry and Status screens.
+
 ## [v1.8.1] - 2026-01-15: Critical Stability Patch
 
 ### 🛠 Fixes

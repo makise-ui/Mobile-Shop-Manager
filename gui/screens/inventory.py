@@ -48,6 +48,9 @@ class InventoryScreen(BaseScreen):
                 print(f"Error loading icon {filename}: {e}")
 
     def _init_ui(self):
+        # Header
+        self.add_header("Inventory List", help_section="View Your Inventory")
+
         # Initialize Filter Variables
         self.var_search = tk.StringVar()
         self.var_min_price = tk.StringVar()

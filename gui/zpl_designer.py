@@ -9,11 +9,11 @@ import threading
 import io
 import time
 import os
+from .base import BaseScreen
 
-class ZPLDesignerScreen(ttk.Frame):
+class ZPLDesignerScreen(BaseScreen):
     def __init__(self, parent, app_context):
-        super().__init__(parent, padding=10)
-        self.app = app_context
+        super().__init__(parent, app_context)
         self.config = app_context.app_config
         
         # Ensure templates dir exists
@@ -52,11 +52,8 @@ class ZPLDesignerScreen(ttk.Frame):
         # Center: Canvas (Top) + Preview (Bottom, Full Width)
         # Right: Properties (Top) + ZPL Code (Bottom)
         
-        # 1. Toolbar
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(toolbar, text="Visual ZPL Designer", font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
+        # 1. Toolbar / Header
+        toolbar = self.add_header("Visual ZPL Designer", help_section="Label Printing")
         
         ttk.Button(toolbar, text="🖨 Test Print", command=self._test_print, bootstyle="secondary").pack(side=tk.RIGHT, padx=5)
         ttk.Button(toolbar, text="✅ Set as Active", command=self._set_active_template, bootstyle="warning").pack(side=tk.RIGHT, padx=5)

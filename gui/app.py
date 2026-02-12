@@ -312,6 +312,10 @@ class MainApp(tb.Window):
         self.screens['billing'].add_items(items)
         self.show_screen('billing')
 
+    def show_help_section(self, section):
+        self.show_screen('help')
+        self.screens['help'].navigate_to(section)
+
     def manual_refresh(self):
         self.status_var.set("Refreshing data...")
         self.update_idletasks()

@@ -6,12 +6,11 @@ import threading
 import os
 from pathlib import Path
 from core.scraper import PhoneScraper
-from gui.base import AutocompleteEntry
+from gui.base import AutocompleteEntry, BaseScreen
 
-class QuickEntryScreen(ttk.Frame):
+class QuickEntryScreen(BaseScreen):
     def __init__(self, parent, app_context):
-        super().__init__(parent)
-        self.app = app_context
+        super().__init__(parent, app_context)
         self.scraper = PhoneScraper()
         
         # State Variables
@@ -49,6 +48,9 @@ class QuickEntryScreen(ttk.Frame):
         self.ent_imei.focus_set()
 
     def _init_ui(self):
+        # Header
+        self.add_header("Quick Entry", help_section="Core Features")
+
         # --- Top Bar: File & Settings ---
         top_bar = ttk.Frame(self, padding=10)
         top_bar.pack(fill=tk.X)
@@ -441,6 +443,16 @@ class QuickEntryScreen(ttk.Frame):
             
         if not val: return
         
+        # Immediate Duplicate Check (Status Label Only)
+        df = getattr(self.app.inventory, 'inventory_df', None)
+        if df is not None and not df.empty:
+            mask = df['imei'].astype(str).str.contains(val, na=False, case=False)
+            if mask.any():
+                existing_model = df[mask].iloc[0].get('model', 'Unknown')
+                self.lbl_status.config(text=f"⚠️ ALREADY IN STOCK: {existing_model}", foreground="red")
+            else:
+                self.lbl_status.config(text="Ready", foreground="gray")
+
         # Check if it looks like a real IMEI (all digits)
         # Only enforce for Single Mode to prevent accidental manual entry
         is_real_imei = val.isdigit()
@@ -567,6 +579,28 @@ class QuickEntryScreen(ttk.Frame):
         if not target or target_display == "No Configured Files":
             messagebox.showwarning("Target File", "Please select a target Excel file.")
             return
+
+        # --- DUPLICATE IMEI CHECK ---
+        df = getattr(self.app.inventory, 'inventory_df', None)
+        if df is not None and not df.empty and imei:
+            # Check for IMEI (case-insensitive and handling dual IMEIs)
+            # We search for the imei string within the imei column
+            mask = df['imei'].astype(str).str.contains(imei, na=False, case=False)
+            if mask.any():
+                existing = df[mask].iloc[0]
+                msg = f"⚠️ DUPLICATE IMEI DETECTED!\n\n"
+                msg += f"IMEI: {imei}\n"
+                msg += f"Model: {existing.get('model', 'Unknown')}\n"
+                msg += f"Status: {existing.get('status', 'Unknown')}\n"
+                msg += f"File: {os.path.basename(str(existing.get('source_file', 'Unknown')))}\n\n"
+                msg += "This item already exists in your inventory.\n"
+                msg += "Do you want to FORCE SAVE this as a new entry?"
+                
+                if not messagebox.askyesno("Duplicate IMEI", msg):
+                    self.lbl_status.config(text="Save cancelled: Duplicate IMEI", foreground="orange")
+                    self.ent_imei.focus_set()
+                    self.ent_imei.select_range(0, tk.END)
+                    return
 
         # Prepare Data
         price = 0.0
