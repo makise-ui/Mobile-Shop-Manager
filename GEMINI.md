@@ -70,3 +70,10 @@ pyinstaller --noconfirm --onefile --windowed \
     --add-data "icon.jpg;." \
     main.py
 ```
+
+## Active Technologies
+- Bash / Git + None (001-cleanup-git-push)
+- Local Filesystem / Git Repository (001-cleanup-git-push)
+
+## Recent Changes
+- 001-cleanup-git-push: Added Bash / Git + None
