@@ -35,14 +35,17 @@ class DashboardScreen(BaseScreen):
         f_cards = ttk.Frame(self.scroll_frame)
         f_cards.pack(fill=tk.X, padx=20, pady=10)
         
-        self.card_stock = self._create_card(f_cards, "Total Items (In Stock)", "0")
-        self.card_stock.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self.card_stock = self._create_card(f_cards, "📦", "In Stock", "0", "#10b981", "#064e3b")
+        self.card_stock.pack(side=tk.LEFT, padx=6, fill=tk.X, expand=True)
         
-        self.card_value = self._create_card(f_cards, "Stock Value", "₹0")
-        self.card_value.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self.card_value = self._create_card(f_cards, "💰", "Stock Value", "₹0", "#3b82f6", "#1e3a5f")
+        self.card_value.pack(side=tk.LEFT, padx=6, fill=tk.X, expand=True)
         
-        self.card_aging = self._create_card(f_cards, "Items Aging (>60 Days)", "0")
-        self.card_aging.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self.card_sold = self._create_card(f_cards, "🛒", "Sold This Month", "0", "#f59e0b", "#5c3d0e")
+        self.card_sold.pack(side=tk.LEFT, padx=6, fill=tk.X, expand=True)
+        
+        self.card_aging = self._create_card(f_cards, "⚠️", "Aging (>60 Days)", "0", "#ef4444", "#5c1a1a")
+        self.card_aging.pack(side=tk.LEFT, padx=6, fill=tk.X, expand=True)
 
         # --- AI Insights Section (Hidden by default) ---
         self.f_ai = ttk.LabelFrame(self.scroll_frame, text=" ✨ AI Demand Insights ", bootstyle="primary")
@@ -122,12 +125,40 @@ class DashboardScreen(BaseScreen):
         
         self.tree_log.pack(fill=tk.X, padx=20, pady=10)
 
-    def _create_card(self, parent, title, value):
-        f = ttk.LabelFrame(parent, text=title)
-        lbl = ttk.Label(f, text=value, font=('Segoe UI', 24, 'bold'), foreground="#007acc")
-        lbl.pack()
-        f.lbl_val = lbl # Store ref
-        return f
+    def _create_card(self, parent, icon, title, value, accent_color, bg_color):
+        """Create a modern stat card with icon, hover effect, and accent color."""
+        card = tk.Frame(parent, bg=bg_color, padx=1, pady=1,
+                        highlightbackground=accent_color, highlightthickness=1)
+        
+        inner = tk.Frame(card, bg=bg_color, padx=15, pady=12)
+        inner.pack(fill=tk.BOTH, expand=True)
+        
+        # Icon + Title row
+        header = tk.Frame(inner, bg=bg_color)
+        header.pack(fill=tk.X)
+        
+        tk.Label(header, text=icon, font=('Segoe UI', 16), bg=bg_color).pack(side=tk.LEFT)
+        tk.Label(header, text=title.upper(), font=('Segoe UI', 8, 'bold'),
+                 bg=bg_color, fg='#a0aec0').pack(side=tk.LEFT, padx=(8, 0))
+        
+        # Value
+        lbl_val = tk.Label(inner, text=value, font=('Segoe UI', 22, 'bold'),
+                           bg=bg_color, fg=accent_color, anchor='w')
+        lbl_val.pack(fill=tk.X, pady=(6, 0))
+        
+        card.lbl_val = lbl_val  # Store ref for updates
+        
+        # Hover effect — thicken border on enter
+        def on_enter(e):
+            card.config(highlightthickness=2)
+        def on_leave(e):
+            card.config(highlightthickness=1)
+        
+        for widget in [card, inner, header, lbl_val]:
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+        
+        return card
 
     def open_sim_settings(self):
         # Dynamic import to avoid circular dependency if simulation imports screens
@@ -149,6 +180,7 @@ class DashboardScreen(BaseScreen):
         else:
             self.lbl_sim.pack_forget()
 
+        sold_month = 0
         if df.empty:
             count = 0
             val = 0
@@ -159,8 +191,20 @@ class DashboardScreen(BaseScreen):
             count = len(available)
             val = available['price'].sum()
             
-            # Aging Logic
+            # Sold This Month
             now = datetime.datetime.now()
+            sold_df = df[df['status'].isin(['OUT', 'SOLD'])]
+            if not sold_df.empty:
+                def is_this_month(row):
+                    try:
+                        d = row.get('last_updated')
+                        if isinstance(d, str): d = datetime.datetime.fromisoformat(d)
+                        if not isinstance(d, datetime.datetime): return False
+                        return d.month == now.month and d.year == now.year
+                    except: return False
+                sold_month = sold_df.apply(is_this_month, axis=1).sum()
+            
+            # Aging Logic
             def get_age(row):
                 try:
                     d = row.get('last_updated')
@@ -176,11 +220,14 @@ class DashboardScreen(BaseScreen):
             else:
                 aging_stock = pd.DataFrame()
                 
-            self.card_aging.lbl_val.config(text=str(len(aging_stock)), foreground="red" if not aging_stock.empty else "green")
+            aging_count = len(aging_stock)
+            aging_color = "#ef4444" if aging_count > 0 else "#10b981"
+            self.card_aging.lbl_val.config(text=str(aging_count), fg=aging_color)
             self._update_alerts(available, aging_stock, df)
             
         self.card_stock.lbl_val.config(text=str(count))
         self.card_value.lbl_val.config(text=f"₹{val:,.0f}")
+        self.card_sold.lbl_val.config(text=str(sold_month))
         
         # AI Forecast Logic
         if str(self.app.app_config.get("enable_ai_features", "True")) == "True":

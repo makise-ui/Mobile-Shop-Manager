@@ -72,9 +72,10 @@ class MainApp(tb.Window):
         # --- Splash Screen ---
         app_name = self.app_config.get('app_display_name', 'Mobile Shop Manager')
         splash = SplashScreen(self, app_name)
-        self.withdraw() # Ensure hidden while splash runs
+        self.withdraw()  # Ensure hidden while splash runs
         
         # Set Icon (Safe Load)
+        splash.update_progress("Initializing configuration...", 10)
         try:
             icon_path = "icon.ico" 
             if hasattr(sys, '_MEIPASS'):
@@ -89,35 +90,52 @@ class MainApp(tb.Window):
             print(f"Icon load skipped: {e}")
         
         # --- Core Initialization ---
+        splash.update_progress("Loading inventory engine...", 30)
         self.activity_logger = ActivityLogger(self.app_config)
         self.updater = UpdateChecker()
         self.inventory = InventoryManager(self.app_config, self.activity_logger)
+        
+        splash.update_progress("Setting up printing & billing...", 50)
         self.barcode_gen = BarcodeGenerator(self.app_config)
         self.printer = PrinterManager(self.app_config, self.barcode_gen)
         self.billing = BillingManager(self.app_config, self.activity_logger)
         
         # --- Watcher ---
+        splash.update_progress("Starting file watcher...", 60)
         self.watcher = InventoryWatcher(self.inventory, self._on_inventory_update)
         
         # --- UI Initialization ---
+        splash.update_progress("Building interface...", 75)
         self._init_layout()
         
         # --- Start ---
+        splash.update_progress("Loading inventory data...", 90)
         self.inventory.reload_all()
         self.watcher.start_watching()
         
-        # Close Splash and Show Main
-        self.after(2000, lambda: self._finish_init(splash))
+        splash.update_progress("Ready!", 100)
+        self.after(600, lambda: self._finish_init(splash))
 
     def _finish_init(self, splash):
         splash.destroy()
-        self.deiconify() # Show main window
+        self.deiconify()  # Show main window
         self.updater.check_for_updates(self._on_update_found)
         if 'inventory' in self.screens:
              self.screens['inventory'].on_show()
         self.after(500, self._check_conflicts)
         if not self.app_config.mappings:
             WelcomeDialog(self, self._on_welcome_choice)
+
+    def show_toast(self, title, message, kind="info"):
+        """Show a non-blocking toast notification. kind: success, warning, danger, info"""
+        from ttkbootstrap.toast import ToastNotification
+        toast = ToastNotification(
+            title=title,
+            message=message,
+            duration=3000,
+            bootstyle=kind
+        )
+        toast.show_toast()
 
     def _on_update_found(self, available, tag, notes):
         if available:
@@ -329,6 +347,12 @@ class MainApp(tb.Window):
 
     def _refresh_ui(self):
         if 'inventory' in self.screens: self.screens['inventory'].refresh_data()
+        # Bug #13 fix: also refresh dashboard so KPI cards stay current
+        if 'dashboard' in self.screens:
+            try:
+                self.screens['dashboard']._refresh_stats()
+            except Exception:
+                pass
         self._check_conflicts()
             
     def _check_conflicts(self):
@@ -348,6 +372,7 @@ class MainApp(tb.Window):
 
     def on_close(self):
         self.watcher.stop_watching()
+        self.inventory.shutdown()  # Drain pending writes before exit
         self.destroy()
 
 if __name__ == "__main__":

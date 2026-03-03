@@ -17,10 +17,24 @@ class BillingManager:
         """
         Returns dict with tax breakdown.
         """
+        # Bug #15 fix: validate inputs to prevent division by zero or negatives
+        try:
+            price = float(price)
+            tax_rate_percent = float(tax_rate_percent)
+        except (ValueError, TypeError):
+            price = 0.0
+            tax_rate_percent = 0.0
+        
+        if tax_rate_percent < 0:
+            tax_rate_percent = 0.0
+        if price < 0:
+            price = 0.0
+
         if is_inclusive:
+            divisor = 1 + (tax_rate_percent / 100.0)
+            taxable_value = price / divisor if divisor != 0 else price
+            tax_amt = price - taxable_value
             total_amount = price
-            taxable_value = price / (1 + (tax_rate_percent / 100.0))
-            tax_amt = total_amount - taxable_value
         else:
             taxable_value = price
             tax_amt = taxable_value * (tax_rate_percent / 100.0)

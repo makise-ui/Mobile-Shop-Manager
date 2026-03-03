@@ -6,9 +6,9 @@ import sys
 class LicenseManager:
     def __init__(self, app_config):
         self.config = app_config
-        # This salt is the secret sauce. If someone knows this, they can generate keys.
-        # Ideally, use PyArmor to obfuscate this file.
-        self.SECRET_SALT = "MAKISE_UI_PRO_SALT_2026_BY_HASAN" 
+        # Salt for license key generation. Read from environment variable for security.
+        # Set MSM_LICENSE_SALT in your environment to override the default.
+        self.SECRET_SALT = os.environ.get("MSM_LICENSE_SALT", "MAKISE_UI_PRO_SALT_2026_BY_HASAN")
 
     def get_hardware_id(self):
         """

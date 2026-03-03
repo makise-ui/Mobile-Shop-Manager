@@ -24,6 +24,7 @@ class InventoryManager:
         self.activity_logger = activity_logger
         self.id_registry = IDRegistry()
         self.inventory_df = pd.DataFrame()
+        self._df_lock = threading.RLock()  # Protects inventory_df access
         self.file_status = {}  # Keep track of file read status
         self.conflicts = []
         
@@ -47,6 +48,13 @@ class InventoryManager:
         
         t = threading.Thread(target=worker, daemon=True, name="ExcelWriterThread")
         t.start()
+
+    def shutdown(self):
+        """Drain the write queue and stop the background worker gracefully."""
+        try:
+            self.write_queue.join()  # Wait for pending writes to finish
+        except Exception as e:
+            print(f"Shutdown warning: {e}")
 
     def load_file(self, file_path):
         """Legacy wrapper or simple load."""
@@ -234,26 +242,12 @@ class InventoryManager:
             if col not in canonical.columns:
                 canonical[col] = "" if col != FIELD_PRICE else 0.0
 
-        # --- VECTORIZED ID GENERATION ---
-        # Generate keys for all rows at once
-        has_imei = (canonical[FIELD_IMEI].str.len() > 4)
-        keys = pd.Series("", index=canonical.index)
-        
-        # IMEI Keys
-        keys[has_imei] = "IMEI:" + canonical.loc[has_imei, FIELD_IMEI].str.strip()
-        
-        # Hash Keys for items without valid IMEI
-        no_imei = ~has_imei
-        if no_imei.any():
-            combined = (
-                canonical.loc[no_imei, FIELD_MODEL].astype(str) + "|" +
-                canonical.loc[no_imei, FIELD_RAM_ROM].astype(str) + "|" +
-                canonical.loc[no_imei, 'supplier'].astype(str)
-            )
-            keys[no_imei] = "HASH:" + combined.apply(lambda x: hashlib.md5(x.encode()).hexdigest())
-        
-        # Batch lookup/create IDs
-        canonical[FIELD_UNIQUE_ID] = self.id_registry.get_ids_batch(keys.tolist())
+        # --- ID GENERATION ---
+        # Use get_or_create_id per row to properly handle placeholder IMEIs,
+        # text-based IMEIs, and collision avoidance.
+        canonical[FIELD_UNIQUE_ID] = canonical.apply(
+            lambda row: self.id_registry.get_or_create_id(row.to_dict()), axis=1
+        )
         
         # Merge persistent metadata (status, notes, color, price overrides)
         # Pre-fetch metadata to avoid repeated dict lookups in apply
@@ -313,6 +307,7 @@ class InventoryManager:
         self.conflicts = [] # Reset conflicts
         
         # Performance optimization: Disable auto-save during batch load
+        self.id_registry.reset_load_cycle()  # Reset collision tracking for placeholder IMEIs
         self.id_registry.auto_save = False
         
         try:
@@ -368,14 +363,16 @@ class InventoryManager:
                             "rows": group.drop_duplicates(FIELD_UNIQUE_ID).to_dict('records')
                         })
                 
-                self.inventory_df = full_df
+                with self._df_lock:
+                    self.inventory_df = full_df
             else:
-                self.inventory_df = pd.DataFrame(columns=[
-                    FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
-                    FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE, 
-                    'last_updated', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
-                    FIELD_BUYER_CONTACT, 'grade', 'condition'
-                ])
+                with self._df_lock:
+                    self.inventory_df = pd.DataFrame(columns=[
+                        FIELD_UNIQUE_ID, FIELD_IMEI, 'brand', FIELD_MODEL, FIELD_RAM_ROM, 
+                        FIELD_PRICE, FIELD_PRICE_ORIGINAL, 'supplier', FIELD_SOURCE_FILE, 
+                        'last_updated', FIELD_STATUS, FIELD_COLOR, FIELD_NOTES, FIELD_BUYER,
+                        FIELD_BUYER_CONTACT, 'grade', 'condition'
+                    ])
         finally:
             self.id_registry.commit()
             self.id_registry.auto_save = True
@@ -474,7 +471,8 @@ class InventoryManager:
         return None, None
 
     def get_inventory(self):
-        return self.inventory_df
+        with self._df_lock:
+            return self.inventory_df.copy()
 
     def update_item_status(self, item_id, new_status, write_to_excel=False):
         """Updates and persists the status of an item."""
@@ -485,50 +483,49 @@ class InventoryManager:
                 self.activity_logger.log(ACTION_REDIRECT, f"Status update for {item_id} redirected to {target_id}")
             item_id = target_id
 
-        # 1. Get Previous Status for logging
-        mask = self.inventory_df[FIELD_UNIQUE_ID].astype(str) == str(item_id)
-        old_status = "UNKNOWN"
-        item_model = ""
-        if mask.any():
-            row = self.inventory_df[mask].iloc[0]
-            old_status = row[FIELD_STATUS]
-            item_model = row[FIELD_MODEL]
+        with self._df_lock:
+            # 1. Get Previous Status for logging
+            mask = self.inventory_df[FIELD_UNIQUE_ID].astype(str) == str(item_id)
+            old_status = "UNKNOWN"
+            item_model = ""
+            if mask.any():
+                row = self.inventory_df[mask].iloc[0]
+                old_status = row[FIELD_STATUS]
+                item_model = row[FIELD_MODEL]
 
-        # 2. Update Internal Registry
-        updates = {FIELD_STATUS: new_status}
-        
-        # Capture Sold Date
-        if new_status == STATUS_OUT:
-            # Only set if not already set? Or update? Spec implies capture current time.
-            # Assuming "Sold Now"
-            updates['sold_date'] = datetime.datetime.now().isoformat()
-        elif new_status == STATUS_IN:
-            # Reset sold date if returned/available
-            updates['sold_date'] = ""
+            # 2. Update Internal Registry
+            updates = {FIELD_STATUS: new_status}
             
-        self.id_registry.update_metadata(item_id, updates)
-        self.id_registry.add_history_log(item_id, ACTION_STATUS_CHANGE, f"Moved from {old_status} to {new_status}")
-        
-        if self.activity_logger:
-            self.activity_logger.log(ACTION_STATUS_CHANGE, f"Item {item_id} ({item_model}) marked as {new_status}")
-        
-        # 3. Update Memory
-        if mask.any():
-            self.inventory_df.loc[mask, FIELD_STATUS] = new_status
+            # Capture Sold Date
+            if new_status == STATUS_OUT:
+                updates['sold_date'] = datetime.datetime.now().isoformat()
+            elif new_status == STATUS_IN:
+                # Reset sold date if returned/available
+                updates['sold_date'] = ""
+                
+            self.id_registry.update_metadata(item_id, updates)
+            self.id_registry.add_history_log(item_id, ACTION_STATUS_CHANGE, f"Moved from {old_status} to {new_status}")
             
-            # 3. Write to Excel (ASYNC via Queue)
-            if write_to_excel:
-                try:
-                    # Create a snapshot of the row data
-                    row_snapshot = self.inventory_df[mask].iloc[0].to_dict()
-                    updates = {FIELD_STATUS: new_status}
-                    
-                    # Offload to worker thread
-                    self.write_queue.put((self._write_excel_generic, (row_snapshot, updates)))
-                    return True
-                except Exception as e:
-                    print(f"Queue Error: {e}")
-                    return False
+            if self.activity_logger:
+                self.activity_logger.log(ACTION_STATUS_CHANGE, f"Item {item_id} ({item_model}) marked as {new_status}")
+            
+            # 3. Update Memory
+            if mask.any():
+                self.inventory_df.loc[mask, FIELD_STATUS] = new_status
+                
+                # 4. Write to Excel (ASYNC via Queue)
+                if write_to_excel:
+                    try:
+                        # Create a snapshot of the row data while holding the lock
+                        row_snapshot = self.inventory_df[mask].iloc[0].to_dict()
+                        excel_updates = {FIELD_STATUS: new_status}
+                        
+                        # Offload to worker thread
+                        self.write_queue.put((self._write_excel_generic, (row_snapshot, excel_updates)))
+                        return True
+                    except Exception as e:
+                        print(f"Queue Error: {e}")
+                        return False
         return True
 
     def update_item_data(self, item_id, updates):
@@ -538,34 +535,35 @@ class InventoryManager:
         if target_id:
             item_id = target_id
 
-        mask = self.inventory_df[FIELD_UNIQUE_ID].astype(str) == str(item_id)
-        if not mask.any(): return False
-        
-        item_model = self.inventory_df.loc[mask, FIELD_MODEL].values[0]
-        
-        # 1. Update Persistent Registry (App DB)
-        self.id_registry.update_metadata(item_id, updates)
-        
-        # Log generic updates
-        log_details = ", ".join([f"{k}={v}" for k, v in updates.items()])
-        self.id_registry.add_history_log(item_id, ACTION_DATA_UPDATE, log_details)
-        
-        if self.activity_logger:
-            self.activity_logger.log(ACTION_ITEM_UPDATE, f"Updated {item_id} ({item_model}): {log_details}")
-        
-        # 2. Update Memory
-        for k, v in updates.items():
-            if k in self.inventory_df.columns:
-                self.inventory_df.loc[mask, k] = v
-        
-        # 3. Write to Excel (ASYNC via Queue)
-        try:
-            row_snapshot = self.inventory_df[mask].iloc[0].to_dict()
-            self.write_queue.put((self._write_excel_generic, (row_snapshot, updates)))
-            return True
-        except Exception as e:
-            print(f"Queue error: {e}")
-            return False
+        with self._df_lock:
+            mask = self.inventory_df[FIELD_UNIQUE_ID].astype(str) == str(item_id)
+            if not mask.any(): return False
+            
+            item_model = self.inventory_df.loc[mask, FIELD_MODEL].values[0]
+            
+            # 1. Update Persistent Registry (App DB)
+            self.id_registry.update_metadata(item_id, updates)
+            
+            # Log generic updates
+            log_details = ", ".join([f"{k}={v}" for k, v in updates.items()])
+            self.id_registry.add_history_log(item_id, ACTION_DATA_UPDATE, log_details)
+            
+            if self.activity_logger:
+                self.activity_logger.log(ACTION_ITEM_UPDATE, f"Updated {item_id} ({item_model}): {log_details}")
+            
+            # 2. Update Memory
+            for k, v in updates.items():
+                if k in self.inventory_df.columns:
+                    self.inventory_df.loc[mask, k] = v
+            
+            # 3. Write to Excel (ASYNC via Queue) — snapshot while holding lock
+            try:
+                row_snapshot = self.inventory_df[mask].iloc[0].to_dict()
+                self.write_queue.put((self._write_excel_generic, (row_snapshot, updates)))
+                return True
+            except Exception as e:
+                print(f"Queue error: {e}")
+                return False
 
     def _write_excel_generic(self, row_data, updates):
         # NOTE: This runs in a background thread!
@@ -704,16 +702,17 @@ class InventoryManager:
                         cell_val = row[imei_col_idx-1].value
                         if cell_val:
                             s_cell = str(cell_val).strip().replace('.0', '')
-                            # Robust Check: Exact match or partial (for dual IMEI scenarios)
-                            # target_imei might be "A / B", cell might be "A" or "B" or "A/B"
-                            if s_cell == target_imei:
+                            # STRICT MATCH: Exact match or exact membership in dual-IMEI set
+                            # target_imei might be "A / B", cell might be "A" or "A / B"
+                            target_parts = set(p.strip() for p in target_imei.split('/') if p.strip())
+                            cell_parts = set(p.strip() for p in s_cell.split('/') if p.strip())
+                            if target_parts and cell_parts and target_parts == cell_parts:
                                 match = True
-                            elif target_imei and (target_imei in s_cell or s_cell in target_imei):
+                            elif target_parts and cell_parts and (target_parts & cell_parts):
+                                # Partial overlap for dual IMEI — at least one IMEI matches exactly
                                 match = True
                     
-                    if not match and model_col_idx:
-                        if str(row[model_col_idx-1].value).strip() == target_model:
-                            match = True # Weak match fallback
+                    # REMOVED: Dangerous model-name-only fallback that could write to wrong row
                     
                     if match:
                         row_found = True

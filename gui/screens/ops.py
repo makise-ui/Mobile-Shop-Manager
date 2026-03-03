@@ -664,7 +664,13 @@ class StatusScreen(BaseScreen):
         
         if success:
             self._log(f"Updated ID {uid} -> {status}")
-            self.history.append({"id": uid, "prev_status": self.current_item['status']})
+            # Bug #12 fix: store buyer info for full undo
+            self.history.append({
+                "id": uid,
+                "prev_status": self.current_item['status'],
+                "prev_buyer": str(self.current_item.get('buyer', '')),
+                "prev_buyer_contact": str(self.current_item.get('buyer_contact', '')),
+            })
             
             if status == "OUT" and self.var_auto_inv.get():
                 self._generate_silent_invoice([self.current_item], updates.get('buyer'), self.ent_inv_date.get(), self.var_tax_inc.get())
@@ -691,7 +697,14 @@ class StatusScreen(BaseScreen):
         iid = last['id']
         prev = last['prev_status']
         
-        if self.app.inventory.update_item_status(iid, prev, write_to_excel=True):
+        # Bug #12 fix: restore buyer info along with status
+        undo_updates = {"status": prev}
+        prev_buyer = last.get('prev_buyer', '')
+        prev_contact = last.get('prev_buyer_contact', '')
+        undo_updates['buyer'] = prev_buyer
+        undo_updates['buyer_contact'] = prev_contact
+        
+        if self.app.inventory.update_item_data(iid, undo_updates):
             self._log(f"UNDO: Reverted {iid} -> {prev}")
             messagebox.showinfo("Undo", f"Reverted ID {iid} to {prev}")
         else:
@@ -709,7 +722,7 @@ class StatusScreen(BaseScreen):
             
         buyer = {
             "name": buyer_name,
-            "contact": "",
+            "contact": self.ent_contact.get().strip(),
             "date": date_str,
             "is_interstate": False,
             "is_tax_inclusive": is_inclusive
@@ -727,7 +740,9 @@ class StatusScreen(BaseScreen):
             try:
                 import json
                 from pathlib import Path
-                reg_path = Path.home() / "Documents" / "4BrosManager" / "config" / "invoice_registry.json"
+                from core.config import CONFIG_DIR
+                reg_path = CONFIG_DIR / "invoice_registry.json"
+                reg_path.parent.mkdir(parents=True, exist_ok=True)
                 registry = {}
                 if reg_path.exists():
                     with open(reg_path, 'r') as f: registry = json.load(f)

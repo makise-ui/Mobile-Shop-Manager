@@ -600,27 +600,66 @@ class SplashScreen(tk.Toplevel):
     def __init__(self, parent, store_name):
         super().__init__(parent)
         self.title("Welcome")
-        self.geometry("500x300")
-        self.overrideredirect(True) # No title bar
+        self.geometry("520x320")
+        self.overrideredirect(True)
         
         # Center on screen
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
-        x = (screen_w // 2) - 250
-        y = (screen_h // 2) - 150
+        x = (screen_w // 2) - 260
+        y = (screen_h // 2) - 160
         self.geometry(f"+{x}+{y}")
         
-        self.configure(bg='#2c3e50')
+        bg_color = '#1a1d23'
+        accent = '#007acc'
         
-        frame = tk.Frame(self, bg='#2c3e50', bd=5, relief=tk.RAISED)
+        self.configure(bg=bg_color)
+        
+        # Outer border glow effect
+        outer = tk.Frame(self, bg=accent, padx=2, pady=2)
+        outer.pack(fill=tk.BOTH, expand=True)
+        
+        frame = tk.Frame(outer, bg=bg_color)
         frame.pack(fill=tk.BOTH, expand=True)
         
-        tk.Label(frame, text="WELCOME TO", font=('Segoe UI', 12), bg='#2c3e50', fg='white').pack(pady=(50, 5))
-        tk.Label(frame, text=store_name.upper(), font=('Segoe UI', 24, 'bold'), bg='#2c3e50', fg='#007acc').pack(pady=5)
-        tk.Label(frame, text="Management System", font=('Segoe UI', 10), bg='#2c3e50', fg='lightgray').pack(pady=5)
+        # Top spacer
+        tk.Frame(frame, bg=bg_color, height=40).pack()
         
-        tk.Label(frame, text="Loading inventory and settings...", font=('Segoe UI', 8, 'italic'), bg='#2c3e50', fg='gray').pack(side=tk.BOTTOM, pady=20)
+        # App icon placeholder — subtle accent line
+        accent_bar = tk.Frame(frame, bg=accent, height=4, width=60)
+        accent_bar.pack(pady=(0, 15))
         
+        tk.Label(frame, text="W E L C O M E   T O", font=('Segoe UI', 10, 'bold'),
+                 bg=bg_color, fg='#6c7a89').pack()
+        tk.Label(frame, text=store_name.upper(), font=('Segoe UI', 22, 'bold'),
+                 bg=bg_color, fg=accent).pack(pady=(5, 3))
+        tk.Label(frame, text="Management System", font=('Segoe UI', 9),
+                 bg=bg_color, fg='#4a5568').pack()
+        
+        # Bottom section with progress
+        bottom = tk.Frame(frame, bg=bg_color)
+        bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=30, pady=20)
+        
+        self.lbl_status = tk.Label(bottom, text="Starting...",
+                                    font=('Segoe UI', 9), bg=bg_color, fg='#8899aa', anchor='w')
+        self.lbl_status.pack(fill=tk.X, pady=(0, 6))
+        
+        # Custom progress bar using frames
+        bar_bg = tk.Frame(bottom, bg='#2d3748', height=6)
+        bar_bg.pack(fill=tk.X)
+        bar_bg.pack_propagate(False)
+        
+        self.bar_fill = tk.Frame(bar_bg, bg=accent, height=6, width=0)
+        self.bar_fill.place(x=0, y=0, relheight=1.0, relwidth=0.0)
+        
+        self._bar_bg = bar_bg
+        self.update()
+    
+    def update_progress(self, step_text, percent):
+        """Update the splash progress. percent is 0-100."""
+        self.lbl_status.config(text=step_text)
+        frac = max(0.0, min(1.0, percent / 100.0))
+        self.bar_fill.place(x=0, y=0, relheight=1.0, relwidth=frac)
         self.update()
 
 class WelcomeDialog(tk.Toplevel):

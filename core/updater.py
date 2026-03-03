@@ -74,22 +74,47 @@ class UpdateChecker:
         
         def _download():
             try:
+                import tempfile
+                import hashlib
+                
                 response = requests.get(self.asset_url, stream=True)
                 total_length = int(response.headers.get('content-length', 0))
                 
                 downloaded = 0
-                temp_name = "update_pkg.tmp"
+                # Bug #9 fix: Download to a secure temp directory instead of CWD
+                temp_dir = tempfile.mkdtemp(prefix="msm_update_")
+                temp_path = os.path.join(temp_dir, "update_pkg.tmp")
                 
-                with open(temp_name, "wb") as f:
+                sha256_hash = hashlib.sha256()
+                with open(temp_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=4096):
                         if chunk:
                             f.write(chunk)
+                            sha256_hash.update(chunk)
                             downloaded += len(chunk)
                             if total_length > 0:
                                 percent = int((downloaded / total_length) * 100)
                                 progress_callback(percent)
                 
-                complete_callback(temp_name)
+                # Bug #8 fix: Verify SHA256 hash if available in release notes
+                computed_hash = sha256_hash.hexdigest()
+                if self.release_notes and 'sha256:' in self.release_notes.lower():
+                    import re
+                    hash_match = re.search(r'sha256:\s*([a-fA-F0-9]{64})', self.release_notes, re.IGNORECASE)
+                    if hash_match:
+                        expected_hash = hash_match.group(1).lower()
+                        if computed_hash != expected_hash:
+                            print(f"SECURITY WARNING: SHA256 mismatch! Expected {expected_hash}, got {computed_hash}")
+                            os.remove(temp_path)
+                            return
+                        else:
+                            print(f"SHA256 verification passed: {computed_hash}")
+                    else:
+                        print(f"WARNING: Could not parse SHA256 from release notes. Downloaded file hash: {computed_hash}")
+                else:
+                    print(f"WARNING: No SHA256 hash in release notes. Downloaded file hash: {computed_hash}")
+                
+                complete_callback(temp_path)
             except Exception as e:
                 print(f"Download failed: {e}")
                 
@@ -159,8 +184,8 @@ REM Cleanup self
             if '_MEIPASS' in clean_env:
                 del clean_env['_MEIPASS']
             
-            # Launch detached process
-            subprocess.Popen([bat_path], shell=True, close_fds=True, cwd=exe_dir, env=clean_env)
+            # Launch detached process — avoid shell=True for security
+            subprocess.Popen(["cmd.exe", "/c", bat_path], shell=False, close_fds=True, cwd=exe_dir, env=clean_env)
             
             return True, "Restarting..."
         except Exception as e:

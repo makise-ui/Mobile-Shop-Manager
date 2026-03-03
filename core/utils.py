@@ -74,8 +74,9 @@ def backup_excel_file(file_path):
     if not path.exists():
         return None
         
-    # Store in Documents/4BrosManager/backups
-    backup_dir = Path.home() / "Documents" / "4BrosManager" / "backups"
+    # Store backups in the app data directory (matches config.py APP_DIR)
+    app_dir = Path.home() / "Documents" / "MobileShopManager"
+    backup_dir = app_dir / "backups"
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:

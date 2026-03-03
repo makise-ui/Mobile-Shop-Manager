@@ -2,6 +2,7 @@ import requests
 import re
 import json
 import base64
+import os
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from bs4 import BeautifulSoup
@@ -9,7 +10,7 @@ from bs4 import BeautifulSoup
 class PhoneScraper:
     def __init__(self):
         self.imei_api_url = "https://alpha.imeicheck.com/api/free_with_key/modelBrandName"
-        self.imei_api_key = "FB6E-37C8-7D0A-ED31-B48A-12QK"
+        self.imei_api_key = os.environ.get("MSM_IMEI_API_KEY", "FB6E-37C8-7D0A-ED31-B48A-12QK")
         self.gsm_search_url = "https://m.gsmarena.com/resl.php3"
 
     def fetch_details(self, imei):
